@@ -11,7 +11,6 @@ import {
   Webhook,
   type LucideIcon,
 } from "lucide-react";
-import Link from "next/link";
 import {
   Dialog,
   DialogContent,
@@ -323,21 +322,11 @@ export function CheckNotificationChannels({
         {activeChannels.length === 0 ? (
           <div
             className={cn(
-              "flex flex-col items-start text-sm",
-              variant === "compact"
-                ? "gap-1.5 px-3 py-3"
-                : "gap-2 px-4 py-4",
+              "text-sm text-muted-foreground",
+              variant === "compact" ? "px-3 py-3" : "px-4 py-4",
             )}
           >
-            <p className="text-muted-foreground">
-              No active notification channels
-            </p>
-            <Link
-              href="/channels"
-              className="font-medium text-foreground underline decoration-border underline-offset-4 transition-colors hover:decoration-foreground"
-            >
-              Add or activate a notification channel
-            </Link>
+            No active notification channels
           </div>
         ) : (
           <>

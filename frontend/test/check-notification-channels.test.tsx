@@ -88,6 +88,83 @@ function createClient() {
   return { client, pending };
 }
 
+interface ChannelsQueryData {
+  channels: NotificationChannelOption[];
+}
+
+function QueryBackedNotificationChannels() {
+  const { data } = useQuery<ChannelsQueryData>(CHANNELS, {
+    variables: { projectId: "project-1" },
+  });
+
+  if (!data) return null;
+
+  return (
+    <CheckNotificationChannels
+      checkId="check-1"
+      checkName="Nightly backup"
+      notificationChannelIds={["webhook"]}
+      channels={data.channels}
+      variant="compact"
+    />
+  );
+}
+
+function createRefetchingFailureClient() {
+  let rejectMutation: (() => void) | null = null;
+  let channelsRequestCount = 0;
+  const link = new ApolloLink(
+    (operation) =>
+      new Observable((observer) => {
+        if (operation.operationName === "channels") {
+          channelsRequestCount += 1;
+          const emailEnabled = channelsRequestCount === 1;
+          observer.next({
+            data: {
+              channels: [
+                {
+                  __typename: "NotificationChannelModel",
+                  ...CHANNEL_OPTIONS[0],
+                  enabled: emailEnabled,
+                  verificationStatus: "NOT_REQUIRED",
+                  verificationDeliveryStatus: "NOT_REQUIRED",
+                  verificationExpiresAt: null,
+                },
+                {
+                  __typename: "NotificationChannelModel",
+                  ...CHANNEL_OPTIONS[2],
+                  verificationStatus: "NOT_REQUIRED",
+                  verificationDeliveryStatus: "NOT_REQUIRED",
+                  verificationExpiresAt: null,
+                },
+              ],
+            },
+          });
+          observer.complete();
+          return;
+        }
+
+        if (operation.operationName === "SetCheckChannelEnabled") {
+          rejectMutation = () => observer.error(new Error("save failed"));
+          return;
+        }
+
+        observer.error(new Error(`Unexpected operation: ${operation.operationName}`));
+      }),
+  );
+  const client = new ApolloClient({ cache: new InMemoryCache(), link });
+
+  return {
+    client,
+    rejectMutation() {
+      if (!rejectMutation) {
+        throw new Error("Notification mutation has not started");
+      }
+      rejectMutation();
+    },
+  };
+}
+
 function renderControl({
   channels = CHANNEL_OPTIONS,
   notificationChannelIds = [],
@@ -228,13 +305,16 @@ describe("CheckNotificationChannels", () => {
     ).toBeInTheDocument();
   });
 
-  it("shows the no-active state and channels CTA", () => {
+  it("shows the no-active state without an active CTA or link", () => {
     renderControl({ channels: [] });
 
     expect(screen.getByText("No active notification channels")).toBeInTheDocument();
     expect(
-      screen.getByRole("link", { name: "Add or activate a notification channel" }),
-    ).toHaveAttribute("href", "/channels");
+      screen.queryByRole("link", {
+        name: "Add or activate a notification channel",
+      }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 
   it("uses compact and detail presentation densities", () => {
@@ -376,6 +456,31 @@ describe("CheckNotificationChannels", () => {
     await waitFor(() => expect(email).not.toBeChecked());
     expect(webhook).toBeChecked();
     expect(refetchQueries).toHaveBeenCalledWith({ include: [CHANNELS] });
+    expect(await screen.findByRole("dialog", { name: "Error" })).toHaveTextContent(
+      "Could not update notifications for Nightly backup. Please try again.",
+    );
+  });
+
+  it("removes a channel row when the failure refetch returns it disabled", async () => {
+    const { client, rejectMutation } = createRefetchingFailureClient();
+    const refetchQueries = vi.spyOn(client, "refetchQueries");
+    render(
+      <ApolloProvider client={client}>
+        <QueryBackedNotificationChannels />
+      </ApolloProvider>,
+    );
+    const email = await screen.findByRole("switch", {
+      name: /Nightly backup.*Email/i,
+    });
+    const webhook = getSwitch("Webhook");
+
+    fireEvent.click(email);
+    rejectMutation();
+
+    await waitFor(() => expect(email).not.toBeInTheDocument());
+    expect(refetchQueries).toHaveBeenCalledWith({ include: [CHANNELS] });
+    expect(webhook).toBeInTheDocument();
+    expect(webhook).toBeChecked();
     expect(await screen.findByRole("dialog", { name: "Error" })).toHaveTextContent(
       "Could not update notifications for Nightly backup. Please try again.",
     );
