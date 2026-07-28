@@ -366,7 +366,7 @@ export class ChecksService {
     const [channels, exclusions] = await Promise.all([
       this.prisma.notificationChannel.findMany({
         where: { projectId, enabled: true },
-        orderBy: { createdAt: 'asc' },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
         select: { id: true },
       }),
       this.prisma.checkChannelExclusion.findMany({
@@ -455,7 +455,7 @@ export class ChecksService {
         enabled: true,
         checkExclusions: { none: { checkId } },
       },
-      orderBy: { createdAt: 'asc' },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       select: { id: true },
     });
     return channels.map(({ id }) => id);

@@ -503,7 +503,7 @@ describe('ChecksService effective notification channels', () => {
         enabled: true,
         checkExclusions: { none: { checkId: 'check-1' } },
       },
-      orderBy: { createdAt: 'asc' },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       select: { id: true },
     });
   });
@@ -533,7 +533,7 @@ describe('ChecksService effective notification channels', () => {
         enabled: true,
         checkExclusions: { none: { checkId: 'check-1' } },
       },
-      orderBy: { createdAt: 'asc' },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       select: { id: true },
     });
   });
@@ -575,7 +575,7 @@ describe('ChecksService effective notification channels', () => {
     expect(h.prisma.notificationChannel.findMany).toHaveBeenCalledTimes(1);
     expect(h.prisma.notificationChannel.findMany).toHaveBeenCalledWith({
       where: { projectId: h.project.id, enabled: true },
-      orderBy: { createdAt: 'asc' },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       select: { id: true },
     });
     expect(h.prisma.checkChannelExclusion.findMany).toHaveBeenCalledTimes(1);
