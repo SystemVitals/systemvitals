@@ -1,8 +1,8 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { useMutation } from "@apollo/client/react";
-import { ACKNOWLEDGE_CHECK } from "@/lib/queries";
+import { useQuery } from "@apollo/client/react";
+import { CHANNELS } from "@/lib/queries";
 import { StatusBadge } from "@/components/status-badge";
 import { ResponseTimeChart } from "@/components/response-time-chart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,10 +10,11 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Check, ArrowLeft, BellOff, Pencil } from "lucide-react";
+import { ArrowLeft, Pencil } from "lucide-react";
 import { CopyField } from "@/components/app/copy-field";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EventTimeline, type TimelineEvent } from "@/components/app/event-timeline";
@@ -22,6 +23,10 @@ import {
   MoveCheckDialog,
   type MoveDestination,
 } from "@/components/app/move-check-dialog";
+import {
+  CheckNotificationChannels,
+  type NotificationChannelOption,
+} from "@/components/app/check-notification-channels";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8888";
 
@@ -32,6 +37,7 @@ type CheckEvent = TimelineEvent;
 export interface CheckDetailData {
   id: string;
   projectId: string;
+  notificationChannelIds: string[];
   name: string;
   slug: string;
   type: string;
@@ -50,6 +56,113 @@ export interface CheckDetailData {
   events: CheckEvent[];
 }
 
+function NotificationChannelsPlaceholder({
+  state,
+}: {
+  state: "loading" | "error";
+}) {
+  const loading = state === "loading";
+  const label = loading
+    ? "Loading notification channels"
+    : "Notification channels unavailable";
+
+  return (
+    <section
+      role="status"
+      aria-label={label}
+      aria-live="polite"
+      className="w-full overflow-hidden rounded-lg border border-border/70 bg-background"
+    >
+      <div className="border-b border-border/60 bg-muted/20 px-4 py-3">
+        <h3 className="text-sm font-medium text-foreground">Notifications</h3>
+      </div>
+      <div className="px-4 py-4 text-sm text-muted-foreground">
+        {loading ? "Loading notification channels…" : label}
+      </div>
+    </section>
+  );
+}
+
+function CheckNotificationChannelsSection({
+  check,
+}: {
+  check: CheckDetailData;
+}) {
+  const [errorDialogOpen, setErrorDialogOpen] = useState(false);
+  const {
+    data,
+    loading,
+    error,
+    refetch,
+  } = useQuery<{ channels: NotificationChannelOption[] }>(CHANNELS, {
+    variables: { projectId: check.projectId },
+  });
+  const channels = useMemo(
+    () => (data?.channels ?? []).filter((channel) => channel.enabled),
+    [data],
+  );
+
+  useEffect(() => {
+    if (error) {
+      Promise.resolve().then(() => setErrorDialogOpen(true));
+    } else if (data) {
+      Promise.resolve().then(() => setErrorDialogOpen(false));
+    }
+  }, [data, error]);
+
+  return (
+    <>
+      {loading && !data ? (
+        <NotificationChannelsPlaceholder state="loading" />
+      ) : error && !data ? (
+        <NotificationChannelsPlaceholder state="error" />
+      ) : data ? (
+        <CheckNotificationChannels
+          checkId={check.id}
+          checkName={check.name}
+          notificationChannelIds={check.notificationChannelIds ?? []}
+          channels={channels}
+          variant="detail"
+        />
+      ) : (
+        <NotificationChannelsPlaceholder state="loading" />
+      )}
+
+      <Dialog
+        open={errorDialogOpen}
+        onOpenChange={(open) => setErrorDialogOpen(open)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Notification channels unavailable</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Could not load notification channels. Please try again.
+          </p>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setErrorDialogOpen(false)}
+            >
+              Dismiss
+            </Button>
+            <Button
+              aria-label="Retry notification channels"
+              disabled={loading}
+              onClick={() => {
+                setErrorDialogOpen(false);
+                void refetch().catch(() => undefined);
+              }}
+            >
+              {loading ? "Retrying…" : "Retry"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 export function CheckDetail({
   check,
   loading,
@@ -60,35 +173,19 @@ export function CheckDetail({
   check: CheckDetailData | undefined;
   loading: boolean;
   error?: Error;
-  // Called after a save (with the updated check) or after any other
-  // side-effecting action, like acknowledge (with no argument). The id route
-  // ignores the argument and always refetches; the slug route uses it to
-  // detect an in-place rename and navigate instead — see that route's
-  // `onRefetch` for why a bare refetch there would 404 the page.
+  // Called after a save. The id route ignores the updated check and always
+  // refetches; the slug route uses it to detect an in-place rename and
+  // navigate instead — see that route's `onRefetch` for why a bare refetch
+  // there would 404 the page.
   onRefetch: (updatedCheck?: UpdatedCheck) => void;
   onMoved: (destination: MoveDestination) => void;
 }) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [acknowledged, setAcknowledged] = useState(false);
   const [editing, setEditing] = useState(false);
-
-  const [acknowledgeCheck, { loading: acknowledging, error: ackError }] = useMutation(
-    ACKNOWLEDGE_CHECK,
-    {
-      onCompleted: () => {
-        setAcknowledged(true);
-        onRefetch();
-      },
-    }
-  );
 
   useEffect(() => {
     if (error) Promise.resolve().then(() => setErrorMessage(error.message));
   }, [error]);
-
-  useEffect(() => {
-    if (ackError) Promise.resolve().then(() => setErrorMessage(ackError.message));
-  }, [ackError]);
 
   // A `pingSlug` survives conversion away from HEARTBEAT so converting back
   // restores the same URL, but the endpoint itself is inert for any other
@@ -144,23 +241,6 @@ export function CheckDetail({
               checkSlug={check.slug}
               onMoved={onMoved}
             />
-            {check.status === "DOWN" && !acknowledged && (
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={acknowledging}
-                onClick={() => acknowledgeCheck({ variables: { checkId: check.id } })}
-              >
-                <BellOff className="h-4 w-4 mr-1" />
-                {acknowledging ? "Acknowledging…" : "Acknowledge"}
-              </Button>
-            )}
-            {acknowledged && (
-              <span className="inline-flex items-center gap-1 text-xs font-medium text-success">
-                <Check className="h-4 w-4" />
-                Acknowledged
-              </span>
-            )}
           </div>
 
           {pingUrl && (
@@ -213,6 +293,11 @@ export function CheckDetail({
               </CardContent>
             </Card>
           )}
+
+          <CheckNotificationChannelsSection
+            key={`${check.id}:${check.projectId}`}
+            check={check}
+          />
 
           {showChart && (
             <div className="space-y-2">

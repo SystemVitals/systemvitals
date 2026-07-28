@@ -58,6 +58,7 @@ function makeLink(queryCount: { current: number }) {
               __typename: "Check",
               id: "check-1",
               projectId: "project-source",
+              notificationChannelIds: ["email"],
               name: "Nightly backup",
               slug: "nightly-backup",
               type: "HEARTBEAT",
@@ -76,6 +77,26 @@ function makeLink(queryCount: { current: number }) {
               timeoutMs: null,
               events: [],
             },
+          },
+        });
+        observer.complete();
+        return;
+      }
+      if (operation.operationName === "channels") {
+        observer.next({
+          data: {
+            channels: [
+              {
+                __typename: "NotificationChannelModel",
+                id: "email",
+                type: "EMAIL",
+                configJson: '{"email":"alerts@example.com"}',
+                enabled: true,
+                verificationStatus: "VERIFIED",
+                verificationDeliveryStatus: "DELIVERED",
+                verificationExpiresAt: null,
+              },
+            ],
           },
         });
         observer.complete();

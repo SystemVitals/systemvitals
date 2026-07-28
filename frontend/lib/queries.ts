@@ -26,6 +26,7 @@ export const CHECK = gql`
     check(id: $id) {
       id
       projectId
+      notificationChannelIds
       name
       slug
       type
@@ -58,6 +59,7 @@ export const CHECK_BY_SLUG = gql`
     checkBySlug(orgSlug: $orgSlug, projectSlug: $projectSlug, checkSlug: $checkSlug) {
       id
       projectId
+      notificationChannelIds
       name
       slug
       type
@@ -332,12 +334,6 @@ export const UPDATE_ESCALATION_POLICY = gql`
 export const DELETE_ESCALATION_POLICY = gql`
   mutation deleteEscalationPolicy($id: ID!) {
     deleteEscalationPolicy(id: $id)
-  }
-`;
-
-export const ACKNOWLEDGE_CHECK = gql`
-  mutation acknowledgeCheck($checkId: ID!) {
-    acknowledgeCheck(checkId: $checkId)
   }
 `;
 
