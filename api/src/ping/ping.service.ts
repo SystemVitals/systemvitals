@@ -8,6 +8,10 @@ export interface PingResult {
   checkId: string;
 }
 
+type PingTransition =
+  | { recovered: false }
+  | { recovered: true; channelIds: string[] };
+
 @Injectable()
 export class PingService {
   constructor(
@@ -30,26 +34,55 @@ export class PingService {
       throw new NotFoundException(`No check found for slug: ${slug}`);
     }
 
-    const previousStatus = check.status;
-    const now = new Date();
-
+    let transition: PingTransition;
     try {
-      await this.prisma.$transaction([
-        this.prisma.checkEvent.create({
-          data: {
-            checkId: check.id,
-            timestamp: now,
-            status: 'UP',
-          },
-        }),
-        this.prisma.check.update({
-          where: { id: check.id },
-          data: {
-            status: 'UP',
-            lastEventAt: now,
-          },
-        }),
-      ]);
+      transition = await this.prisma.$transaction(
+        async (tx): Promise<PingTransition> => {
+          await tx.$queryRaw`
+          SELECT id FROM checks WHERE id = ${check.id} FOR UPDATE
+        `;
+          const lockedCheck = await tx.check.findUnique({
+            where: { id: check.id },
+          });
+          if (!lockedCheck || lockedCheck.type !== 'HEARTBEAT') {
+            throw new NotFoundException('Check not found');
+          }
+
+          const previousStatus = lockedCheck.status;
+          const now = new Date();
+          await tx.checkEvent.create({
+            data: {
+              checkId: lockedCheck.id,
+              timestamp: now,
+              status: 'UP',
+            },
+          });
+          await tx.check.update({
+            where: { id: lockedCheck.id },
+            data: {
+              status: 'UP',
+              lastEventAt: now,
+            },
+          });
+
+          if (previousStatus !== 'DOWN') {
+            return { recovered: false };
+          }
+          const channels = await tx.notificationChannel.findMany({
+            where: {
+              projectId: lockedCheck.projectId,
+              enabled: true,
+              checkExclusions: { none: { checkId: lockedCheck.id } },
+            },
+            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+            select: { id: true },
+          });
+          return {
+            recovered: true,
+            channelIds: channels.map(({ id }) => id),
+          };
+        },
+      );
     } catch (e) {
       if (
         e instanceof Prisma.PrismaClientKnownRequestError &&
@@ -60,12 +93,11 @@ export class PingService {
       throw e;
     }
 
-    const recovered = previousStatus === 'DOWN';
-
-    if (recovered) {
+    if (transition.recovered) {
       const enqueuePromise = this.alertQueue.enqueue({
         checkId: check.id,
         kind: 'recovery',
+        channelIds: transition.channelIds,
       });
       void Promise.resolve(enqueuePromise).catch((err) =>
         console.error('recovery enqueue failed', err),
@@ -73,7 +105,7 @@ export class PingService {
     }
 
     return {
-      recovered,
+      recovered: transition.recovered,
       checkId: check.id,
     };
   }

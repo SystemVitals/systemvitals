@@ -31,3 +31,9 @@ project. Repeating the same value is safe, including disabling every channel.
 Changing routing does not send notifications, create alert logs, or enqueue
 escalation work. Moving a check to another project clears its exclusions, so
 the destination project's enabled channels become the new defaults.
+
+Recipient routing is snapshotted atomically when a check transitions to
+`DOWN` or recovers from `DOWN` to `UP`. Later per-check channel changes affect
+only future transitions; already queued jobs retain their original recipients.
+Consumers may still skip a snapshotted channel if it is deleted or globally
+disabled before delivery.

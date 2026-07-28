@@ -5,7 +5,10 @@ import { FastifyAdapter } from '@nestjs/platform-fastify';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
-import { AlertQueueService } from '../src/queue/alert-queue.service';
+import {
+  AlertQueueService,
+  type AlertJobData,
+} from '../src/queue/alert-queue.service';
 import { ChecksService } from '../src/checks/checks.service';
 import { generateToken } from '../src/tokens/token.util';
 import { cleanupTestUsers } from './cleanup-test-users';
@@ -98,10 +101,7 @@ function deferred(): Deferred {
 describe('per-check notification channels (e2e)', () => {
   const runId = randomUUID().replaceAll('-', '').slice(0, 12);
   const fixtureEmails: string[] = [];
-  const enqueue = jest.fn<
-    Promise<void>,
-    [{ checkId: string; kind: 'down' | 'recovery' }]
-  >();
+  const enqueue = jest.fn<Promise<void>, [AlertJobData]>();
   let sequence = 0;
   let app: NestFastifyApplication;
   let prisma: PrismaService;
