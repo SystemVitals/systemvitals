@@ -6,7 +6,14 @@ import {
   Observable,
 } from "@apollo/client";
 import { ApolloProvider, useQuery } from "@apollo/client/react";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { print } from "graphql";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -295,14 +302,14 @@ describe("CheckNotificationChannels", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("shows the exact all-off warning", () => {
+  it("announces the exact all-off warning as a polite status", () => {
     renderControl({ notificationChannelIds: [] });
 
-    expect(
-      screen.getByText(
-        "Notifications off — This check will not send DOWN or RECOVERY notifications.",
-      ),
-    ).toBeInTheDocument();
+    const warning = screen.getByRole("status");
+    expect(warning).toHaveAttribute("aria-live", "polite");
+    expect(warning).toHaveTextContent(
+      "Notifications off — This check will not send DOWN or RECOVERY notifications.",
+    );
   });
 
   it("shows the no-active state without an active CTA or link", () => {
@@ -570,6 +577,61 @@ describe("CheckNotificationChannels", () => {
     pending[0].succeed();
     await waitFor(() => expect(getSwitch("Email")).toBeEnabled());
   });
+
+  it.each<"succeed" | "fail">(["succeed", "fail"])(
+    "isolates a new check from a pending old request that later %ss",
+    async (completion) => {
+      const { client, pending } = createClient();
+      const view = render(
+        <ApolloProvider client={client}>
+          <CheckNotificationChannels
+            checkId="check-1"
+            checkName="Old heartbeat"
+            notificationChannelIds={[]}
+            channels={[CHANNEL_OPTIONS[0], CHANNEL_OPTIONS[2]]}
+            variant="compact"
+          />
+        </ApolloProvider>,
+      );
+      fireEvent.click(
+        screen.getByRole("switch", { name: /Old heartbeat.*Email/i }),
+      );
+      expect(pending).toHaveLength(1);
+
+      view.rerender(
+        <ApolloProvider client={client}>
+          <CheckNotificationChannels
+            checkId="check-2"
+            checkName="API probe"
+            notificationChannelIds={["webhook"]}
+            channels={[CHANNEL_OPTIONS[0], CHANNEL_OPTIONS[2]]}
+            variant="compact"
+          />
+        </ApolloProvider>,
+      );
+      const newEmail = screen.getByRole("switch", {
+        name: /API probe.*Email/i,
+      });
+      const newWebhook = screen.getByRole("switch", {
+        name: /API probe.*Webhook/i,
+      });
+
+      expect(newEmail).not.toBeChecked();
+      expect(newEmail).toBeEnabled();
+      expect(newWebhook).toBeChecked();
+      expect(screen.queryByText("Saving…")).not.toBeInTheDocument();
+
+      await act(async () => {
+        pending[0][completion]();
+      });
+
+      expect(newEmail).not.toBeChecked();
+      expect(newEmail).toBeEnabled();
+      expect(newWebhook).toBeChecked();
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(screen.queryByText(/Old heartbeat/)).not.toBeInTheDocument();
+    },
+  );
 });
 
 const SHARED_CHECK = gql`
@@ -616,6 +678,24 @@ function SharedControls() {
   );
 }
 
+function SharedControl() {
+  const { data } = useQuery<SharedCheckData>(SHARED_CHECK, {
+    fetchPolicy: "cache-only",
+  });
+  const check = data?.sharedNotificationCheck;
+  if (!check) return null;
+
+  return (
+    <CheckNotificationChannels
+      checkId={check.id}
+      checkName={check.name}
+      notificationChannelIds={check.notificationChannelIds}
+      channels={[CHANNEL_OPTIONS[0], CHANNEL_OPTIONS[2]]}
+      variant="compact"
+    />
+  );
+}
+
 it("updates compact and detail controls backed by the same normalized CheckModel", async () => {
   const { client, pending } = createClient();
   client.cache.writeQuery({
@@ -653,4 +733,57 @@ it("updates compact and detail controls backed by the same normalized CheckModel
   expect(
     compact.getByRole("switch", { name: /Nightly backup.*Email/i }),
   ).toBeChecked();
+});
+
+it("restores a failed target from the latest authoritative shared cache state", async () => {
+  const { client, pending } = createClient();
+  vi.spyOn(client, "refetchQueries").mockResolvedValue([]);
+  client.cache.writeQuery({
+    query: SHARED_CHECK,
+    data: {
+      sharedNotificationCheck: {
+        __typename: "CheckModel",
+        id: "check-1",
+        name: "Nightly backup",
+        notificationChannelIds: ["webhook"],
+      },
+    },
+  });
+  render(
+    <ApolloProvider client={client}>
+      <SharedControl />
+    </ApolloProvider>,
+  );
+  const email = getSwitch("Email");
+  const webhook = getSwitch("Webhook");
+  fireEvent.click(email);
+  expect(email).toBeChecked();
+
+  const checkId = client.cache.identify({
+    __typename: "CheckModel",
+    id: "check-1",
+  });
+  await act(async () => {
+    client.cache.modify<{ notificationChannelIds: readonly string[] }>({
+      id: checkId,
+      fields: {
+        notificationChannelIds() {
+          return ["email", "webhook"];
+        },
+      },
+    });
+  });
+  await act(async () => {
+    pending[0].fail();
+  });
+
+  expect(email).toBeInTheDocument();
+  expect(email).toBeChecked();
+  expect(email).toBeEnabled();
+  expect(webhook).toBeChecked();
+  expect(
+    client.cache.readQuery<SharedCheckData>({
+      query: SHARED_CHECK,
+    })?.sharedNotificationCheck.notificationChannelIds,
+  ).toEqual(["email", "webhook"]);
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useApolloClient, useMutation } from "@apollo/client/react";
 import {
   Bell,
@@ -187,7 +187,7 @@ function channelPresentation(
   }
 }
 
-export function CheckNotificationChannels({
+function StatefulCheckNotificationChannels({
   checkId,
   checkName,
   notificationChannelIds,
@@ -202,14 +202,19 @@ export function CheckNotificationChannels({
   const [selectedIds, setSelectedIds] = useState(
     () => new Set(notificationChannelIds),
   );
+  const authoritativeIds = useRef(notificationChannelIds);
   const [pendingIds, setPendingIds] = useState(() => new Set<string>());
-  const pendingPreviousValues = useRef(new Map<string, boolean>());
+  const pendingChannelIds = useRef(new Set<string>());
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useLayoutEffect(() => {
+    authoritativeIds.current = notificationChannelIds;
+  }, [notificationChannelIds]);
 
   useEffect(() => {
     setSelectedIds((current) => {
       const reconciled = new Set(notificationChannelIds);
-      for (const channelId of pendingPreviousValues.current.keys()) {
+      for (const channelId of pendingChannelIds.current) {
         if (current.has(channelId)) {
           reconciled.add(channelId);
         } else {
@@ -229,10 +234,9 @@ export function CheckNotificationChannels({
     channel: NotificationChannelOption,
     enabled: boolean,
   ) {
-    if (pendingPreviousValues.current.has(channel.id)) return;
+    if (pendingChannelIds.current.has(channel.id)) return;
 
-    const wasEnabled = selectedIds.has(channel.id);
-    pendingPreviousValues.current.set(channel.id, wasEnabled);
+    pendingChannelIds.current.add(channel.id);
     setPendingIds((current) => {
       const next = new Set(current);
       next.add(channel.id);
@@ -278,9 +282,11 @@ export function CheckNotificationChannels({
         });
       }
     } catch {
+      const authoritativeEnabled =
+        authoritativeIds.current.includes(channel.id);
       setSelectedIds((current) => {
         const next = new Set(current);
-        if (wasEnabled) {
+        if (authoritativeEnabled) {
           next.add(channel.id);
         } else {
           next.delete(channel.id);
@@ -292,7 +298,7 @@ export function CheckNotificationChannels({
       );
       void client.refetchQueries({ include: [CHANNELS] }).catch(() => undefined);
     } finally {
-      pendingPreviousValues.current.delete(channel.id);
+      pendingChannelIds.current.delete(channel.id);
       setPendingIds((current) => {
         const next = new Set(current);
         next.delete(channel.id);
@@ -385,7 +391,11 @@ export function CheckNotificationChannels({
               })}
             </div>
             {!hasSelectedActiveChannel ? (
-              <p className="border-t border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs leading-4 text-amber-800 dark:text-amber-300">
+              <p
+                role="status"
+                aria-live="polite"
+                className="border-t border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs leading-4 text-amber-800 dark:text-amber-300"
+              >
                 Notifications off — This check will not send DOWN or RECOVERY
                 notifications.
               </p>
@@ -409,4 +419,10 @@ export function CheckNotificationChannels({
       </Dialog>
     </>
   );
+}
+
+export function CheckNotificationChannels(
+  props: CheckNotificationChannelsProps,
+) {
+  return <StatefulCheckNotificationChannels key={props.checkId} {...props} />;
 }
