@@ -29,7 +29,7 @@ describe("check channel exclusions migration contract", () => {
       'CREATE INDEX "check_channel_exclusions_channel_id_idx"',
     );
     expect(sql).toMatch(
-      /CREATE INDEX "check_channel_exclusions_channel_id_idx"\s+ON "check_channel_exclusions"\("channel_id"\)/,
+      /CREATE INDEX "check_channel_exclusions_channel_id_idx"\s+ON "check_channel_exclusions"\("channel_id"\)\s*;/,
     );
     expect(sql).not.toMatch(/\bINSERT\b/i);
   });
