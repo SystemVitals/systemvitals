@@ -151,6 +151,15 @@ export const CHANNELS = gql`
   }
 `;
 
+export const SET_CHECK_CHANNEL_ENABLED = gql`
+  mutation SetCheckChannelEnabled($checkId: ID!, $channelId: ID!, $enabled: Boolean!) {
+    setCheckChannelEnabled(checkId: $checkId, channelId: $channelId, enabled: $enabled) {
+      id
+      notificationChannelIds
+    }
+  }
+`;
+
 export const CREATE_CHANNEL = gql`
   mutation createChannel($projectId: ID!, $type: String!, $configJson: String!) {
     createChannel(projectId: $projectId, type: $type, configJson: $configJson) {
