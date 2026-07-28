@@ -14,6 +14,47 @@ function credentialGql(credential: Record<string, unknown>): Gql {
   return async () => ({ apiCredential: credential });
 }
 
+const SESSION_TOOL_NAMES = [
+  "create_active_check",
+  "create_channel",
+  "create_heartbeat_check",
+  "create_organization",
+  "create_project",
+  "delete_channel",
+  "delete_check",
+  "delete_organization",
+  "get_check",
+  "invite_member",
+  "leave_organization",
+  "list_channels",
+  "list_checks",
+  "list_members",
+  "list_projects",
+  "pause_check",
+  "regenerate_ping_key",
+  "remove_member",
+  "resend_email_channel_verification",
+  "resume_check",
+  "revoke_invite",
+  "set_check_channel_enabled",
+  "transfer_organization_creatorship",
+  "update_check",
+  "update_member_role",
+  "update_organization",
+] as const;
+
+const SCOPED_CHECK_TOOL_NAMES = [
+  "create_active_check",
+  "create_heartbeat_check",
+  "delete_check",
+  "get_check",
+  "list_checks",
+  "pause_check",
+  "resume_check",
+  "set_check_channel_enabled",
+  "update_check",
+] as const;
+
 describe("buildServer", () => {
   it("fetches the credential once and registers every tool for a session", async () => {
     let calls = 0;
@@ -32,13 +73,14 @@ describe("buildServer", () => {
     const { toolNames } = await buildServer(gql);
 
     expect(calls).toBe(1);
-    expect(toolNames).toContain("set_check_channel_enabled");
+    expect(toolNames).toHaveLength(26);
+    expect([...toolNames].sort()).toEqual(SESSION_TOOL_NAMES);
     expect(emailVerificationLifecycleToolNames(toolNames)).toEqual(
       EMAIL_VERIFICATION_TOOL_ALLOWLIST,
     );
   });
 
-  it("registers only email verification resend for a legacy broad token", async () => {
+  it("registers the full catalog, including email verification resend, for a legacy broad token", async () => {
     const { toolNames } = await buildServer(
       credentialGql({
         authKind: "api-token",
@@ -49,6 +91,8 @@ describe("buildServer", () => {
       }),
     );
 
+    expect(toolNames).toHaveLength(26);
+    expect([...toolNames].sort()).toEqual(SESSION_TOOL_NAMES);
     expect(emailVerificationLifecycleToolNames(toolNames)).toEqual(
       EMAIL_VERIFICATION_TOOL_ALLOWLIST,
     );
@@ -68,7 +112,7 @@ describe("buildServer", () => {
     expect(toolNames).toEqual(["list_checks", "get_check"]);
   });
 
-  it("registers every selected ToolDef exactly once", async () => {
+  it("registers exactly the nine check tools for a full scoped credential", async () => {
     const { toolNames } = await buildServer(
       credentialGql({
         authKind: "api-token",
@@ -78,8 +122,9 @@ describe("buildServer", () => {
         projectName: "Production",
       }),
     );
-    const unique = new Set(toolNames);
-    expect(unique.size).toBe(toolNames.length);
+
+    expect(toolNames).toHaveLength(9);
+    expect([...toolNames].sort()).toEqual(SCOPED_CHECK_TOOL_NAMES);
   });
 
   it("fails startup clearly for an unbound full explicit scoped credential", async () => {

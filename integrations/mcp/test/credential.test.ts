@@ -33,6 +33,35 @@ const SCOPED_TOOL_NAMES = [
   "set_check_channel_enabled",
 ];
 
+const ALL_TOOL_NAMES = [
+  "list_projects",
+  "list_checks",
+  "get_check",
+  "list_channels",
+  "create_heartbeat_check",
+  "create_active_check",
+  "pause_check",
+  "resume_check",
+  "delete_check",
+  "set_check_channel_enabled",
+  "create_channel",
+  "resend_email_channel_verification",
+  "delete_channel",
+  "create_project",
+  "regenerate_ping_key",
+  "update_check",
+  "list_members",
+  "invite_member",
+  "revoke_invite",
+  "update_member_role",
+  "remove_member",
+  "create_organization",
+  "update_organization",
+  "transfer_organization_creatorship",
+  "leave_organization",
+  "delete_organization",
+];
+
 describe("fetchCredential", () => {
   it("requests only public credential metadata", async () => {
     const gql = vi.fn<Gql>().mockResolvedValue({
@@ -50,9 +79,12 @@ describe("fetchCredential", () => {
 
 describe("toolsForCredential", () => {
   it("exposes reads and every checks:write mutation for a full scoped credential", () => {
-    expect(toolsForCredential(scopedCredential()).map((tool) => tool.name)).toEqual(
-      SCOPED_TOOL_NAMES,
+    const selectedNames = toolsForCredential(scopedCredential()).map(
+      (tool) => tool.name,
     );
+
+    expect(selectedNames).toHaveLength(9);
+    expect(selectedNames).toEqual(SCOPED_TOOL_NAMES);
   });
 
   it("removes projectId from every scoped schema", () => {
@@ -108,12 +140,9 @@ describe("toolsForCredential", () => {
       projectName: null,
     });
 
-    expect(selected.map((tool) => tool.name)).toEqual(
-      tools.map((tool) => tool.name),
-    );
-    expect(selected.map((tool) => tool.name)).toContain(
-      "set_check_channel_enabled",
-    );
+    expect(tools.map((tool) => tool.name)).toEqual(ALL_TOOL_NAMES);
+    expect(selected).toHaveLength(26);
+    expect(selected.map((tool) => tool.name)).toEqual(ALL_TOOL_NAMES);
     expect(
       emailVerificationLifecycleToolNames(selected.map((tool) => tool.name)),
     ).toEqual(EMAIL_VERIFICATION_TOOL_ALLOWLIST);
@@ -131,9 +160,8 @@ describe("toolsForCredential", () => {
       projectName: null,
     });
 
-    expect(selected.map((tool) => tool.name)).toContain(
-      "set_check_channel_enabled",
-    );
+    expect(selected).toHaveLength(26);
+    expect(selected.map((tool) => tool.name)).toEqual(ALL_TOOL_NAMES);
     expect(
       emailVerificationLifecycleToolNames(selected.map((tool) => tool.name)),
     ).toEqual(EMAIL_VERIFICATION_TOOL_ALLOWLIST);
