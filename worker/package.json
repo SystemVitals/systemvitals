@@ -15,7 +15,7 @@
     "@systemvitals/database": "file:../database",
     "bullmq": "^5.79.0",
     "commander": "^14.0.0",
-    "cron-parser": "^4.9.0",
+    "cron-parser": "^5.6.2",
     "dotenv": "^17.4.2",
     "ioredis": "^5.6.1",
     "nodemailer": "9.0.3"
