@@ -4,7 +4,7 @@
 
 **Goal:** Replace escalation policies and acknowledgements with immediate per-check notification-channel routing for DOWN and recovery transitions, while preserving automatic zero-downtime Dokploy deployments.
 
-**Architecture:** Store only `(check_id, channel_id)` exclusions so every enabled project channel is selected by default, including channels enabled later. Expose the effective enabled channel IDs through GraphQL, mutate one channel at a time with project-scoped authorization, filter worker delivery by exclusions, and use one shared frontend control on dashboard cards and check detail pages. Roll out in three protected releases: compatible foundation, product cutover, then dormant-schema/infrastructure cleanup.
+**Architecture:** Store only `(check_id, channel_id)` exclusions so every enabled project channel is selected by default, including channels enabled later. Expose the effective enabled channel IDs through GraphQL and mutate one channel at a time with project-scoped authorization. Every watchdog DOWN, probe DOWN/recovery, and heartbeat recovery producer snapshots effective channel IDs inside the same locked transaction as the actual transition; alert jobs carry optional `channelIds`, and the worker treats a present snapshot (including `[]`) as authoritative while retaining snapshotless-job compatibility during the rolling release. Use one shared frontend control on dashboard cards and check detail pages. Roll out in three protected releases: compatible foundation, product cutover, then dormant-schema/infrastructure cleanup.
 
 **Tech Stack:** PostgreSQL + Prisma, NestJS GraphQL, BullMQ worker, Next.js 16 + React 19 + TypeScript + Apollo Client 4 + Tailwind CSS v4 + shadcn/ui + lucide-react, Vitest/Jest, npm on Node.js 22, GitHub Actions, Dokploy.
 
@@ -13,6 +13,10 @@
 - Notify only on future `UP -> DOWN` and `DOWN -> UP` transitions. Do not notify for ordinary successful probes and do not emit a notification when a channel is enabled while a check is already DOWN.
 - One per-check selection controls both DOWN and recovery delivery. There is no separate recovery toggle.
 - Effective selection is `enabled project channels - check exclusions`. New checks and newly enabled channels therefore default to selected without backfills.
+- Snapshot effective channel IDs in the same locked transaction as each actual watchdog DOWN, probe DOWN/recovery, or heartbeat recovery transition.
+- Alert jobs carry optional `channelIds`. A present snapshot, including `[]`, is authoritative; consumption rechecks channel existence, the check's current project, and global enabled state without reapplying later exclusions.
+- Only snapshotless legacy jobs resolve current exclusions at processing time, preserving rolling compatibility with older producers.
+- Per-check toggles affect future transitions only. They neither add a recipient to nor suppress a recipient from an already-queued transition.
 - A check may exclude every channel. The UI must make that state explicit with `Notifications off`.
 - Disabled and pending-verification channels are not effective selections and do not appear in per-check controls.
 - Channel icons are `Mail` for EMAIL, `Send` for TELEGRAM, `Webhook` for WEBHOOK, `MessageSquare` for legacy SLACK, and `Bell` for unknown future types.
@@ -262,46 +266,66 @@ git add api/src api/test/check-notification-channels.e2e-spec.ts api/test/move-c
 git commit -m "feat(api): manage per-check channel routing"
 ```
 
-### Task 4: Filter worker delivery by check exclusions
+### Task 4: Snapshot transition recipients and consume them compatibly
 
 **Files:**
 
+- Create: `worker/src/notification-routing.ts`
+- Modify: `worker/src/watchdog.ts`
+- Modify: `worker/src/probe-handler.ts`
 - Modify: `worker/src/alert-handler.ts`
+- Modify: `worker/test/watchdog.test.ts`
+- Modify: `worker/test/probe-handler.test.ts`
+- Modify: `worker/test/scheduler-lifecycle.test.ts`
 - Modify: `worker/test/alert-handler.test.ts`
-- Modify: `worker/CLAUDE.md`
+- Modify: `worker/README.md`
+- Modify: `api/src/queue/alert-queue.service.ts`
+- Modify: `api/src/ping/ping.service.ts`
+- Modify: `api/src/ping/ping.service.spec.ts`
+- Modify: `api/test/check-notification-channels.e2e-spec.ts`
+- Modify: `api/test/ping-recovery.e2e-spec.ts`
+- Modify: `api/README.md`
 
-**Behavioral boundary:** Release 1 continues to schedule existing escalation jobs after a DOWN transition. The initial DOWN and recovery dispatch paths must already honor exclusions. This makes the database/API/worker change backward compatible with the still-deployed frontend.
+**Behavioral boundary:** Release 1 continues to schedule existing escalation jobs after a DOWN transition. Every initial DOWN and recovery producer must snapshot effective recipients atomically with its transition, and the consumer must support both new snapshots and legacy snapshotless jobs. This keeps the database/API/worker change backward compatible with the still-deployed frontend and rolling older producers.
 
+- [ ] Extend the shared alert job shape in the worker and API queue with optional `channelIds?: string[]`.
+- [ ] Add a transaction-client helper that returns enabled project channel IDs minus the locked check's exclusions in deterministic creation/ID order.
+- [ ] In watchdog DOWN, probe DOWN/recovery, and heartbeat recovery, lock the check and snapshot the selected channel IDs inside the same transaction that commits the status/event transition. Enqueue after commit with `channelIds`, preserving `[]`.
+- [ ] Add producer tests proving:
+  - watchdog DOWN snapshots under the check lock;
+  - probe DOWN and recovery snapshot under the same transition transaction;
+  - heartbeat recovery snapshots under the same transition transaction;
+  - ordinary successful probes/pings without a transition enqueue nothing;
+  - all-off enqueues an authoritative empty snapshot;
+  - concurrent toggles serialize with the transition and affect either that transition's snapshot or the next transition, never a partially observed set.
 - [ ] Add alert-handler tests proving:
-  - a selected enabled channel receives the DOWN notification;
-  - an excluded channel does not receive DOWN;
-  - the same exclusion suppresses recovery;
-  - a channel enabled after check creation is selected when no exclusion exists;
-  - excluding every channel produces no notifier call and no `AlertLog`;
-  - globally disabled channels produce no notifier call;
-  - ordinary successful probes still dispatch nothing;
-  - changing exclusions does not itself call a notifier;
+  - a present non-empty snapshot dispatches only its still-existing, same-project, globally enabled channels;
+  - a present `[]` dispatches nothing and creates no `AlertLog`;
+  - later exclusion/toggle changes neither add recipients to nor suppress an already-queued snapshot;
+  - a globally disabled or removed snapshotted channel does not dispatch;
+  - a snapshotless legacy job resolves current exclusions for rolling compatibility;
   - one notifier failure still records its attempt and does not block another channel;
-  - existing Release 1 escalation scheduling remains unchanged.
-- [ ] Run `npm test -- alert-handler.test.ts` from `worker/` and confirm the exclusion tests fail.
-- [ ] Change the channel query used by both DOWN and recovery transitions:
+  - existing Release 1 escalation scheduling remains unchanged, including when immediate `channelIds` is `[]`.
+- [ ] Run the focused worker and API producer/consumer tests and confirm the new snapshot and post-enqueue-toggle cases fail.
+- [ ] For a present snapshot, query only channels named by that snapshot while rechecking the current project and global enabled state:
 
 ```ts
 where: {
   projectId: check.projectId,
   enabled: true,
-  checkExclusions: { none: { checkId: check.id } },
+  id: { in: channelIds },
 }
 ```
 
+- [ ] Do not reapply exclusions when `channelIds` is present. Only the `channelIds === undefined` legacy branch queries `checkExclusions: { none: { checkId: check.id } }`.
 - [ ] Keep channel ordering and sanitized notifier inputs unchanged.
-- [ ] Document that notification routing is evaluated at transition time in `worker/CLAUDE.md`.
-- [ ] Run `npm test -- alert-handler.test.ts`, `npm test`, and `npx tsc -p tsconfig.build.json --noEmit` from `worker/`.
+- [ ] Document transition-time snapshots, authoritative empty snapshots, legacy-job fallback, and unchanged Release 1 escalation behavior in the API and worker READMEs.
+- [ ] Run the focused producer/consumer suites, full API/worker tests, both type-checks, API e2e, and API build.
 - [ ] Commit:
 
 ```bash
-git add worker/src/alert-handler.ts worker/test/alert-handler.test.ts worker/CLAUDE.md
-git commit -m "feat(worker): honor check channel exclusions"
+git add worker/src worker/test worker/README.md api/src/ping api/src/queue/alert-queue.service.ts api/test api/README.md
+git commit -m "feat: snapshot transition notification channels"
 ```
 
 ### Task 5: Validate and ship the compatible foundation

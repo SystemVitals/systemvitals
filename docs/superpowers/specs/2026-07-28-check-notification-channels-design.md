@@ -129,13 +129,17 @@ effective notification channels when presenting check details.
 
 ## Worker Behavior
 
-For every alert job, the worker resolves recipients at processing time:
+Each producer snapshots the effective channel IDs inside the same locked
+database transaction that commits an actual status transition. This applies to
+watchdog `DOWN`, probe `DOWN`/recovery, and heartbeat recovery. The resulting
+alert job carries an optional `channelIds` field.
 
-```text
-enabled and deliverable channels for the check's project
-minus
-channels excluded from that check
-```
+When `channelIds` is present, the snapshot is authoritative, including an empty
+array. At consumption time the worker still verifies that each referenced
+channel exists, belongs to the check's current project, and remains globally
+enabled, but it does not reapply exclusions changed after the transition.
+Snapshotless jobs from an older producer resolve the current exclusions at
+processing time only for rolling-deployment compatibility.
 
 The existing per-channel isolation and `AlertLog` behavior remain: one failed
 channel does not block another, and each attempt records its result.
@@ -146,7 +150,9 @@ The worker sends only:
 - `kind: recovery` after an actual transition from `DOWN` to `UP`.
 
 It no longer schedules escalation work after immediate `DOWN` dispatch.
-Changing exclusions has no side effect beyond later recipient resolution.
+Changing exclusions never changes an already-queued transition: a later toggle
+neither adds recipients to nor suppresses its snapshot. Toggle changes affect
+future status transitions only.
 
 ## User Interface
 
@@ -237,8 +243,12 @@ chain.
 
 - Add the exclusions table and relations.
 - Add the GraphQL field and mutation.
-- Make the worker honor exclusions.
-- Add API, database, and worker tests.
+- Make every DOWN/recovery producer snapshot effective recipients in its
+  locked transition transaction.
+- Make the worker consume authoritative snapshots while retaining
+  snapshotless-job compatibility.
+- Add API, database, and worker tests, including post-enqueue toggle and
+  transition/toggle concurrency cases.
 - Do not expose frontend toggles yet.
 - Keep escalation and acknowledgement behavior available.
 
@@ -310,9 +320,19 @@ deployments.
 
 - `DOWN` dispatch reaches selected channels only.
 - Recovery dispatch reaches the same selected channels only.
+- Watchdog, probe, and heartbeat recovery snapshot effective channel IDs in the
+  same locked transaction as the actual transition.
+- A present job snapshot, including `[]`, is not changed by later per-check
+  toggles.
+- Snapshot consumption rechecks channel existence, project membership, and
+  global enabled state without reapplying later exclusions.
+- Snapshotless legacy jobs resolve current exclusions for rolling
+  compatibility.
 - All-off produces no dispatch or `AlertLog`.
 - Globally disabled/ineligible channels do not dispatch.
 - Toggle changes do not notify an already-down check.
+- Post-enqueue toggle and transition/toggle concurrency cases preserve the
+  transition-time recipient set.
 - Existing notifier failure isolation and retries remain.
 - Release 2 schedules no escalation jobs.
 
