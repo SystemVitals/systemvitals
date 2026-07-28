@@ -6,7 +6,9 @@
   <img src="frontend/app/icon.svg" width="96" alt="SystemVitals logo">
 </p>
 
-SystemVitals is an open-source uptime and cron-job monitoring platform. It combines passive heartbeat monitoring with active HTTP, TCP, and ping checks, notifications, escalation policies, public status pages, and an MCP integration.
+SystemVitals is an open-source uptime and cron-job monitoring platform. It
+combines passive heartbeat monitoring with active HTTP, TCP, and ping checks,
+per-check notification routing, public status pages, and an MCP integration.
 
 Visit [systemvitals.link](https://systemvitals.link) or clone the project:
 
@@ -50,6 +52,20 @@ Run commands from each project directory:
 ## Architecture
 
 The Next.js frontend communicates with the NestJS API, which stores monitoring data in PostgreSQL and schedules background work through Redis and BullMQ. The worker performs probes and delivers alerts. The Prisma package is the shared database schema source of truth. See [the architecture reference](docs/ARCHITECTURE.md).
+
+## Notification routing
+
+Each check selects from the globally enabled notification channels in its
+project. Selected channels receive a notification only when a future
+monitoring event changes the check to `DOWN`, and again when it actually
+recovers from `DOWN` to `UP`. Changing a selection does not send a notification
+for the check's current state.
+
+All enabled project channels are selected by default. Channels enabled later
+also become selected unless they were explicitly turned off for that check.
+The dashboard and check detail page let users turn individual channels on or
+off, including turning every channel off with a clear `Notifications off`
+warning.
 
 ## Self-hosting
 

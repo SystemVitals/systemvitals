@@ -1,7 +1,7 @@
 # SystemVitals MCP Server
 
 Drive [SystemVitals](../../README.md) from Claude Code or any MCP-compatible
-client. Session and legacy broad credentials expose the 25 tools listed below;
+client. Session and legacy broad credentials expose the 26 tools listed below;
 project-scoped connections expose only their authorized check tools.
 
 > **This package is prepared for public publication, but is not currently
@@ -83,10 +83,10 @@ needed.
 
 The server introspects the credential before registering tools:
 
-- Session JWTs and legacy broad `read`/`write` tokens retain all **25** tools
+- Session JWTs and legacy broad `read`/`write` tokens retain all **26** tools
   below for compatibility.
-- A full project-scoped agent connection exposes **8** check tools: two reads
-  and six mutations.
+- A full project-scoped agent connection exposes **9** check tools: two reads
+  and seven mutations.
 - A read-only scoped credential exposes only **2** tools: `list_checks` and
   `get_check`.
 
@@ -94,7 +94,11 @@ For scoped credentials, the server injects the bound project and no tool schema
 exposes a project selector. Startup fails for a malformed unbound scoped
 credential instead of silently widening access.
 
-## Legacy/session tool catalog (25 total)
+`set_check_channel_enabled` requires the `checks:write` capability. `get_check`
+requires `checks:read` and reports the effective notification channel IDs,
+including an empty selection.
+
+## Legacy/session tool catalog (26 total)
 
 ### Read tools (5)
 
@@ -106,7 +110,7 @@ credential instead of silently widening access.
 | `list_channels` | List notification channels for a given project, including already-connected Telegram rows |
 | `list_members` | List the members of an organization, with membership id and role |
 
-### Write/mutation tools (20)
+### Write/mutation tools (21)
 
 | Tool | Description |
 |---|---|
@@ -118,6 +122,7 @@ credential instead of silently widening access.
 | `pause_check` | Pause monitoring for a check (no alerts while paused) |
 | `resume_check` | Resume a previously paused check |
 | `delete_check` | Permanently delete a check and all its events |
+| `set_check_channel_enabled` | Enable or disable one notification channel for a check and return its effective channel IDs |
 | `create_channel` | Create an EMAIL, SLACK, or WEBHOOK channel; email remains pending until recipient confirmation, while Telegram requires the web-app handshake |
 | `resend_email_channel_verification` | Resend verification for a pending email channel by channel ID; reports delivery failure and API cooldown/errors |
 | `delete_channel` | Permanently delete a notification channel, including an already-connected Telegram row |
@@ -142,9 +147,8 @@ across all organizations attributed to one creator account. The previous
 creator remains an owner after transfer, and deleting an organization never
 changes account billing.
 
-> **Not exposed:** escalation-policy list/create/update/delete, status-page
-> list/create/update/delete, and check acknowledgement are currently absent
-> from MCP even though those management surfaces exist in the API/frontend.
+> **Not exposed:** status-page list/create/update/delete is currently absent
+> from MCP even though that management surface exists in the API/frontend.
 > API-token administration (creation, listing/history, and revocation) requires
 > a session JWT and cannot be called with an ApiToken. Account password
 > management, account billing, checkout, portal, and Stripe actions also remain
@@ -196,4 +200,5 @@ npm start
 
 ## Development
 
-See [CLAUDE.md](./CLAUDE.md) for architecture notes, test patterns, and extension guidance.
+See the repository [contributor guide](../../AGENTS.md) for validation and
+contribution guidance.

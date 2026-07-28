@@ -216,17 +216,6 @@ type EmailVerificationPreviewModel {
   status: String!
 }
 
-type EscalationPolicyModel {
-  id: ID!
-  projectId: ID!
-  steps: [EscalationStepModel!]!
-}
-
-type EscalationStepModel {
-  channelId: ID!
-  delaySeconds: Int!
-}
-
 type ImpersonationResult {
   expiresAt: DateTime!
   token: String!

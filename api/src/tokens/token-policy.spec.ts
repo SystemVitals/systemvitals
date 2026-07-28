@@ -156,7 +156,6 @@ describe('requireOperationAccess', () => {
     'statusPages',
     'mySubscription',
     'apiTokens',
-    'acknowledgeCheck',
     'adminPing',
     'adminImpersonate',
   ])(

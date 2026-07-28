@@ -16,6 +16,7 @@ export const CHECKS = gql`
       tz
       nextExpectedAt
       lastEventAt
+      notificationChannelIds
     }
   }
 `;
@@ -25,6 +26,7 @@ export const CHECK = gql`
     check(id: $id) {
       id
       projectId
+      notificationChannelIds
       name
       slug
       type
@@ -57,6 +59,7 @@ export const CHECK_BY_SLUG = gql`
     checkBySlug(orgSlug: $orgSlug, projectSlug: $projectSlug, checkSlug: $checkSlug) {
       id
       projectId
+      notificationChannelIds
       name
       slug
       type
@@ -147,6 +150,15 @@ export const CHANNELS = gql`
       verificationStatus
       verificationDeliveryStatus
       verificationExpiresAt
+    }
+  }
+`;
+
+export const SET_CHECK_CHANNEL_ENABLED = gql`
+  mutation SetCheckChannelEnabled($checkId: ID!, $channelId: ID!, $enabled: Boolean!) {
+    setCheckChannelEnabled(checkId: $checkId, channelId: $channelId, enabled: $enabled) {
+      id
+      notificationChannelIds
     }
   }
 `;
@@ -288,46 +300,6 @@ export const UPDATE_STATUS_PAGE = gql`
 export const DELETE_STATUS_PAGE = gql`
   mutation deleteStatusPage($id: ID!) {
     deleteStatusPage(id: $id)
-  }
-`;
-
-export const ESCALATION_POLICIES = gql`
-  query escalationPolicies($projectId: ID!) {
-    escalationPolicies(projectId: $projectId) {
-      id
-      steps {
-        channelId
-        delaySeconds
-      }
-    }
-  }
-`;
-
-export const CREATE_ESCALATION_POLICY = gql`
-  mutation createEscalationPolicy($projectId: ID!, $stepsJson: String!) {
-    createEscalationPolicy(projectId: $projectId, stepsJson: $stepsJson) {
-      id
-    }
-  }
-`;
-
-export const UPDATE_ESCALATION_POLICY = gql`
-  mutation updateEscalationPolicy($id: ID!, $stepsJson: String!) {
-    updateEscalationPolicy(id: $id, stepsJson: $stepsJson) {
-      id
-    }
-  }
-`;
-
-export const DELETE_ESCALATION_POLICY = gql`
-  mutation deleteEscalationPolicy($id: ID!) {
-    deleteEscalationPolicy(id: $id)
-  }
-`;
-
-export const ACKNOWLEDGE_CHECK = gql`
-  mutation acknowledgeCheck($checkId: ID!) {
-    acknowledgeCheck(checkId: $checkId)
   }
 `;
 

@@ -190,17 +190,6 @@ type EmailVerificationPreviewModel {
   status: String!
 }
 
-type EscalationPolicyModel {
-  id: ID!
-  projectId: ID!
-  steps: [EscalationStepModel!]!
-}
-
-type EscalationStepModel {
-  channelId: ID!
-  delaySeconds: Int!
-}
-
 type InviteModel {
   acceptUrl: String!
   createdAt: DateTime!
@@ -232,20 +221,17 @@ type MemberModel {
 
 type Mutation {
   acceptInvite(token: String!): MemberModel!
-  acknowledgeCheck(checkId: ID!): Boolean!
   connectTelegramChannel(projectId: ID!, token: String!): ChannelModel!
   createActiveCheck(expectedStatus: Int, intervalSeconds: Int!, method: String, name: String!, projectId: ID!, target: String!, timeoutMs: Int!, type: String!): CheckModel!
   createApiToken(name: String!, scopes: [String!]!): ApiTokenCreateResult!
   createChannel(configJson: String!, projectId: ID!, type: String!): ChannelModel!
   createCheck(graceSeconds: Int!, name: String!, periodSeconds: Int, projectId: ID!, schedule: String, tz: String): CheckModel!
-  createEscalationPolicy(projectId: ID!, stepsJson: String!): EscalationPolicyModel!
   createOrganization(name: String!): OrganizationModel!
   createProject(name: String!, organizationId: ID!): ProjectModel!
   createScopedApiToken(input: CreateApiTokenInput!): ApiTokenCreateResult!
   createStatusPage(brandingJson: String, checkIds: [ID!]!, projectId: ID!, slug: String!, title: String!): StatusPageModel!
   deleteChannel(id: ID!): Boolean!
   deleteCheck(id: ID!): Boolean!
-  deleteEscalationPolicy(id: ID!): Boolean!
   deleteOrganization(organizationId: ID!): Boolean!
   deleteStatusPage(id: ID!): Boolean!
   inviteMember(email: String!, organizationId: ID!, role: String!): InviteModel!
@@ -262,7 +248,6 @@ type Mutation {
   setPassword(currentPassword: String, newPassword: String!): Boolean!
   transferOrganizationCreatorship(newCreatorUserId: ID!, organizationId: ID!): OrganizationModel!
   updateCheck(id: ID!, input: UpdateCheckInput!): CheckModel!
-  updateEscalationPolicy(id: ID!, stepsJson: String!): EscalationPolicyModel!
   updateMemberRole(membershipId: ID!, role: String!): MemberModel!
   updateOrganization(name: String, organizationId: ID!, slug: String): OrganizationModel!
   updateOrganizationSlug(organizationId: ID!, slug: String!): OrganizationModel!
@@ -297,7 +282,6 @@ type Query {
   checkBySlug(checkSlug: String!, orgSlug: String!, projectSlug: String!): CheckModel!
   checks(projectId: ID!): [CheckModel!]!
   emailChannelVerificationPreview(token: String!): EmailVerificationPreviewModel!
-  escalationPolicies(projectId: ID!): [EscalationPolicyModel!]!
   health: String!
   invitePreview(token: String!): InvitePreviewModel!
   managedTelegramBot: ManagedTelegramBotModel!

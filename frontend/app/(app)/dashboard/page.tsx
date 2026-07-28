@@ -1,10 +1,17 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useQuery, useMutation } from "@apollo/client/react";
 import { useAuth } from "@/lib/auth-context";
 import { useOrg } from "@/lib/org-context";
-import { CHECKS, CREATE_CHECK, PAUSE_CHECK, RESUME_CHECK, CREATE_ACTIVE_CHECK } from "@/lib/queries";
+import {
+  CHANNELS,
+  CHECKS,
+  CREATE_CHECK,
+  PAUSE_CHECK,
+  RESUME_CHECK,
+  CREATE_ACTIVE_CHECK,
+} from "@/lib/queries";
 import { StatusBadge } from "@/components/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -34,6 +41,10 @@ import { isValidCron, nextCronFires } from "@/lib/cron";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CopyField } from "@/components/app/copy-field";
 import { ConnectAgentDialog } from "@/components/app/connect-agent-dialog";
+import {
+  CheckNotificationChannels,
+  type NotificationChannelOption,
+} from "@/components/app/check-notification-channels";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8888";
 
@@ -53,6 +64,7 @@ interface CheckItem {
   schedule: string | null;
   tz: string | null;
   lastEventAt: string | null;
+  notificationChannelIds: string[];
 }
 
 function TypeBadge({ type }: { type: string }) {
@@ -67,6 +79,33 @@ function TypeBadge({ type }: { type: string }) {
     >
       {labels[type] ?? type}
     </span>
+  );
+}
+
+function NotificationChannelsPlaceholder({
+  state,
+}: {
+  state: "loading" | "error";
+}) {
+  const loading = state === "loading";
+  const label = loading
+    ? "Loading notification channels"
+    : "Notification channels unavailable";
+
+  return (
+    <section
+      role="status"
+      aria-label={label}
+      aria-live="polite"
+      className="w-full overflow-hidden rounded-lg border border-border/70 bg-background"
+    >
+      <div className="border-b border-border/60 bg-muted/20 px-3 py-2">
+        <h3 className="text-sm font-medium text-foreground">Notifications</h3>
+      </div>
+      <div className="px-3 py-3 text-sm text-muted-foreground">
+        {loading ? "Loading notification channels…" : label}
+      </div>
+    </section>
   );
 }
 
@@ -405,6 +444,10 @@ interface ChecksListProps {
 function ChecksList({ projectId, projectName, orgSlug, projectSlug }: ChecksListProps) {
   const [showCreate, setShowCreate] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [channelErrorDialog, setChannelErrorDialog] = useState<{
+    projectId: string;
+    message: string;
+  } | null>(null);
 
   const query = useQuery<{ checks: CheckItem[] }>(CHECKS, {
     variables: { projectId },
@@ -413,6 +456,20 @@ function ChecksList({ projectId, projectName, orgSlug, projectSlug }: ChecksList
     notifyOnNetworkStatusChange: false,
   });
   const { data, refetch, loading, error: queryError } = query;
+  const {
+    data: channelData,
+    loading: channelLoading,
+    error: channelError,
+    refetch: refetchChannels,
+  } = useQuery<{
+    channels: NotificationChannelOption[];
+  }>(CHANNELS, {
+    variables: { projectId },
+  });
+  const channels = useMemo(
+    () => (channelData?.channels ?? []).filter((channel) => channel.enabled),
+    [channelData],
+  );
 
   usePollWhenVisible(query, CHECK_POLL_INTERVAL_MS);
 
@@ -435,6 +492,23 @@ function ChecksList({ projectId, projectName, orgSlug, projectSlug }: ChecksList
   useEffect(() => {
     if (resumeError) Promise.resolve().then(() => setErrorMessage(resumeError.message));
   }, [resumeError]);
+
+  useEffect(() => {
+    if (channelError) {
+      Promise.resolve().then(() =>
+        setChannelErrorDialog({
+          projectId,
+          message: "Could not load notification channels. Please try again.",
+        }),
+      );
+    } else if (channelData) {
+      Promise.resolve().then(() =>
+        setChannelErrorDialog((current) =>
+          current?.projectId === projectId ? null : current,
+        ),
+      );
+    }
+  }, [channelData, channelError, projectId]);
 
   const checks = data?.checks ?? [];
 
@@ -528,6 +602,21 @@ function ChecksList({ projectId, projectName, orgSlug, projectSlug }: ChecksList
                     Last event: {new Date(check.lastEventAt).toLocaleString()}
                   </div>
                 )}
+                {channelLoading && !channelData ? (
+                  <NotificationChannelsPlaceholder state="loading" />
+                ) : channelError && !channelData ? (
+                  <NotificationChannelsPlaceholder state="error" />
+                ) : channelData ? (
+                  <CheckNotificationChannels
+                    checkId={check.id}
+                    checkName={check.name}
+                    notificationChannelIds={check.notificationChannelIds}
+                    channels={channels}
+                    variant="compact"
+                  />
+                ) : (
+                  <NotificationChannelsPlaceholder state="loading" />
+                )}
                 <div>
                   {isPaused ? (
                     <Button
@@ -571,6 +660,40 @@ function ChecksList({ projectId, projectName, orgSlug, projectSlug }: ChecksList
           <Button onClick={() => setErrorMessage(null)}>Dismiss</Button>
         </DialogContent>
       </Dialog>
+
+      <Dialog
+        open={channelErrorDialog?.projectId === projectId}
+        onOpenChange={(open) => {
+          if (!open) setChannelErrorDialog(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Notification channels unavailable</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            {channelErrorDialog?.message}
+          </p>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setChannelErrorDialog(null)}
+            >
+              Dismiss
+            </Button>
+            <Button
+              aria-label="Retry notification channels"
+              disabled={channelLoading}
+              onClick={() => {
+                setChannelErrorDialog(null);
+                void refetchChannels().catch(() => undefined);
+              }}
+            >
+              {channelLoading ? "Retrying…" : "Retry"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -594,6 +717,7 @@ export default function DashboardPage() {
         <p className="text-muted-foreground">No projects found.</p>
       ) : (
         <ChecksList
+          key={firstProject.id}
           projectId={firstProject.id}
           projectName={firstProject.name}
           orgSlug={firstOrg.slug}

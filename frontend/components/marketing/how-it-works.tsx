@@ -14,8 +14,8 @@ const STEPS = [
   },
   {
     number: "03",
-    title: "We alert & escalate",
-    body: "The moment something flatlines, we notify your channels and walk your escalation policy.",
+    title: "We notify on recovery",
+    body: "The moment something flatlines, selected channels receive DOWN. When it returns UP, they receive recovery.",
   },
 ] as const;
 

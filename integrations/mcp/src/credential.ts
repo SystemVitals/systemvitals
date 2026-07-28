@@ -21,6 +21,7 @@ const WRITE_TOOLS = [
   "pause_check",
   "resume_check",
   "delete_check",
+  "set_check_channel_enabled",
 ] as const;
 
 export async function fetchCredential(gql: Gql): Promise<Credential> {

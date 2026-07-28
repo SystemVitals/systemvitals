@@ -15,9 +15,9 @@ const FOOTER_COLUMNS = [
   {
     heading: "Resources",
     links: [
-      { label: "Docs", href: "https://github.com/nihey/systemvitals" },
+      { label: "Docs", href: "https://github.com/SystemVitals/systemvitals" },
       { label: "MCP", href: "/#mcp" },
-      { label: "API", href: "https://github.com/nihey/systemvitals" },
+      { label: "API", href: "https://github.com/SystemVitals/systemvitals" },
     ],
   },
   {

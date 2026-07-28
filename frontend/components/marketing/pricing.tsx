@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 const SHARED_FEATURES = [
   "All monitor types",
   "All alert channels",
-  "Escalation policies",
+  "Per-check notification routing",
   "Status pages",
   "API + MCP",
 ];

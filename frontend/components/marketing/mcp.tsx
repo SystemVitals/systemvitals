@@ -3,8 +3,8 @@ import { TerminalSquare } from "lucide-react";
 const INTERACTION_LINES = [
   { type: "input" as const, text: "> create a heartbeat check for nightly-backup, 1h period, 10m grace" },
   { type: "output" as const, text: "✓ check created — ping: https://systemvitals.app/ping/8f3c…" },
-  { type: "input" as const, text: "> alert me on Slack #ops when it goes down" },
-  { type: "output" as const, text: "✓ channel linked · escalation: Slack → Email (5m) → Telegram (15m)" },
+  { type: "input" as const, text: "> route its alerts to Email, Telegram, and my incident webhook" },
+  { type: "output" as const, text: "✓ routing saved · DOWN + recovery (DOWN → UP)" },
 ];
 
 export function Mcp() {
@@ -30,7 +30,7 @@ export function Mcp() {
               <p className="mt-4 text-muted-foreground">
                 SystemVitals ships a built-in MCP server that exposes the full
                 management surface to Claude Code. Create checks, wire up
-                escalation policies, and manage alert channels — all from a
+                notification routes, and manage alert channels — all from a
                 natural-language conversation, with no context switching.
               </p>
               <p className="mt-3 text-muted-foreground">

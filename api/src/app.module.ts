@@ -20,7 +20,6 @@ import { ChannelsModule } from './channels/channels.module';
 import { QueueModule } from './queue/queue.module';
 import { StatusPagesModule } from './status-pages/status-pages.module';
 import { PublicStatusModule } from './public-status/public-status.module';
-import { EscalationModule } from './escalation/escalation.module';
 import { BillingModule } from './billing/billing.module';
 import { AdminModule } from './admin/admin.module';
 import { TelegramModule } from './telegram/telegram.module';
@@ -74,7 +73,6 @@ export function graphqlSchemaDestination(
         ChecksModule,
         ChannelsModule,
         StatusPagesModule,
-        EscalationModule,
         BillingModule,
         TelegramModule,
       ],
@@ -105,7 +103,6 @@ export function graphqlSchemaDestination(
     ChannelsModule,
     StatusPagesModule,
     PublicStatusModule,
-    EscalationModule,
     BillingModule,
     AdminModule,
     TelegramModule,

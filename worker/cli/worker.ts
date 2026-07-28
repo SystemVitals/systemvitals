@@ -15,8 +15,6 @@ import { scheduleDueProbes } from "../src/probe-scheduler.js";
 import type { ProbeJob } from "../src/probe-scheduler.js";
 import { handleProbe } from "../src/probe-handler.js";
 import { probe } from "../src/prober.js";
-import { handleEscalationStep } from "../src/escalation.js";
-import type { EscalationJob } from "../src/escalation.js";
 import { handleInvite } from "../src/invite-handler.js";
 import type { InviteJob } from "../src/invite-handler.js";
 import {
@@ -169,12 +167,6 @@ async function startWorker(): Promise<void> {
     });
     observeQueue(probeQueue, "probe");
     queues.push(probeQueue);
-    const escalationQueue = new Queue<EscalationJob, void, "escalation">(
-      config.queueEscalation,
-      { connection, defaultJobOptions },
-    );
-    observeQueue(escalationQueue, "escalation");
-    queues.push(escalationQueue);
     const inviteQueue = new Queue<InviteJob, void, "invite">(
       config.queueInvite,
       { connection, defaultJobOptions },
@@ -196,18 +188,10 @@ async function startWorker(): Promise<void> {
       data: AlertJob,
       options?: { jobId: string },
     ): Promise<unknown> => alertQueue.add("alert", data, options);
-    const enqueueEscalation = (
-      data: EscalationJob,
-      delayMs: number,
-    ): Promise<void> =>
-      escalationQueue
-        .add("escalation", data, { delay: delayMs })
-        .then(() => {});
     const deps = {
       mailer,
       httpPost,
       telegramPost,
-      enqueueEscalation,
       telegramBotToken: config.telegramBotToken,
     };
 
@@ -243,20 +227,6 @@ async function startWorker(): Promise<void> {
     observeWorker(probeWorker, "probe");
     workers.push(probeWorker);
     readyWorkers.push(readyWorker(probeWorker, "probe"));
-
-    const escalationWorker = new Worker<EscalationJob, void>(
-      config.queueEscalation,
-      async (job) => {
-        const outcome = await handleEscalationStep(prisma, deps, job.data);
-        console.log(
-          `[worker] escalation job ${job.id}: ${outcome} for check ${job.data.checkId}`,
-        );
-      },
-      { connection, autorun: false },
-    );
-    observeWorker(escalationWorker, "escalation");
-    workers.push(escalationWorker);
-    readyWorkers.push(readyWorker(escalationWorker, "escalation"));
 
     const inviteWorker = new Worker<InviteJob, void>(
       config.queueInvite,

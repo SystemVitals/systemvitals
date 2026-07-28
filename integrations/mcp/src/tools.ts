@@ -49,6 +49,13 @@ interface ResumeCheckResponse {
   resumeCheck: CheckStatus;
 }
 
+interface SetCheckChannelEnabledResponse {
+  setCheckChannelEnabled: {
+    id: string;
+    notificationChannelIds: string[];
+  };
+}
+
 interface CreateChannelResponse {
   createChannel: Channel;
 }
@@ -145,6 +152,7 @@ interface CheckDetail {
   schedule: string | null;
   tz: string | null;
   nextExpectedAt: string | null;
+  notificationChannelIds: string[];
   events: CheckEvent[];
 }
 
@@ -349,6 +357,7 @@ const getCheck: ToolDef = {
           schedule
           tz
           nextExpectedAt
+          notificationChannelIds
           events(limit: 20) {
             id
             status
@@ -377,6 +386,11 @@ const getCheck: ToolDef = {
             ? `Period: ${check.periodSeconds}s`
             : null,
       check.nextExpectedAt ? `Next expected: ${check.nextExpectedAt}` : null,
+      `Notification channels: ${
+        check.notificationChannelIds.length > 0
+          ? check.notificationChannelIds.join(", ")
+          : "none"
+      }`,
       `Events (last ${check.events.length}):`,
     ]
       .filter(Boolean)
@@ -602,6 +616,39 @@ const resumeCheck: ToolDef = {
 
     const { resumeCheck: result } = cast<ResumeCheckResponse>(data);
     return text(`Check ${result.id} resumed. Status: ${result.status}`);
+  },
+};
+
+const setCheckChannelEnabled: ToolDef = {
+  name: "set_check_channel_enabled",
+  description: "Enable or disable one notification channel for a check.",
+  inputSchema: {
+    checkId: z.string().min(1).describe("The check ID"),
+    channelId: z.string().min(1).describe("The notification channel ID"),
+    enabled: z.boolean().describe("Whether the channel should receive check notifications"),
+  },
+  handler: async (args, gql) => {
+    const checkId = args["checkId"] as string;
+    const channelId = args["channelId"] as string;
+    const enabled = args["enabled"] as boolean;
+
+    const data = await gql(
+      `mutation setCheckChannelEnabled($checkId: ID!, $channelId: ID!, $enabled: Boolean!) {
+        setCheckChannelEnabled(checkId: $checkId, channelId: $channelId, enabled: $enabled) {
+          id
+          notificationChannelIds
+        }
+      }`,
+      { checkId, channelId, enabled },
+    );
+
+    const { setCheckChannelEnabled: result } =
+      cast<SetCheckChannelEnabledResponse>(data);
+    const effectiveIds =
+      result.notificationChannelIds.length > 0
+        ? result.notificationChannelIds.join(", ")
+        : "none";
+    return text(`Check ${result.id} notification channels: ${effectiveIds}`);
   },
 };
 
@@ -1181,6 +1228,7 @@ const toolDefinitions: ToolDef[] = [
   pauseCheck,
   resumeCheck,
   deleteCheck,
+  setCheckChannelEnabled,
   createChannel,
   resendEmailChannelVerification,
   deleteChannel,

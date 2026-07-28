@@ -463,18 +463,6 @@ describe('api tokens (e2e)', () => {
       where: { id: user.id },
       data: { isAdmin: true },
     });
-    const check = await prisma.check.create({
-      data: {
-        name: 'Boundary check',
-        slug: 'boundary-check',
-        type: 'HEARTBEAT',
-        status: 'NEW',
-        projectId: project.id,
-        pingSlug: `boundary-check-${Date.now()}`,
-        periodSeconds: 300,
-        graceSeconds: 60,
-      },
-    });
     const token = await createTokenRecord(
       user.id,
       ['checks:read', 'checks:write'],
@@ -503,19 +491,7 @@ describe('api tokens (e2e)', () => {
         `query($projectId:ID!){ statusPages(projectId:$projectId){ id } }`,
         { projectId: project.id },
       ],
-      [
-        'escalation policy',
-        `query($projectId:ID!){
-          escalationPolicies(projectId:$projectId){ id }
-        }`,
-        { projectId: project.id },
-      ],
       ['billing', `{ mySubscription { plan } }`, undefined],
-      [
-        'check acknowledgement',
-        `mutation($checkId:ID!){ acknowledgeCheck(checkId:$checkId) }`,
-        { checkId: check.id },
-      ],
     ];
 
     for (const [label, query, variables] of operations) {

@@ -26,10 +26,6 @@ export interface NotifierDeps {
     url: string,
     body: unknown,
   ) => Promise<TelegramPostResponse>;
-  enqueueEscalation: (
-    data: { checkId: string; alertedAt: string; channelId: string },
-    delayMs: number,
-  ) => Promise<void>;
   telegramBotToken: string;
 }
 

@@ -75,7 +75,6 @@ describe("dispatchChannel", () => {
       mailer,
       httpPost,
       telegramPost,
-      enqueueEscalation: vi.fn().mockResolvedValue(undefined),
       telegramBotToken: "managed-test-token",
     };
   });

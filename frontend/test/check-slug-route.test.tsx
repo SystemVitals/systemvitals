@@ -53,6 +53,7 @@ interface CheckRecord {
   __typename: "Check";
   id: string;
   projectId: string;
+  notificationChannelIds: string[];
   name: string;
   slug: string;
   type: string;
@@ -76,6 +77,7 @@ const INITIAL_CHECK: CheckRecord = {
   __typename: "Check",
   id: "c1",
   projectId: "project-1",
+  notificationChannelIds: ["email"],
   name: "Nightly job",
   slug: "old-slug",
   type: "HEARTBEAT",
@@ -108,6 +110,26 @@ function makeLink(checkRef: { current: CheckRecord }, queryCount: { current: num
       if (operation.operationName === "CheckBySlug") {
         queryCount.current += 1;
         observer.next({ data: { checkBySlug: { ...checkRef.current } } });
+        observer.complete();
+        return;
+      }
+      if (operation.operationName === "channels") {
+        observer.next({
+          data: {
+            channels: [
+              {
+                __typename: "NotificationChannelModel",
+                id: "email",
+                type: "EMAIL",
+                configJson: '{"email":"alerts@example.com"}',
+                enabled: true,
+                verificationStatus: "VERIFIED",
+                verificationDeliveryStatus: "DELIVERED",
+                verificationExpiresAt: null,
+              },
+            ],
+          },
+        });
         observer.complete();
         return;
       }
