@@ -254,6 +254,128 @@ describe("DashboardPage", () => {
     expect(channelsResult).toHaveBeenCalledTimes(1);
   });
 
+  it("shows a neutral channel loading state without false empty or all-off messaging", async () => {
+    renderDashboard("SIGNAL", [
+      {
+        request: {
+          query: CHECKS,
+          variables: { projectId: "project-signal" },
+        },
+        result: {
+          data: {
+            checks: [
+              check({
+                id: "api",
+                name: "API",
+                notificationChannelIds: [],
+              }),
+            ],
+          },
+        },
+      },
+      {
+        request: {
+          query: CHANNELS,
+          variables: { projectId: "project-signal" },
+        },
+        delay: 150,
+        result: { data: { channels: enabledChannels } },
+      },
+      subscriptionMock("SIGNAL"),
+    ]);
+
+    await screen.findByRole("link", { name: "API" });
+    expect(
+      screen.getByRole("status", { name: "Loading notification channels" }),
+    ).toHaveTextContent("Loading notification channels…");
+    expect(
+      screen.queryByText("No active notification channels"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/Notifications off/)).not.toBeInTheDocument();
+
+    expect(
+      await screen.findByRole("switch", {
+        name: /API.*Email notifications/i,
+      }),
+    ).not.toBeChecked();
+  });
+
+  it("shows a channel loading error dialog and retries the channel query", async () => {
+    const successfulRetry = vi.fn(() => ({
+      data: { channels: enabledChannels },
+    }));
+
+    renderDashboard("SIGNAL", [
+      {
+        request: {
+          query: CHECKS,
+          variables: { projectId: "project-signal" },
+        },
+        result: {
+          data: {
+            checks: [
+              check({
+                id: "api",
+                name: "API",
+                notificationChannelIds: ["email"],
+              }),
+            ],
+          },
+        },
+      },
+      {
+        request: {
+          query: CHANNELS,
+          variables: { projectId: "project-signal" },
+        },
+        error: new Error("network unavailable"),
+      },
+      {
+        request: {
+          query: CHANNELS,
+          variables: { projectId: "project-signal" },
+        },
+        result: successfulRetry,
+      },
+      subscriptionMock("SIGNAL"),
+    ]);
+
+    const dialog = await screen.findByRole("dialog", {
+      name: "Notification channels unavailable",
+    });
+    expect(dialog).toHaveTextContent(
+      "Could not load notification channels. Please try again.",
+    );
+    expect(
+      screen.getByRole("status", {
+        name: "Notification channels unavailable",
+        hidden: true,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("No active notification channels"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/Notifications off/)).not.toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Retry notification channels" }),
+    );
+
+    expect(
+      await screen.findByRole("switch", {
+        name: /API.*Email notifications/i,
+      }),
+    ).toBeChecked();
+    expect(successfulRetry).toHaveBeenCalledTimes(1);
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", {
+          name: "Notification channels unavailable",
+        }),
+      ).not.toBeInTheDocument(),
+    );
+  });
+
   it("keeps compact toggles independent and targets the correct check", async () => {
     const apiMutation = vi.fn(() => ({
       data: {
