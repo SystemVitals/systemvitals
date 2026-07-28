@@ -18,6 +18,7 @@ import {
   CheckValidationError,
   type CheckUpdateInput,
 } from './check-update';
+import type { CheckModel } from './check.model';
 
 const CREATOR_STABILITY_RETRIES = 3;
 
@@ -461,6 +462,54 @@ export class ChecksService {
     return channels.map(({ id }) => id);
   }
 
+  async setCheckChannelEnabled(
+    userId: string,
+    checkId: string,
+    expectedProjectId: string,
+    channelId: string,
+    enabled: boolean,
+  ): Promise<CheckModel> {
+    return this.withCreatorStableExpectedCheck(
+      userId,
+      checkId,
+      expectedProjectId,
+      async (tx, check) => {
+        const channel = await tx.notificationChannel.findFirst({
+          where: { id: channelId, projectId: check.projectId },
+          select: { id: true, enabled: true },
+        });
+        if (!channel) {
+          throw new NotFoundException('Notification channel not found');
+        }
+        if (!channel.enabled) {
+          throw new BadRequestException('Notification channel is not enabled');
+        }
+
+        if (enabled) {
+          await tx.checkChannelExclusion.deleteMany({
+            where: { checkId, channelId },
+          });
+        } else {
+          await tx.checkChannelExclusion.upsert({
+            where: {
+              checkId_channelId: { checkId, channelId },
+            },
+            create: { checkId, channelId },
+            update: {},
+          });
+        }
+
+        const notificationChannelIds =
+          await this.effectiveNotificationChannelIds(
+            checkId,
+            check.projectId,
+            tx,
+          );
+        return { ...check, notificationChannelIds } as CheckModel;
+      },
+    );
+  }
+
   async update(
     userId: string,
     checkId: string,
@@ -624,6 +673,9 @@ export class ChecksService {
           check.projectId,
           check.id,
         );
+        await tx.checkChannelExclusion.deleteMany({
+          where: { checkId: check.id },
+        });
         return tx.check.update({
           where: { id: check.id },
           data: { projectId: destinationProjectId },

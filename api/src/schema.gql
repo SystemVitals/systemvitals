@@ -258,6 +258,7 @@ type Mutation {
   resumeCheck(id: ID!): CheckModel!
   revokeApiToken(id: ID!): Boolean!
   revokeInvite(inviteId: ID!): Boolean!
+  setCheckChannelEnabled(channelId: ID!, checkId: ID!, enabled: Boolean!): CheckModel!
   setPassword(currentPassword: String, newPassword: String!): Boolean!
   transferOrganizationCreatorship(newCreatorUserId: ID!, organizationId: ID!): OrganizationModel!
   updateCheck(id: ID!, input: UpdateCheckInput!): CheckModel!

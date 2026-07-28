@@ -135,6 +135,27 @@ export class ChecksResolver {
   }
 
   @Mutation(() => CheckModel)
+  async setCheckChannelEnabled(
+    @CurrentUser() principal: ApiPrincipal,
+    @Args('checkId', { type: () => ID }) checkId: string,
+    @Args('channelId', { type: () => ID }) channelId: string,
+    @Args('enabled', { type: () => Boolean }) enabled: boolean,
+  ) {
+    const projectId = await this.checksService.projectIdForCheck(
+      principal.userId,
+      checkId,
+    );
+    requireCheckAccess(principal, 'checks:write', projectId);
+    return this.checksService.setCheckChannelEnabled(
+      principal.userId,
+      checkId,
+      projectId,
+      channelId,
+      enabled,
+    );
+  }
+
+  @Mutation(() => CheckModel)
   @AccountSessionOnly()
   moveCheck(
     @CurrentUser() principal: ApiPrincipal,
