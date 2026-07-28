@@ -18,6 +18,7 @@ import {
   CheckValidationError,
   type CheckUpdateInput,
 } from './check-update';
+import type { CheckModel } from './check.model';
 
 const CREATOR_STABILITY_RETRIES = 3;
 
@@ -26,6 +27,10 @@ class CreatorChangedDuringCheckOperation extends Error {}
 type LockedExpectedCheck = Prisma.CheckGetPayload<{
   include: { project: true };
 }>;
+
+export type CheckWithNotificationChannels<T> = T & {
+  notificationChannelIds: string[];
+};
 
 @Injectable()
 export class ChecksService {
@@ -355,14 +360,47 @@ export class ChecksService {
 
   async list(userId: string, projectId: string) {
     await this.assertProjectAccess(userId, projectId);
-    return this.prisma.check.findMany({
+    const checks = await this.prisma.check.findMany({
       where: { projectId },
       orderBy: { createdAt: 'asc' },
+    });
+    const [channels, exclusions] = await Promise.all([
+      this.prisma.notificationChannel.findMany({
+        where: { projectId, enabled: true },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        select: { id: true },
+      }),
+      this.prisma.checkChannelExclusion.findMany({
+        where: { checkId: { in: checks.map(({ id }) => id) } },
+        select: { checkId: true, channelId: true },
+      }),
+    ]);
+    const channelIds = channels.map(({ id }) => id);
+    const excludedByCheck = new Map<string, Set<string>>();
+    for (const { checkId, channelId } of exclusions) {
+      const excluded = excludedByCheck.get(checkId) ?? new Set<string>();
+      excluded.add(channelId);
+      excludedByCheck.set(checkId, excluded);
+    }
+
+    return checks.map((check) => {
+      const excluded = excludedByCheck.get(check.id);
+      return {
+        ...check,
+        notificationChannelIds: excluded
+          ? channelIds.filter((channelId) => !excluded.has(channelId))
+          : [...channelIds],
+      };
     });
   }
 
   async findOne(userId: string, checkId: string) {
-    return this.assertCheckAccess(userId, checkId);
+    const check = await this.assertCheckAccess(userId, checkId);
+    const notificationChannelIds = await this.effectiveNotificationChannelIds(
+      check.id,
+      check.projectId,
+    );
+    return { ...check, notificationChannelIds };
   }
 
   async projectIdForCheck(userId: string, checkId: string): Promise<string> {
@@ -399,7 +437,82 @@ export class ChecksService {
 
     if (!check) throw new NotFoundException('Check not found');
 
-    return check;
+    const notificationChannelIds = await this.effectiveNotificationChannelIds(
+      check.id,
+      check.projectId,
+    );
+    return { ...check, notificationChannelIds };
+  }
+
+  async effectiveNotificationChannelIds(
+    checkId: string,
+    projectId: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<string[]> {
+    const client = tx ?? this.prisma;
+    const channels = await client.notificationChannel.findMany({
+      where: {
+        projectId,
+        enabled: true,
+        checkExclusions: { none: { checkId } },
+      },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: { id: true },
+    });
+    return channels.map(({ id }) => id);
+  }
+
+  async setCheckChannelEnabled(
+    userId: string,
+    checkId: string,
+    expectedProjectId: string,
+    channelId: string,
+    enabled: boolean,
+  ): Promise<CheckModel> {
+    return this.withCreatorStableExpectedCheck(
+      userId,
+      checkId,
+      expectedProjectId,
+      async (tx, check) => {
+        await tx.$queryRaw`
+          SELECT id FROM notification_channels
+          WHERE id = ${channelId} AND project_id = ${check.projectId}
+          FOR UPDATE
+        `;
+        const channel = await tx.notificationChannel.findFirst({
+          where: { id: channelId, projectId: check.projectId },
+          select: { id: true, enabled: true },
+        });
+        if (!channel) {
+          throw new NotFoundException('Notification channel not found');
+        }
+        if (!channel.enabled) {
+          throw new BadRequestException('Notification channel is not enabled');
+        }
+
+        if (enabled) {
+          await tx.checkChannelExclusion.deleteMany({
+            where: { checkId, channelId },
+          });
+        } else {
+          await tx.checkChannelExclusion.upsert({
+            where: {
+              checkId_channelId: { checkId, channelId },
+            },
+            create: { checkId, channelId },
+            update: {},
+          });
+        }
+
+        const notificationChannelIds =
+          await this.effectiveNotificationChannelIds(
+            checkId,
+            check.projectId,
+            tx,
+          );
+        return { ...check, notificationChannelIds } as CheckModel;
+      },
+    );
   }
 
   async update(
@@ -565,6 +678,9 @@ export class ChecksService {
           check.projectId,
           check.id,
         );
+        await tx.checkChannelExclusion.deleteMany({
+          where: { checkId: check.id },
+        });
         return tx.check.update({
           where: { id: check.id },
           data: { projectId: destinationProjectId },

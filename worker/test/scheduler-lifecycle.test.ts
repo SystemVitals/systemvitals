@@ -288,7 +288,14 @@ describe("watchdog lease fencing", () => {
         callback: (transaction: unknown) => Promise<unknown>,
       ) =>
         callback({
+          $queryRaw: vi.fn().mockResolvedValue([
+            { id: "heartbeat-check" },
+          ]),
           check: {
+            findUnique: vi.fn().mockResolvedValue({
+              id: "heartbeat-check",
+              projectId: "project-1",
+            }),
             updateMany: vi.fn(async () => {
               controller.abort(new Error("lease lost during watchdog write"));
               return { count: 1 };
@@ -312,15 +319,39 @@ describe("watchdog lease fencing", () => {
   it("enqueues the committed DOWN event even when ownership is lost after commit", async () => {
     const controller = new AbortController();
     const enqueue = vi.fn().mockResolvedValue(undefined);
+    const transactionOrder: string[] = [];
     const prisma = fakePrisma({
       check: { findMany: vi.fn().mockResolvedValue([overdueHeartbeat]) },
       $transaction: vi.fn(async (callback) => {
         const result = await callback({
+          $queryRaw: vi.fn().mockImplementation(async () => {
+            transactionOrder.push("lock");
+            return [{ id: "heartbeat-check" }];
+          }),
           check: {
-            updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+            findUnique: vi.fn().mockImplementation(async () => {
+              transactionOrder.push("re-read");
+              return {
+                id: "heartbeat-check",
+                projectId: "project-1",
+              };
+            }),
+            updateMany: vi.fn().mockImplementation(async () => {
+              transactionOrder.push("update");
+              return { count: 1 };
+            }),
           },
           checkEvent: {
-            create: vi.fn().mockResolvedValue({ id: "down-event-1" }),
+            create: vi.fn().mockImplementation(async () => {
+              transactionOrder.push("event");
+              return { id: "down-event-1" };
+            }),
+          },
+          notificationChannel: {
+            findMany: vi.fn().mockImplementation(async () => {
+              transactionOrder.push("snapshot");
+              return [{ id: "channel-1" }];
+            }),
           },
         });
         controller.abort(new Error("lease lost after watchdog commit"));
@@ -331,8 +362,19 @@ describe("watchdog lease fencing", () => {
     await expect(
       sweepOverdue(prisma, enqueue, new Date(120_000), controller.signal),
     ).resolves.toBe(1);
+    expect(transactionOrder).toEqual([
+      "lock",
+      "re-read",
+      "update",
+      "event",
+      "snapshot",
+    ]);
     expect(enqueue).toHaveBeenCalledWith(
-      { checkId: "heartbeat-check", kind: "down" },
+      {
+        checkId: "heartbeat-check",
+        kind: "down",
+        channelIds: ["channel-1"],
+      },
       {
         jobId: watchdogAlertJobId(
           "heartbeat-check",

@@ -13,6 +13,7 @@ export class CheckEventModel {
 @ObjectType()
 export class CheckModel {
   @Field(() => ID) id!: string;
+  notificationChannelIds?: string[];
   @Field() name!: string;
   @Field() slug!: string;
   @Field() type!: string;

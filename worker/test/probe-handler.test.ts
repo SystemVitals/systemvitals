@@ -1,7 +1,12 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { PrismaClient, CheckStatus } from "@systemvitals/database";
+import {
+  PrismaClient,
+  CheckStatus,
+  ChannelType,
+} from "@systemvitals/database";
 import { handleProbe } from "../src/probe-handler.js";
 import type { ProbeResult } from "../src/prober.js";
+import type { AlertJob } from "../src/watchdog.js";
 
 const prisma = new PrismaClient();
 
@@ -14,6 +19,10 @@ let checkUpId: string;    // currently UP
 let checkDownId: string;  // currently DOWN
 let checkUpStayId: string; // currently UP, probe returns UP (no transition)
 let checkConvertedId: string; // was HTTP when enqueued, now HEARTBEAT by the time the job runs
+let checkPausedDuringProbeId: string;
+let checkRoutingLockId: string;
+let emailChannelId: string;
+let slackChannelId: string;
 
 const TEST_EMAIL = `probe-handler-test-${Date.now()}@probe-handler-test.invalid`;
 
@@ -103,12 +112,75 @@ beforeAll(async () => {
     },
   });
   checkConvertedId = checkConverted.id;
+
+  const checkPausedDuringProbe = await prisma.check.create({
+    data: {
+      name: "Paused During Probe Check",
+      slug: "paused-during-probe-check",
+      type: "HTTP",
+      status: "UP",
+      projectId,
+      target: "http://example.com",
+      intervalSeconds: 60,
+    },
+  });
+  checkPausedDuringProbeId = checkPausedDuringProbe.id;
+
+  const checkRoutingLock = await prisma.check.create({
+    data: {
+      name: "Routing Lock Check",
+      slug: "routing-lock-check",
+      type: "HTTP",
+      status: "UP",
+      projectId,
+      target: "http://example.com",
+      intervalSeconds: 60,
+    },
+  });
+  checkRoutingLockId = checkRoutingLock.id;
+
+  const emailChannel = await prisma.notificationChannel.create({
+    data: {
+      projectId,
+      type: ChannelType.EMAIL,
+      config: { email: "probe-email@example.com" },
+      enabled: true,
+    },
+  });
+  emailChannelId = emailChannel.id;
+
+  const slackChannel = await prisma.notificationChannel.create({
+    data: {
+      projectId,
+      type: ChannelType.SLACK,
+      config: { webhookUrl: "https://hooks.slack.com/services/probe/test" },
+      enabled: true,
+    },
+  });
+  slackChannelId = slackChannel.id;
+
+  await prisma.checkChannelExclusion.createMany({
+    data: [
+      { checkId: checkUpId, channelId: slackChannelId },
+      { checkId: checkDownId, channelId: emailChannelId },
+    ],
+  });
 });
 
 afterAll(async () => {
-  const allIds = [checkUpId, checkDownId, checkUpStayId, checkConvertedId].filter(Boolean);
+  const allIds = [
+    checkUpId,
+    checkDownId,
+    checkUpStayId,
+    checkConvertedId,
+    checkPausedDuringProbeId,
+    checkRoutingLockId,
+  ].filter(Boolean);
   await prisma.checkEvent.deleteMany({ where: { checkId: { in: allIds } } });
   await prisma.check.deleteMany({ where: { id: { in: allIds } } });
+  await prisma.notificationChannel.deleteMany({
+    where: { id: { in: [emailChannelId, slackChannelId] } },
+  });
   await prisma.project.deleteMany({ where: { organizationId: orgId } });
   await prisma.membership.deleteMany({ where: { userId } });
   await prisma.organization.delete({ where: { id: orgId } });
@@ -118,8 +190,8 @@ afterAll(async () => {
 
 describe("handleProbe", () => {
   it("UP check: probe returns down → writes DOWN event, sets status DOWN, enqueues kind=down", async () => {
-    const enqueued: Array<{ checkId: string; kind: "down" | "recovery" }> = [];
-    const fakeEnqueue = async (job: { checkId: string; kind: "down" | "recovery" }) => {
+    const enqueued: AlertJob[] = [];
+    const fakeEnqueue = async (job: AlertJob) => {
       enqueued.push(job);
     };
 
@@ -146,12 +218,16 @@ describe("handleProbe", () => {
 
     // Alert enqueued with kind='down' exactly once
     expect(enqueued.length).toBe(1);
-    expect(enqueued[0]).toEqual({ checkId: checkUpId, kind: "down" });
+    expect(enqueued[0]).toEqual({
+      checkId: checkUpId,
+      kind: "down",
+      channelIds: [emailChannelId],
+    });
   });
 
   it("DOWN check: probe returns up → writes UP event, sets status UP, enqueues kind=recovery", async () => {
-    const enqueued: Array<{ checkId: string; kind: "down" | "recovery" }> = [];
-    const fakeEnqueue = async (job: { checkId: string; kind: "down" | "recovery" }) => {
+    const enqueued: AlertJob[] = [];
+    const fakeEnqueue = async (job: AlertJob) => {
       enqueued.push(job);
     };
 
@@ -179,12 +255,16 @@ describe("handleProbe", () => {
 
     // Alert enqueued with kind='recovery' exactly once
     expect(enqueued.length).toBe(1);
-    expect(enqueued[0]).toEqual({ checkId: checkDownId, kind: "recovery" });
+    expect(enqueued[0]).toEqual({
+      checkId: checkDownId,
+      kind: "recovery",
+      channelIds: [slackChannelId],
+    });
   });
 
   it("UP check: probe returns up → writes UP event, status stays UP, NO alert enqueued", async () => {
-    const enqueued: Array<{ checkId: string; kind: "down" | "recovery" }> = [];
-    const fakeEnqueue = async (job: { checkId: string; kind: "down" | "recovery" }) => {
+    const enqueued: AlertJob[] = [];
+    const fakeEnqueue = async (job: AlertJob) => {
       enqueued.push(job);
     };
 
@@ -211,8 +291,8 @@ describe("handleProbe", () => {
   });
 
   it("check converted away from HTTP/TCP before the job runs: no probe, no event, no status change, no alert (Fix 2)", async () => {
-    const enqueued: Array<{ checkId: string; kind: "down" | "recovery" }> = [];
-    const fakeEnqueue = async (job: { checkId: string; kind: "down" | "recovery" }) => {
+    const enqueued: AlertJob[] = [];
+    const fakeEnqueue = async (job: AlertJob) => {
       enqueued.push(job);
     };
 
@@ -237,5 +317,117 @@ describe("handleProbe", () => {
     expect(afterEvents).toBe(beforeEvents);
 
     expect(enqueued.length).toBe(0);
+  });
+
+  it("does not commit a probe result when the check is paused while the probe is in flight", async () => {
+    const enqueued: AlertJob[] = [];
+    const beforeEvents = await prisma.checkEvent.count({
+      where: { checkId: checkPausedDuringProbeId },
+    });
+    const fakeProbeFn = async (): Promise<ProbeResult> => {
+      await prisma.check.update({
+        where: { id: checkPausedDuringProbeId },
+        data: { status: CheckStatus.PAUSED },
+      });
+      return {
+        up: false,
+        responseTimeMs: 12,
+        error: "connection refused",
+      };
+    };
+
+    await handleProbe(
+      prisma,
+      async (job) => {
+        enqueued.push(job);
+      },
+      fakeProbeFn,
+      { checkId: checkPausedDuringProbeId },
+    );
+
+    const check = await prisma.check.findUniqueOrThrow({
+      where: { id: checkPausedDuringProbeId },
+    });
+    expect(check.status).toBe(CheckStatus.PAUSED);
+    expect(
+      await prisma.checkEvent.count({
+        where: { checkId: checkPausedDuringProbeId },
+      }),
+    ).toBe(beforeEvents);
+    expect(enqueued).toHaveLength(0);
+  });
+
+  it("serializes a routing toggle with the transition lock before snapshotting", async () => {
+    let resolveLocked!: () => void;
+    const locked = new Promise<void>((resolve) => {
+      resolveLocked = resolve;
+    });
+    let releaseToggle!: () => void;
+    const release = new Promise<void>((resolve) => {
+      releaseToggle = resolve;
+    });
+
+    const toggle = prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`
+        SELECT id
+        FROM checks
+        WHERE id = ${checkRoutingLockId}
+        FOR UPDATE
+      `;
+      resolveLocked();
+      await release;
+      await tx.checkChannelExclusion.create({
+        data: {
+          checkId: checkRoutingLockId,
+          channelId: emailChannelId,
+        },
+      });
+    });
+    await locked;
+
+    const enqueued: AlertJob[] = [];
+    let probeCompleted = false;
+    const handling = handleProbe(
+      prisma,
+      async (job) => {
+        enqueued.push(job);
+      },
+      async () => {
+        probeCompleted = true;
+        return {
+          up: false,
+          responseTimeMs: 10,
+          error: "connection refused",
+        };
+      },
+      { checkId: checkRoutingLockId },
+    );
+
+    while (!probeCompleted) {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+    }
+    let handlingResolved = false;
+    void handling.then(
+      () => {
+        handlingResolved = true;
+      },
+      () => {
+        handlingResolved = true;
+      },
+    );
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(handlingResolved).toBe(false);
+
+    releaseToggle();
+    await toggle;
+    await handling;
+
+    expect(enqueued).toEqual([
+      {
+        checkId: checkRoutingLockId,
+        kind: "down",
+        channelIds: [slackChannelId],
+      },
+    ]);
   });
 });

@@ -1,4 +1,9 @@
-import { ConflictException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@systemvitals/database';
 import {
   AccountEntitlementsService,
@@ -125,6 +130,14 @@ type ProjectBoundMutation = (
   expectedProjectId: string,
 ) => Promise<unknown>;
 
+type SetCheckChannelEnabled = (
+  userId: string,
+  checkId: string,
+  expectedProjectId: string,
+  channelId: string,
+  enabled: boolean,
+) => Promise<unknown>;
+
 function updateWithProjectBinding(
   service: ChecksService,
   userId: string,
@@ -153,6 +166,27 @@ function mutationWithProjectBinding(
     userId,
     checkId,
     expectedProjectId,
+  );
+}
+
+function setCheckChannelEnabled(
+  service: ChecksService,
+  userId: string,
+  checkId: string,
+  expectedProjectId: string,
+  channelId: string,
+  enabled: boolean,
+) {
+  return (
+    service as unknown as {
+      setCheckChannelEnabled: SetCheckChannelEnabled;
+    }
+  ).setCheckChannelEnabled(
+    userId,
+    checkId,
+    expectedProjectId,
+    channelId,
+    enabled,
   );
 }
 
@@ -386,6 +420,12 @@ function moveHarness() {
           },
         ),
     },
+    checkChannelExclusion: {
+      deleteMany: jest.fn().mockImplementation(() => {
+        order.push('checkChannelExclusion:deleteMany');
+        return { count: 1 };
+      }),
+    },
   };
   const prisma = {
     $transaction: jest.fn((callback: (client: typeof tx) => unknown) =>
@@ -419,6 +459,526 @@ function moveHarness() {
     ),
   };
 }
+
+function channelToggleHarness() {
+  const order: string[] = [];
+  let excluded = false;
+  const enabledChannels = [
+    { id: 'channel-later' },
+    { id: 'channel-earlier-b' },
+    { id: 'channel-earlier-a' },
+  ];
+  const channel = {
+    id: 'channel-earlier-b',
+    enabled: true,
+  };
+  const check = {
+    ...movingCheck,
+    projectId: sourceProject.id,
+    project: sourceProject,
+  };
+  const tx = {
+    $queryRaw: jest.fn().mockImplementation((strings: TemplateStringsArray) => {
+      const query = strings.join(' ');
+      if (query.includes('FROM notification_channels')) {
+        order.push('lock:channel');
+      }
+      return [];
+    }),
+    check: {
+      findUnique: jest.fn().mockResolvedValue(check),
+    },
+    project: {
+      findUnique: jest.fn().mockResolvedValue(sourceProject),
+    },
+    membership: {
+      findUnique: jest.fn().mockResolvedValue({ id: 'membership' }),
+    },
+    notificationChannel: {
+      findFirst: jest.fn().mockImplementation(() => {
+        order.push('validate:channel');
+        return channel;
+      }),
+      findMany: jest
+        .fn()
+        .mockImplementation(() =>
+          enabledChannels.filter(({ id }) => !(excluded && id === channel.id)),
+        ),
+    },
+    checkChannelExclusion: {
+      upsert: jest.fn().mockImplementation(() => {
+        order.push('exclusion:upsert');
+        excluded = true;
+        return {
+          checkId: check.id,
+          channelId: channel.id,
+        };
+      }),
+      deleteMany: jest.fn().mockImplementation(() => {
+        order.push('exclusion:deleteMany');
+        const count = excluded ? 1 : 0;
+        excluded = false;
+        return { count };
+      }),
+    },
+  };
+  const prisma = {
+    $transaction: jest.fn((callback: (client: typeof tx) => unknown) =>
+      callback(tx),
+    ),
+    notificationChannel: {
+      findMany: jest.fn(),
+    },
+  };
+  const entitlements = {
+    lockUsers: jest.fn(),
+    forUser: jest.fn(),
+    assertInterval: jest.fn(),
+    assertCanAddCheck: jest.fn(),
+  };
+
+  return {
+    order,
+    channel,
+    check,
+    tx,
+    prisma,
+    entitlements,
+    service: new ChecksService(
+      prisma as unknown as PrismaService,
+      entitlements as unknown as AccountEntitlementsService,
+    ),
+  };
+}
+
+function readHarness() {
+  const checks = [
+    {
+      id: 'check-1',
+      name: 'API',
+      slug: 'api',
+      projectId: 'project-a',
+    },
+    {
+      id: 'check-2',
+      name: 'Worker',
+      slug: 'worker',
+      projectId: 'project-a',
+    },
+  ];
+  const project = { id: 'project-a', organizationId: 'org-a' };
+  const activeChannels = [
+    { id: 'channel-1' },
+    { id: 'channel-2' },
+    { id: 'channel-3' },
+  ];
+  const exclusions = [
+    { checkId: 'check-1', channelId: 'channel-2' },
+    { checkId: 'check-2', channelId: 'channel-1' },
+    { checkId: 'check-2', channelId: 'channel-3' },
+  ];
+  const prisma = {
+    project: {
+      findUnique: jest.fn().mockResolvedValue(project),
+    },
+    membership: {
+      findUnique: jest.fn().mockResolvedValue({ id: 'membership-1' }),
+    },
+    check: {
+      findMany: jest.fn().mockResolvedValue(checks),
+      findUnique: jest.fn().mockResolvedValue({ ...checks[0], project }),
+      findFirst: jest.fn().mockResolvedValue(checks[0]),
+    },
+    notificationChannel: {
+      findMany: jest.fn().mockResolvedValue(activeChannels),
+    },
+    checkChannelExclusion: {
+      findMany: jest.fn().mockResolvedValue(exclusions),
+    },
+  };
+  const entitlements = {
+    lockUsers: jest.fn(),
+    forUser: jest.fn(),
+    assertInterval: jest.fn(),
+    assertCanAddCheck: jest.fn(),
+  };
+
+  return {
+    checks,
+    project,
+    activeChannels,
+    exclusions,
+    prisma,
+    service: new ChecksService(
+      prisma as unknown as PrismaService,
+      entitlements as unknown as AccountEntitlementsService,
+    ),
+  };
+}
+
+describe('ChecksService effective notification channels', () => {
+  it('returns only enabled same-project channels without matching exclusions', async () => {
+    const h = readHarness();
+    h.prisma.notificationChannel.findMany.mockResolvedValue([
+      { id: 'channel-1' },
+      { id: 'channel-3' },
+    ]);
+
+    await expect(
+      h.service.effectiveNotificationChannelIds('check-1', h.project.id),
+    ).resolves.toEqual(['channel-1', 'channel-3']);
+
+    expect(h.prisma.notificationChannel.findMany).toHaveBeenCalledWith({
+      where: {
+        projectId: h.project.id,
+        enabled: true,
+        checkExclusions: { none: { checkId: 'check-1' } },
+      },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: { id: true },
+    });
+  });
+
+  it('returns an empty list when every enabled channel is excluded', async () => {
+    const h = readHarness();
+    h.prisma.notificationChannel.findMany.mockResolvedValue([]);
+
+    await expect(
+      h.service.effectiveNotificationChannelIds('check-1', h.project.id),
+    ).resolves.toEqual([]);
+  });
+
+  it('ignores disabled and pending-verification channels', async () => {
+    const h = readHarness();
+    h.prisma.notificationChannel.findMany.mockResolvedValue([
+      { id: 'verified-enabled' },
+    ]);
+
+    await expect(
+      h.service.effectiveNotificationChannelIds('check-1', h.project.id),
+    ).resolves.toEqual(['verified-enabled']);
+
+    expect(h.prisma.notificationChannel.findMany).toHaveBeenCalledWith({
+      where: {
+        projectId: h.project.id,
+        enabled: true,
+        checkExclusions: { none: { checkId: 'check-1' } },
+      },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: { id: true },
+    });
+  });
+
+  it('uses the provided transaction client', async () => {
+    const h = readHarness();
+    const tx = {
+      notificationChannel: {
+        findMany: jest.fn().mockResolvedValue([{ id: 'transaction-channel' }]),
+      },
+    };
+
+    await expect(
+      h.service.effectiveNotificationChannelIds(
+        'check-1',
+        h.project.id,
+        tx as unknown as Prisma.TransactionClient,
+      ),
+    ).resolves.toEqual(['transaction-channel']);
+
+    expect(tx.notificationChannel.findMany).toHaveBeenCalledTimes(1);
+    expect(h.prisma.notificationChannel.findMany).not.toHaveBeenCalled();
+  });
+
+  it('loads active project channels and exclusions once for the entire list', async () => {
+    const h = readHarness();
+
+    await expect(h.service.list('member', h.project.id)).resolves.toEqual([
+      {
+        ...h.checks[0],
+        notificationChannelIds: ['channel-1', 'channel-3'],
+      },
+      {
+        ...h.checks[1],
+        notificationChannelIds: ['channel-2'],
+      },
+    ]);
+
+    expect(h.prisma.notificationChannel.findMany).toHaveBeenCalledTimes(1);
+    expect(h.prisma.notificationChannel.findMany).toHaveBeenCalledWith({
+      where: { projectId: h.project.id, enabled: true },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: { id: true },
+    });
+    expect(h.prisma.checkChannelExclusion.findMany).toHaveBeenCalledTimes(1);
+    expect(h.prisma.checkChannelExclusion.findMany).toHaveBeenCalledWith({
+      where: { checkId: { in: ['check-1', 'check-2'] } },
+      select: { checkId: true, channelId: true },
+    });
+  });
+
+  it('attaches effective channel IDs to single-check reads', async () => {
+    const h = readHarness();
+    h.prisma.notificationChannel.findMany.mockResolvedValue([
+      { id: 'channel-1' },
+      { id: 'channel-3' },
+    ]);
+
+    await expect(h.service.findOne('member', 'check-1')).resolves.toEqual({
+      ...h.checks[0],
+      project: h.project,
+      notificationChannelIds: ['channel-1', 'channel-3'],
+    });
+    await expect(
+      h.service.findBySlug('member', 'org', 'project', 'api'),
+    ).resolves.toEqual({
+      ...h.checks[0],
+      notificationChannelIds: ['channel-1', 'channel-3'],
+    });
+  });
+});
+
+describe('ChecksService setCheckChannelEnabled', () => {
+  it.each([
+    [false, 'exclusion:upsert'],
+    [true, 'exclusion:deleteMany'],
+  ] as const)(
+    'locks the same-project channel before validation and the %s write',
+    async (enabled, writeStep) => {
+      const h = channelToggleHarness();
+
+      await setCheckChannelEnabled(
+        h.service,
+        'owner',
+        h.check.id,
+        sourceProject.id,
+        h.channel.id,
+        enabled,
+      );
+
+      expect(h.tx.$queryRaw).toHaveBeenCalledTimes(3);
+      const [query, channelId, projectId] = h.tx.$queryRaw.mock
+        .calls[2] as unknown as [TemplateStringsArray, string, string];
+      expect(query.join(' ')).toContain('SELECT id FROM notification_channels');
+      expect(query.join(' ')).toContain('FOR UPDATE');
+      expect([channelId, projectId]).toEqual([h.channel.id, sourceProject.id]);
+      expect(h.order).toEqual(['lock:channel', 'validate:channel', writeStep]);
+    },
+  );
+
+  it('upserts one exclusion and repeated disable remains idempotent', async () => {
+    const h = channelToggleHarness();
+
+    await expect(
+      setCheckChannelEnabled(
+        h.service,
+        'owner',
+        h.check.id,
+        sourceProject.id,
+        h.channel.id,
+        false,
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        id: h.check.id,
+        notificationChannelIds: ['channel-later', 'channel-earlier-a'],
+      }),
+    );
+    await expect(
+      setCheckChannelEnabled(
+        h.service,
+        'owner',
+        h.check.id,
+        sourceProject.id,
+        h.channel.id,
+        false,
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        notificationChannelIds: ['channel-later', 'channel-earlier-a'],
+      }),
+    );
+
+    expect(h.tx.checkChannelExclusion.upsert).toHaveBeenCalledTimes(2);
+    expect(h.tx.checkChannelExclusion.upsert).toHaveBeenLastCalledWith({
+      where: {
+        checkId_channelId: {
+          checkId: h.check.id,
+          channelId: h.channel.id,
+        },
+      },
+      create: { checkId: h.check.id, channelId: h.channel.id },
+      update: {},
+    });
+    expect(h.tx.checkChannelExclusion.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('deletes any exclusion and repeated enable remains idempotent', async () => {
+    const h = channelToggleHarness();
+    await setCheckChannelEnabled(
+      h.service,
+      'owner',
+      h.check.id,
+      sourceProject.id,
+      h.channel.id,
+      false,
+    );
+
+    await expect(
+      setCheckChannelEnabled(
+        h.service,
+        'owner',
+        h.check.id,
+        sourceProject.id,
+        h.channel.id,
+        true,
+      ),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        notificationChannelIds: [
+          'channel-later',
+          'channel-earlier-b',
+          'channel-earlier-a',
+        ],
+      }),
+    );
+    await setCheckChannelEnabled(
+      h.service,
+      'owner',
+      h.check.id,
+      sourceProject.id,
+      h.channel.id,
+      true,
+    );
+
+    expect(h.tx.checkChannelExclusion.deleteMany).toHaveBeenCalledTimes(2);
+    expect(h.tx.checkChannelExclusion.deleteMany).toHaveBeenLastCalledWith({
+      where: { checkId: h.check.id, channelId: h.channel.id },
+    });
+  });
+
+  it('does not disclose an unknown or cross-project channel', async () => {
+    const h = channelToggleHarness();
+    h.tx.notificationChannel.findFirst.mockResolvedValue(null);
+
+    await expect(
+      setCheckChannelEnabled(
+        h.service,
+        'owner',
+        h.check.id,
+        sourceProject.id,
+        'other-project-channel',
+        false,
+      ),
+    ).rejects.toEqual(new NotFoundException('Notification channel not found'));
+
+    expect(h.tx.notificationChannel.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'other-project-channel',
+        projectId: sourceProject.id,
+      },
+      select: { id: true, enabled: true },
+    });
+    expect(h.tx.checkChannelExclusion.upsert).not.toHaveBeenCalled();
+    expect(h.tx.checkChannelExclusion.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it.each(['disabled', 'pending-verification'])(
+    'rejects a %s channel',
+    async () => {
+      const h = channelToggleHarness();
+      h.tx.notificationChannel.findFirst.mockResolvedValue({
+        id: h.channel.id,
+        enabled: false,
+      });
+
+      await expect(
+        setCheckChannelEnabled(
+          h.service,
+          'owner',
+          h.check.id,
+          sourceProject.id,
+          h.channel.id,
+          false,
+        ),
+      ).rejects.toEqual(
+        new BadRequestException('Notification channel is not enabled'),
+      );
+
+      expect(h.tx.checkChannelExclusion.upsert).not.toHaveBeenCalled();
+      expect(h.tx.checkChannelExclusion.deleteMany).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects a stale expected project before reading the channel', async () => {
+    const h = channelToggleHarness();
+
+    await expect(
+      setCheckChannelEnabled(
+        h.service,
+        'owner',
+        h.check.id,
+        destinationProject.id,
+        h.channel.id,
+        false,
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(h.entitlements.lockUsers).not.toHaveBeenCalled();
+    expect(h.tx.notificationChannel.findFirst).not.toHaveBeenCalled();
+  });
+
+  it('rejects when the locked check moved after project authorization', async () => {
+    const h = channelToggleHarness();
+    h.tx.check.findUnique.mockResolvedValueOnce(h.check).mockResolvedValueOnce({
+      ...h.check,
+      projectId: destinationProject.id,
+      project: destinationProject,
+    });
+
+    await expect(
+      setCheckChannelEnabled(
+        h.service,
+        'owner',
+        h.check.id,
+        sourceProject.id,
+        h.channel.id,
+        false,
+      ),
+    ).rejects.toThrow('Check no longer belongs to the authorized project');
+
+    expect(h.tx.notificationChannel.findFirst).not.toHaveBeenCalled();
+    expect(h.tx.checkChannelExclusion.upsert).not.toHaveBeenCalled();
+  });
+
+  it('returns deterministically ordered committed IDs read in the write transaction', async () => {
+    const h = channelToggleHarness();
+
+    await expect(
+      setCheckChannelEnabled(
+        h.service,
+        'owner',
+        h.check.id,
+        sourceProject.id,
+        h.channel.id,
+        false,
+      ),
+    ).resolves.toEqual({
+      ...h.check,
+      notificationChannelIds: ['channel-later', 'channel-earlier-a'],
+    });
+
+    expect(h.tx.notificationChannel.findMany).toHaveBeenCalledWith({
+      where: {
+        projectId: sourceProject.id,
+        enabled: true,
+        checkExclusions: { none: { checkId: h.check.id } },
+      },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: { id: true },
+    });
+    expect(h.prisma.notificationChannel.findMany).not.toHaveBeenCalled();
+  });
+});
 
 describe('ChecksService shared account quota', () => {
   it.each([
@@ -791,6 +1351,20 @@ describe('ChecksService move', () => {
     });
   });
 
+  it('deletes source channel exclusions immediately before changing projects', async () => {
+    const h = moveHarness();
+
+    await h.service.move('acting-owner', movingCheck.id, destinationProject.id);
+
+    expect(h.tx.checkChannelExclusion.deleteMany).toHaveBeenCalledWith({
+      where: { checkId: movingCheck.id },
+    });
+    expect(h.order.slice(-2)).toEqual([
+      'checkChannelExclusion:deleteMany',
+      'check:update',
+    ]);
+  });
+
   it('preserves ping identity, paused status, and below-floor cadence', async () => {
     const h = moveHarness();
 
@@ -1057,6 +1631,7 @@ describe('ChecksService move', () => {
       'statusPage:findMany',
       'statusPage:update:page-1',
       'statusPage:update:page-2',
+      'checkChannelExclusion:deleteMany',
       'check:update',
     ]);
   });

@@ -70,6 +70,15 @@ export class ChecksResolver {
     return this.checksService.eventsForCheck(check.id, limit);
   }
 
+  @ResolveField(() => [ID])
+  notificationChannelIds(@Parent() check: CheckModel) {
+    if (check.notificationChannelIds) return check.notificationChannelIds;
+    return this.checksService.effectiveNotificationChannelIds(
+      check.id,
+      check.projectId,
+    );
+  }
+
   @ResolveField(() => Date, { nullable: true })
   nextExpectedAt(@Parent() check: CheckModel): Date | null {
     const c = check as unknown as {
@@ -123,6 +132,27 @@ export class ChecksResolver {
     );
     requireCheckAccess(principal, 'checks:write', projectId);
     return this.checksService.update(principal.userId, id, projectId, input);
+  }
+
+  @Mutation(() => CheckModel)
+  async setCheckChannelEnabled(
+    @CurrentUser() principal: ApiPrincipal,
+    @Args('checkId', { type: () => ID }) checkId: string,
+    @Args('channelId', { type: () => ID }) channelId: string,
+    @Args('enabled', { type: () => Boolean }) enabled: boolean,
+  ) {
+    const projectId = await this.checksService.projectIdForCheck(
+      principal.userId,
+      checkId,
+    );
+    requireCheckAccess(principal, 'checks:write', projectId);
+    return this.checksService.setCheckChannelEnabled(
+      principal.userId,
+      checkId,
+      projectId,
+      channelId,
+      enabled,
+    );
   }
 
   @Mutation(() => CheckModel)

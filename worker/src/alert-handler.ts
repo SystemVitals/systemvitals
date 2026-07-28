@@ -6,9 +6,10 @@ import { dispatchChannel } from "./notifiers.js";
 import { scheduleEscalation } from "./escalation.js";
 
 /**
- * Process an alert job: find ALL enabled notification channels for the check's
- * project, dispatch to each one, and write an AlertLog per channel (success or
- * failure). One failing channel does not block the others.
+ * Process an alert job: dispatch its transition-time channel snapshot, or
+ * resolve effective selected enabled channels for a legacy job, and write an
+ * AlertLog per channel (success or failure). One failing channel does not
+ * block the others.
  *
  * @returns The number of channels that were dispatched successfully.
  */
@@ -17,7 +18,7 @@ export async function handleAlert(
   deps: NotifierDeps,
   data: AlertJob,
 ): Promise<number> {
-  const { checkId, kind } = data;
+  const { checkId, kind, channelIds } = data;
 
   // Load the check (include its project for context)
   const check = await prisma.check.findUnique({
@@ -30,17 +31,18 @@ export async function handleAlert(
     return 0;
   }
 
-  // Find ALL enabled channels (any type) for the check's project
+  // Snapshots preserve transition-time selection. Legacy jobs without one use
+  // the current exclusions during the rolling upgrade.
   const channels = await prisma.notificationChannel.findMany({
     where: {
       projectId: check.projectId,
       enabled: true,
+      ...(channelIds === undefined
+        ? { checkExclusions: { none: { checkId: check.id } } }
+        : { id: { in: channelIds } }),
     },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
   });
-
-  if (channels.length === 0) {
-    return 0;
-  }
 
   const statusLabel = kind === "down" ? "DOWN" : "recovered";
   const subject = `[SystemVitals] ${check.name} is ${statusLabel}`;

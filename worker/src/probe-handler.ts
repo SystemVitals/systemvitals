@@ -2,6 +2,7 @@ import type { PrismaClient } from "@systemvitals/database";
 import { CheckStatus } from "@systemvitals/database";
 import type { AlertJob } from "./watchdog.js";
 import type { ProbeResult } from "./prober.js";
+import { snapshotSelectedChannelIds } from "./notification-routing.js";
 
 type EnqueueAlert = (job: AlertJob) => Promise<unknown>;
 
@@ -41,16 +42,33 @@ export async function handleProbe(
     return;
   }
 
-  const prev = check.status;
-
   // Run the probe
   const r = await probeFn(check);
 
   const newStatus: CheckStatus = r.up ? CheckStatus.UP : CheckStatus.DOWN;
   const now = new Date();
 
-  // Write CheckEvent and update check status in a transaction
-  await prisma.$transaction(async (tx) => {
+  // Lock and re-read after the probe so mutable check state and notification
+  // routing are committed as one transition-time snapshot.
+  const alert = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`
+      SELECT id
+      FROM checks
+      WHERE id = ${checkId}
+      FOR UPDATE
+    `;
+    const current = await tx.check.findUnique({
+      where: { id: checkId },
+    });
+
+    if (
+      current == null ||
+      current.status === CheckStatus.PAUSED ||
+      (current.type !== "HTTP" && current.type !== "TCP")
+    ) {
+      return undefined;
+    }
+
     await tx.checkEvent.create({
       data: {
         checkId,
@@ -68,12 +86,23 @@ export async function handleProbe(
         lastEventAt: now,
       },
     });
+
+    let kind: AlertJob["kind"] | undefined;
+    if (!r.up && current.status !== CheckStatus.DOWN) {
+      kind = "down";
+    } else if (r.up && current.status === CheckStatus.DOWN) {
+      kind = "recovery";
+    }
+
+    if (kind === undefined) {
+      return undefined;
+    }
+
+    const channelIds = await snapshotSelectedChannelIds(tx, current);
+    return { checkId, kind, channelIds } satisfies AlertJob;
   });
 
-  // Enqueue alert only on status transition
-  if (!r.up && prev !== CheckStatus.DOWN) {
-    await enqueueAlert({ checkId, kind: "down" });
-  } else if (r.up && prev === CheckStatus.DOWN) {
-    await enqueueAlert({ checkId, kind: "recovery" });
+  if (alert !== undefined) {
+    await enqueueAlert(alert);
   }
 }

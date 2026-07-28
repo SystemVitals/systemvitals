@@ -10,6 +10,7 @@ import {
 export interface AlertJobData {
   checkId: string;
   kind: 'down' | 'recovery';
+  channelIds?: string[];
 }
 
 @Injectable()

@@ -58,6 +58,8 @@ interface Fixture {
   eventId: string;
   alertId: string;
   acknowledgementId: string;
+  sourceChannelId: string;
+  destinationChannelIds: string[];
 }
 
 describe('moveCheck (e2e)', () => {
@@ -213,6 +215,40 @@ describe('moveCheck (e2e)', () => {
           graceSeconds: 10,
         },
       });
+      const sourceChannel = await tx.notificationChannel.create({
+        data: {
+          projectId: sourceProject.id,
+          type: 'WEBHOOK',
+          destinationKey: `source-${label}`,
+          config: { url: 'https://example.test/source' },
+          enabled: true,
+        },
+      });
+      const destinationChannels = await Promise.all([
+        tx.notificationChannel.create({
+          data: {
+            projectId: destinationProject.id,
+            type: 'WEBHOOK',
+            destinationKey: `destination-a-${label}`,
+            config: { url: 'https://example.test/destination-a' },
+            enabled: true,
+            createdAt: new Date('2025-01-01T00:00:00.000Z'),
+          },
+        }),
+        tx.notificationChannel.create({
+          data: {
+            projectId: destinationProject.id,
+            type: 'WEBHOOK',
+            destinationKey: `destination-b-${label}`,
+            config: { url: 'https://example.test/destination-b' },
+            enabled: true,
+            createdAt: new Date('2025-01-02T00:00:00.000Z'),
+          },
+        }),
+      ]);
+      await tx.checkChannelExclusion.create({
+        data: { checkId: check.id, channelId: sourceChannel.id },
+      });
       if (options?.destinationAtLimit && !options.sameCreator) {
         await tx.check.create({
           data: {
@@ -312,6 +348,8 @@ describe('moveCheck (e2e)', () => {
         eventId: event.id,
         alertId: alert.id,
         acknowledgementId: acknowledgement.id,
+        sourceChannelId: sourceChannel.id,
+        destinationChannelIds: destinationChannels.map(({ id }) => id),
       };
     });
   }
@@ -351,21 +389,31 @@ describe('moveCheck (e2e)', () => {
       periodSeconds: 30,
       graceSeconds: 10,
     });
-    const [check, events, alerts, acknowledgements, sourcePages, destination] =
-      await Promise.all([
-        prisma.check.findUniqueOrThrow({ where: { id: fixture.checkId } }),
-        prisma.checkEvent.findMany({ where: { checkId: fixture.checkId } }),
-        prisma.alertLog.findMany({ where: { checkId: fixture.checkId } }),
-        prisma.acknowledgement.findMany({
-          where: { checkId: fixture.checkId },
-        }),
-        prisma.statusPage.findMany({
-          where: { id: { in: fixture.sourcePageIds } },
-        }),
-        prisma.statusPage.findUniqueOrThrow({
-          where: { id: fixture.destinationPageId },
-        }),
-      ]);
+    const [
+      check,
+      events,
+      alerts,
+      acknowledgements,
+      sourcePages,
+      destination,
+      exclusions,
+    ] = await Promise.all([
+      prisma.check.findUniqueOrThrow({ where: { id: fixture.checkId } }),
+      prisma.checkEvent.findMany({ where: { checkId: fixture.checkId } }),
+      prisma.alertLog.findMany({ where: { checkId: fixture.checkId } }),
+      prisma.acknowledgement.findMany({
+        where: { checkId: fixture.checkId },
+      }),
+      prisma.statusPage.findMany({
+        where: { id: { in: fixture.sourcePageIds } },
+      }),
+      prisma.statusPage.findUniqueOrThrow({
+        where: { id: fixture.destinationPageId },
+      }),
+      prisma.checkChannelExclusion.findMany({
+        where: { checkId: fixture.checkId },
+      }),
+    ]);
     expect(check).toMatchObject({
       id: fixture.checkId,
       name: 'Nightly backup',
@@ -394,6 +442,25 @@ describe('moveCheck (e2e)', () => {
       true,
     );
     expect(destination.checkIds).toEqual(fixture.destinationPageCheckIds);
+    expect(exclusions).toEqual([]);
+
+    const checkResponse = await app.inject({
+      method: 'POST',
+      url: '/graphql',
+      headers: { authorization: `Bearer ${fixture.actorToken}` },
+      payload: {
+        query: `query($id: ID!) {
+          check(id: $id) { notificationChannelIds }
+        }`,
+        variables: { id: fixture.checkId },
+      },
+    });
+    const parsed = JSON.parse(checkResponse.body) as {
+      data?: { check?: { notificationChannelIds: string[] } };
+    };
+    expect(parsed.data?.check?.notificationChannelIds).toEqual(
+      fixture.destinationChannelIds,
+    );
   });
 
   it.each([
