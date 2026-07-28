@@ -187,7 +187,7 @@ describe("list_checks", () => {
 // get_check
 // ---------------------------------------------------------------------------
 describe("get_check", () => {
-  it("passes id variable and returns status plus event info", async () => {
+  it("passes id variable and returns status, notification channels, and event info", async () => {
     const fakeData = {
       check: {
         id: "c1",
@@ -197,6 +197,7 @@ describe("get_check", () => {
         pingSlug: "abc123",
         target: "https://example.com",
         intervalSeconds: 60,
+        notificationChannelIds: ["channel-email", "channel-webhook"],
         events: [
           { id: "e1", status: "UP", timestamp: "2024-01-01T00:01:00Z", responseTimeMs: 120, error: null, statusCode: 200 },
           { id: "e2", status: "DOWN", timestamp: "2024-01-01T00:00:00Z", responseTimeMs: null, error: "timeout", statusCode: null },
@@ -210,11 +211,40 @@ describe("get_check", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0].variables).toEqual({ id: "c1" });
     expect(calls[0].query).toContain("check");
+    expect(calls[0].query).toContain("notificationChannelIds");
     expect(result.content[0].text).toContain("UP");
+    expect(result.content[0].text).toContain(
+      "Notification channels: channel-email, channel-webhook",
+    );
     // Should mention events with actual event data from the timestamp/status
     const text = result.content[0].text;
     expect(text).toContain("2024-01-01T00:01:00Z");
     expect(text).toContain("2024-01-01T00:00:00Z");
+  });
+
+  it("accurately exposes an empty notification channel selection", async () => {
+    const fakeData = {
+      check: {
+        id: "c-empty",
+        name: "Quiet Check",
+        type: "HTTP",
+        status: "UP",
+        pingSlug: null,
+        target: "https://example.com/health",
+        intervalSeconds: 60,
+        periodSeconds: null,
+        schedule: null,
+        tz: null,
+        nextExpectedAt: null,
+        notificationChannelIds: [],
+        events: [],
+      },
+    };
+    const { gql } = makeFakeGql(fakeData);
+
+    const result = await findTool("get_check").handler({ id: "c-empty" }, gql);
+
+    expect(result.content[0].text).toContain("Notification channels: none");
   });
 
   it("shows the cron schedule and next expected time for cron checks", async () => {
@@ -231,6 +261,7 @@ describe("get_check", () => {
         schedule: "0 9 * * *",
         tz: "America/New_York",
         nextExpectedAt: "2024-01-02T09:00:00Z",
+        notificationChannelIds: [],
         events: [],
       },
     };
@@ -244,6 +275,115 @@ describe("get_check", () => {
     expect(text).toContain("0 9 * * *");
     expect(text).toContain("America/New_York");
     expect(text).toContain("2024-01-02T09:00:00Z");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// set_check_channel_enabled
+// ---------------------------------------------------------------------------
+describe("set_check_channel_enabled", () => {
+  it("has the exact public contract and validates every argument", () => {
+    const tool = findTool("set_check_channel_enabled");
+
+    expect(tool.description).toBe(
+      "Enable or disable one notification channel for a check.",
+    );
+    expect(Object.keys(tool.inputSchema)).toEqual([
+      "checkId",
+      "channelId",
+      "enabled",
+    ]);
+    expect(tool.inputSchema.checkId.safeParse("check-1").success).toBe(true);
+    expect(tool.inputSchema.checkId.safeParse("").success).toBe(false);
+    expect(tool.inputSchema.channelId.safeParse("channel-1").success).toBe(true);
+    expect(tool.inputSchema.channelId.safeParse("").success).toBe(false);
+    expect(tool.inputSchema.enabled.safeParse(true).success).toBe(true);
+    expect(tool.inputSchema.enabled.safeParse(false).success).toBe(true);
+    expect(tool.inputSchema.enabled.safeParse("true").success).toBe(false);
+    expect(tool.inputSchema.enabled.safeParse(undefined).success).toBe(false);
+  });
+
+  it.each([
+    {
+      enabled: true,
+      notificationChannelIds: ["channel-email", "channel-webhook"],
+      expected: "channel-email, channel-webhook",
+    },
+    {
+      enabled: false,
+      notificationChannelIds: [],
+      expected: "none",
+    },
+  ])(
+    "sends the exact mutation variables when enabled is $enabled and returns the effective IDs",
+    async ({ enabled, notificationChannelIds, expected }) => {
+      const fakeData = {
+        setCheckChannelEnabled: {
+          id: "check-1",
+          notificationChannelIds,
+        },
+      };
+      const { gql, calls } = makeFakeGql(fakeData);
+
+      const result = await findTool("set_check_channel_enabled").handler(
+        {
+          checkId: "check-1",
+          channelId: "channel-email",
+          enabled,
+        },
+        gql,
+      );
+
+      expect(calls).toHaveLength(1);
+      expect(calls[0].query).toContain(
+        "setCheckChannelEnabled(checkId: $checkId, channelId: $channelId, enabled: $enabled)",
+      );
+      expect(calls[0].query).toContain("notificationChannelIds");
+      expect(calls[0].variables).toEqual({
+        checkId: "check-1",
+        channelId: "channel-email",
+        enabled,
+      });
+      expect(result.content[0].text).toBe(
+        `Check check-1 notification channels: ${expected}`,
+      );
+    },
+  );
+
+  it.each([
+    [
+      "Missing capability: checks:write",
+      "This SystemVitals credential is missing checks:write. Create a connection with the checks:write capability.",
+    ],
+    [
+      "Unauthorized: bearer svt_do-not-leak",
+      "SystemVitals rejected this credential. Verify SYSTEMVITALS_API_TOKEN or create a new agent connection.",
+    ],
+  ])("surfaces %s through the standard safe error wrapper", async (message, expected) => {
+    const gql: Gql = async () => {
+      throw new Error(message);
+    };
+
+    await expect(
+      findTool("set_check_channel_enabled").handler(
+        {
+          checkId: "check-1",
+          channelId: "channel-email",
+          enabled: true,
+        },
+        gql,
+      ),
+    ).rejects.toThrow(expected);
+    await expect(
+      findTool("set_check_channel_enabled").handler(
+        {
+          checkId: "check-1",
+          channelId: "channel-email",
+          enabled: true,
+        },
+        gql,
+      ),
+    ).rejects.not.toThrow("svt_do-not-leak");
   });
 });
 

@@ -30,6 +30,7 @@ const SCOPED_TOOL_NAMES = [
   "pause_check",
   "resume_check",
   "delete_check",
+  "set_check_channel_enabled",
 ];
 
 describe("fetchCredential", () => {
@@ -48,7 +49,7 @@ describe("fetchCredential", () => {
 });
 
 describe("toolsForCredential", () => {
-  it("exposes exactly the eight check tools for a full scoped credential", () => {
+  it("exposes reads and every checks:write mutation for a full scoped credential", () => {
     expect(toolsForCredential(scopedCredential()).map((tool) => tool.name)).toEqual(
       SCOPED_TOOL_NAMES,
     );
@@ -81,11 +82,24 @@ describe("toolsForCredential", () => {
     ).toEqual(["list_checks", "get_check"]);
   });
 
+  it("classifies notification routing as checks:write, never checks:read", () => {
+    expect(
+      toolsForCredential(scopedCredential(["checks:write"])).map(
+        (tool) => tool.name,
+      ),
+    ).toContain("set_check_channel_enabled");
+    expect(
+      toolsForCredential(scopedCredential(["checks:read"])).map(
+        (tool) => tool.name,
+      ),
+    ).not.toContain("set_check_channel_enabled");
+  });
+
   it("exposes no tools when a scoped credential has no recognized capabilities", () => {
     expect(toolsForCredential(scopedCredential([]))).toEqual([]);
   });
 
-  it("retains all 25 tools, including email verification resend, for sessions", () => {
+  it("retains every tool, including notification routing, for sessions", () => {
     const selected = toolsForCredential({
       authKind: "session",
       credentialMode: "SESSION",
@@ -94,9 +108,11 @@ describe("toolsForCredential", () => {
       projectName: null,
     });
 
-    expect(selected).toHaveLength(25);
     expect(selected.map((tool) => tool.name)).toEqual(
       tools.map((tool) => tool.name),
+    );
+    expect(selected.map((tool) => tool.name)).toContain(
+      "set_check_channel_enabled",
     );
     expect(
       emailVerificationLifecycleToolNames(selected.map((tool) => tool.name)),
@@ -106,7 +122,7 @@ describe("toolsForCredential", () => {
     ).toHaveProperty("projectId");
   });
 
-  it("retains all 25 tools, including email verification resend, for an unbound legacy broad API token", () => {
+  it("retains every tool, including notification routing, for an unbound legacy broad API token", () => {
     const selected = toolsForCredential({
       authKind: "api-token",
       credentialMode: "LEGACY_BROAD",
@@ -115,7 +131,9 @@ describe("toolsForCredential", () => {
       projectName: null,
     });
 
-    expect(selected).toHaveLength(25);
+    expect(selected.map((tool) => tool.name)).toContain(
+      "set_check_channel_enabled",
+    );
     expect(
       emailVerificationLifecycleToolNames(selected.map((tool) => tool.name)),
     ).toEqual(EMAIL_VERIFICATION_TOOL_ALLOWLIST);

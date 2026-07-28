@@ -15,7 +15,7 @@ function credentialGql(credential: Record<string, unknown>): Gql {
 }
 
 describe("buildServer", () => {
-  it("fetches the credential once and registers all 25 tools including email verification resend for a session", async () => {
+  it("fetches the credential once and registers every tool for a session", async () => {
     let calls = 0;
     const gql: Gql = async () => {
       calls += 1;
@@ -32,7 +32,7 @@ describe("buildServer", () => {
     const { toolNames } = await buildServer(gql);
 
     expect(calls).toBe(1);
-    expect(toolNames).toHaveLength(25);
+    expect(toolNames).toContain("set_check_channel_enabled");
     expect(emailVerificationLifecycleToolNames(toolNames)).toEqual(
       EMAIL_VERIFICATION_TOOL_ALLOWLIST,
     );
