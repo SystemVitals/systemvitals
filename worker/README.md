@@ -6,11 +6,16 @@ supporting background jobs such as invitations and email verification.
 
 ## Alert delivery
 
-Recipients are resolved when a check transitions: the effective recipient set
-is the check's enabled project channels minus that check's channel exclusions.
-An empty exclusion set therefore selects every enabled channel, including
-channels added after the check was created. Globally disabled channels are
-never selected.
+Recipients are snapshotted when a check transitions. The effective recipient
+set is the check's enabled project channels minus that check's channel
+exclusions. An empty exclusion set therefore selects every enabled channel,
+including channels added after the check was created.
+
+Alert consumption uses that snapshot instead of re-reading check exclusions,
+so later routing toggles affect only future transitions. A channel that was
+deleted or globally disabled after the transition is safely skipped. During a
+rolling upgrade, legacy queued jobs without a snapshot temporarily resolve
+recipients from the current exclusions.
 
 DOWN transitions send an immediate alert to every selected channel. Recovery
 notifications use the same selection rule and are sent only for an actual

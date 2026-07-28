@@ -405,11 +405,12 @@ describe("handleAlert", () => {
 
     expect(sent).toBe(2);
     expect(mailer.sent[0]?.subject.toLowerCase()).toContain("recover");
+    expect(enqueueEscalation).not.toHaveBeenCalled();
 
     await prisma.alertLog.deleteMany({ where: { checkId: checkWithChannelId } });
   });
 
-  it("dispatches DOWN only to selected enabled channels and logs only their attempts", async () => {
+  it("uses current exclusions for a legacy job without a channel snapshot", async () => {
     await prisma.checkChannelExclusion.create({
       data: { checkId: checkWithChannelId, channelId: slackChannelId },
     });
@@ -457,6 +458,108 @@ describe("handleAlert", () => {
     expect(logs).toHaveLength(1);
     expect(logs[0]?.channelId).toBe(emailChannelId);
     expect(logs[0]?.status).toBe(CheckStatus.UP);
+  });
+
+  it("delivers a snapshotted channel even when it is excluded before consumption", async () => {
+    await prisma.checkChannelExclusion.create({
+      data: { checkId: checkWithChannelId, channelId: slackChannelId },
+    });
+    const httpPost = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    const deps = makeDeps(httpPost);
+
+    const sent = await handleAlert(prisma, deps, {
+      checkId: checkWithChannelId,
+      kind: "down",
+      channelIds: [slackChannelId],
+    });
+
+    expect(sent).toBe(1);
+    expect((deps.mailer as CollectingMailer).sent).toHaveLength(0);
+    expect(httpPost).toHaveBeenCalledOnce();
+    const logs = await prisma.alertLog.findMany({
+      where: { checkId: checkWithChannelId },
+    });
+    expect(logs).toHaveLength(1);
+    expect(logs[0]?.channelId).toBe(slackChannelId);
+  });
+
+  it("keeps an empty transition snapshot empty after its exclusion is removed", async () => {
+    await prisma.checkChannelExclusion.create({
+      data: { checkId: checkWithChannelId, channelId: slackChannelId },
+    });
+    await prisma.checkChannelExclusion.delete({
+      where: {
+        checkId_channelId: {
+          checkId: checkWithChannelId,
+          channelId: slackChannelId,
+        },
+      },
+    });
+    const httpPost = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    const deps = makeDeps(httpPost);
+
+    const sent = await handleAlert(prisma, deps, {
+      checkId: checkWithChannelId,
+      kind: "down",
+      channelIds: [],
+    });
+
+    expect(sent).toBe(0);
+    expect((deps.mailer as CollectingMailer).sent).toHaveLength(0);
+    expect(httpPost).not.toHaveBeenCalled();
+    expect(
+      await prisma.alertLog.count({ where: { checkId: checkWithChannelId } }),
+    ).toBe(0);
+  });
+
+  it("skips a snapshotted channel that is globally disabled before consumption", async () => {
+    await prisma.notificationChannel.update({
+      where: { id: slackChannelId },
+      data: { enabled: false },
+    });
+    const httpPost = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    const deps = makeDeps(httpPost);
+
+    const sent = await handleAlert(prisma, deps, {
+      checkId: checkWithChannelId,
+      kind: "down",
+      channelIds: [slackChannelId],
+    });
+
+    expect(sent).toBe(0);
+    expect(httpPost).not.toHaveBeenCalled();
+    expect(
+      await prisma.alertLog.count({ where: { checkId: checkWithChannelId } }),
+    ).toBe(0);
+  });
+
+  it("skips a snapshotted channel that is deleted before consumption", async () => {
+    const deletedChannel = await prisma.notificationChannel.create({
+      data: {
+        projectId: projectNoPolicyId,
+        type: ChannelType.EMAIL,
+        config: { email: "deleted-before-alert@example.com" },
+        enabled: true,
+      },
+    });
+    await prisma.notificationChannel.delete({
+      where: { id: deletedChannel.id },
+    });
+    const httpPost = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    const deps = makeDeps(httpPost);
+
+    const sent = await handleAlert(prisma, deps, {
+      checkId: checkNoPolicyId,
+      kind: "down",
+      channelIds: [deletedChannel.id],
+    });
+
+    expect(sent).toBe(0);
+    expect((deps.mailer as CollectingMailer).sent).toHaveLength(0);
+    expect(httpPost).not.toHaveBeenCalled();
+    expect(
+      await prisma.alertLog.count({ where: { checkId: checkNoPolicyId } }),
+    ).toBe(0);
   });
 
   it("selects an enabled channel created after the check when it has no exclusion", async () => {
@@ -620,7 +723,7 @@ describe("handleAlert", () => {
     await prisma.alertLog.deleteMany({ where: { checkId: checkWithPolicyId } });
   });
 
-  it("still schedules legacy DOWN escalation when every immediate channel is excluded", async () => {
+  it("still schedules legacy DOWN escalation when the transition snapshot is empty", async () => {
     await prisma.checkChannelExclusion.create({
       data: { checkId: checkWithPolicyId, channelId: policyChannelId },
     });
@@ -630,6 +733,7 @@ describe("handleAlert", () => {
     const sent = await handleAlert(prisma, deps, {
       checkId: checkWithPolicyId,
       kind: "down",
+      channelIds: [],
     });
 
     expect(sent).toBe(0);

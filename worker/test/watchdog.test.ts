@@ -1,6 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { PrismaClient, CheckStatus } from "@systemvitals/database";
-import { sweepOverdue } from "../src/watchdog.js";
+import {
+  PrismaClient,
+  CheckStatus,
+  ChannelType,
+} from "@systemvitals/database";
+import { sweepOverdue, type AlertJob } from "../src/watchdog.js";
 
 const prisma = new PrismaClient();
 
@@ -13,6 +17,8 @@ let checkFreshId: string;
 let checkPausedId: string;
 let checkCronOverdueId: string;
 let checkCronFreshId: string;
+let emailChannelId: string;
+let slackChannelId: string;
 
 beforeAll(async () => {
   // Clean up any stale test artifacts from prior failed runs
@@ -167,6 +173,35 @@ beforeAll(async () => {
     },
   });
   checkCronFreshId = checkCronFresh.id;
+
+  const emailChannel = await prisma.notificationChannel.create({
+    data: {
+      projectId,
+      type: ChannelType.EMAIL,
+      config: { email: "watchdog-email@example.com" },
+      enabled: true,
+    },
+  });
+  emailChannelId = emailChannel.id;
+
+  const slackChannel = await prisma.notificationChannel.create({
+    data: {
+      projectId,
+      type: ChannelType.SLACK,
+      config: {
+        webhookUrl: "https://hooks.slack.com/services/watchdog/test",
+      },
+      enabled: true,
+    },
+  });
+  slackChannelId = slackChannel.id;
+
+  await prisma.checkChannelExclusion.createMany({
+    data: [
+      { checkId: checkOverdueId, channelId: slackChannelId },
+      { checkId: checkCronOverdueId, channelId: emailChannelId },
+    ],
+  });
 });
 
 afterAll(async () => {
@@ -174,6 +209,9 @@ afterAll(async () => {
   const allCheckIds = [checkOverdueId, checkFreshId, checkPausedId, checkCronOverdueId, checkCronFreshId];
   await prisma.checkEvent.deleteMany({ where: { checkId: { in: allCheckIds } } });
   await prisma.check.deleteMany({ where: { id: { in: allCheckIds } } });
+  await prisma.notificationChannel.deleteMany({
+    where: { id: { in: [emailChannelId, slackChannelId] } },
+  });
   await prisma.project.delete({ where: { id: projectId } });
   await prisma.membership.deleteMany({ where: { userId } });
   await prisma.organization.delete({ where: { id: orgId } });
@@ -183,8 +221,8 @@ afterAll(async () => {
 
 describe("sweepOverdue", () => {
   it("marks the overdue UP check as DOWN, writes a CheckEvent, enqueues alert, returns 1", async () => {
-    const enqueuedJobs: Array<{ checkId: string; kind: "down" | "recovery" }> = [];
-    const fakeEnqueue = async (job: { checkId: string; kind: "down" | "recovery" }) => {
+    const enqueuedJobs: AlertJob[] = [];
+    const fakeEnqueue = async (job: AlertJob) => {
       enqueuedJobs.push(job);
     };
 
@@ -206,7 +244,11 @@ describe("sweepOverdue", () => {
     expect(events[0]?.error).toBe("missed heartbeat");
 
     // fakeEnqueue was called with the overdue check's job
-    expect(enqueuedJobs.some(j => j.checkId === checkOverdueId && j.kind === "down")).toBe(true);
+    expect(enqueuedJobs).toContainEqual({
+      checkId: checkOverdueId,
+      kind: "down",
+      channelIds: [emailChannelId],
+    });
 
     // The fresh and paused checks were NOT enqueued
     expect(enqueuedJobs.some(j => j.checkId === checkFreshId)).toBe(false);
@@ -230,7 +272,11 @@ describe("sweepOverdue", () => {
     expect(cronEvents.length).toBe(1);
     expect(cronEvents[0]?.error).toBe("missed heartbeat");
 
-    expect(enqueuedJobs.some(j => j.checkId === checkCronOverdueId && j.kind === "down")).toBe(true);
+    expect(enqueuedJobs).toContainEqual({
+      checkId: checkCronOverdueId,
+      kind: "down",
+      channelIds: [slackChannelId],
+    });
 
     // Check (e) cron fresh — still within schedule + grace, untouched
     const freshCronCheck = await prisma.check.findUniqueOrThrow({ where: { id: checkCronFreshId } });
@@ -355,8 +401,8 @@ describe("sweepOverdue: read-then-write race with a mid-sweep conversion (Fix 3)
       checkEvent: prisma.checkEvent,
     } as unknown as PrismaClient;
 
-    const enqueuedJobs: Array<{ checkId: string; kind: "down" | "recovery" }> = [];
-    const fakeEnqueue = async (job: { checkId: string; kind: "down" | "recovery" }) => {
+    const enqueuedJobs: AlertJob[] = [];
+    const fakeEnqueue = async (job: AlertJob) => {
       enqueuedJobs.push(job);
     };
 

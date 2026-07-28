@@ -1,10 +1,12 @@
 import type { PrismaClient } from "@systemvitals/database";
 import { CheckStatus } from "@systemvitals/database";
 import { isCronOverdue } from "./cron.js";
+import { snapshotSelectedChannelIds } from "./notification-routing.js";
 
 export type AlertJob = {
   checkId: string;
   kind: "down" | "recovery";
+  channelIds?: string[];
 };
 
 export type EnqueueAlert = (
@@ -80,15 +82,30 @@ export async function sweepOverdue(
   for (const check of overdue) {
     signal?.throwIfAborted();
 
-    // Between the read above and this write, the check may have been
-    // converted away from HEARTBEAT (its timing columns nulled) or already
-    // resolved by a real ping. Re-check both conditions atomically in the
-    // WHERE clause instead of trusting the stale snapshot: `updateMany`
-    // only touches a row that still has heartbeat timing columns AND is
-    // still in an alertable status. If it matches nothing, the check is no
-    // longer ours to sweep — skip the event and the alert entirely.
-    const eventId = await prisma.$transaction(async (tx) => {
+    // Locking serializes this transition and routing snapshot with check
+    // notification toggles. Between the candidate read and this write, the
+    // check may also have been converted away from HEARTBEAT or resolved by a
+    // real ping, so retain the conditional update guard after the locked
+    // re-read.
+    const transition = await prisma.$transaction(async (tx) => {
       signal?.throwIfAborted();
+      await tx.$queryRaw`
+        SELECT id
+        FROM checks
+        WHERE id = ${check.id}
+        FOR UPDATE
+      `;
+      signal?.throwIfAborted();
+      const current = await tx.check.findUnique({
+        where: { id: check.id },
+        select: { id: true, projectId: true },
+      });
+      signal?.throwIfAborted();
+
+      if (current == null) {
+        return undefined;
+      }
+
       const result = await tx.check.updateMany({
         where: {
           id: check.id,
@@ -115,10 +132,13 @@ export async function sweepOverdue(
       });
       signal?.throwIfAborted();
 
-      return event.id;
+      const channelIds = await snapshotSelectedChannelIds(tx, current);
+      signal?.throwIfAborted();
+
+      return { eventId: event.id, channelIds };
     });
 
-    if (!eventId) {
+    if (!transition) {
       continue;
     }
 
@@ -126,8 +146,12 @@ export async function sweepOverdue(
     // corresponding idempotent alert. Lease cancellation may fence future
     // checks, but must not strand this committed transition.
     await enqueueAlert(
-      { checkId: check.id, kind: "down" },
-      { jobId: watchdogAlertJobId(check.id, eventId) },
+      {
+        checkId: check.id,
+        kind: "down",
+        channelIds: transition.channelIds,
+      },
+      { jobId: watchdogAlertJobId(check.id, transition.eventId) },
     );
 
     count++;
