@@ -2,7 +2,7 @@ import {
   HeartPulse,
   Radar,
   Bell,
-  AlarmClock,
+  Route,
   PanelTop,
   TerminalSquare,
 } from "lucide-react";
@@ -25,9 +25,9 @@ const FEATURES = [
     body: "Email, Slack, Telegram, and webhooks — wherever your team looks.",
   },
   {
-    Icon: AlarmClock,
-    title: "Escalation policies",
-    body: "Multi-step, delay-based escalation with reminders until acknowledged.",
+    Icon: Route,
+    title: "Per-check routing",
+    body: "Choose which channels receive DOWN and recovery events for every check.",
   },
   {
     Icon: PanelTop,

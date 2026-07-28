@@ -85,8 +85,8 @@ const sections: LegalSection[] = [
           control, backup system, or guarantee that a failure will be detected.
         </p>
         <p>
-          You are responsible for configuring checks, recipients, escalation
-          rules, and status pages correctly; testing alert delivery; and
+          You are responsible for configuring checks, notification routes,
+          recipients, and status pages correctly; testing alert delivery; and
           maintaining independent safeguards appropriate to your systems.
           Public status pages and webhook destinations are published or
           contacted according to your configuration.

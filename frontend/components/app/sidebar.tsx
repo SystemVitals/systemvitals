@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  AlertTriangle,
   Bell,
   Building2,
   CreditCard,
@@ -24,7 +23,6 @@ import { OrgSwitcher } from "@/components/app/org-switcher";
 export const APP_NAV = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Channels", href: "/channels", icon: Bell },
-  { label: "Escalation", href: "/escalation", icon: AlertTriangle },
   { label: "Status pages", href: "/status-pages", icon: Globe },
   { label: "Team", href: "/team", icon: Users },
   { label: "Organizations", href: "/organizations", icon: Building2 },

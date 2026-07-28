@@ -2,7 +2,7 @@ export const SITE = {
   name: "SystemVitals",
   tagline: "Know the moment your systems flatline.",
   description:
-    "Uptime & cron-job monitoring: passive heartbeat dead-man's-switch, active HTTP/TCP/ping probing, multi-channel alerting, escalation, and public status pages.",
+    "Uptime & cron-job monitoring: passive heartbeat dead-man's-switch, active HTTP/TCP/ping probing, per-check notification routing, and public status pages.",
   // Absolute origin, used as Next's `metadataBase` so og:image / og:url resolve
   // to absolute URLs — social crawlers reject relative ones. Baked in at build
   // time (see frontend/Dockerfile), so it must be passed as a build arg.
@@ -16,7 +16,7 @@ export const SITE = {
   capabilities: {
     monitors: ["HTTP", "TCP", "Ping", "Heartbeat"],
     channels: ["Email", "Slack", "Telegram", "Webhook"],
-    platform: ["Escalation", "Status pages", "MCP"],
+    platform: ["Per-check routing", "Status pages", "MCP"],
   },
   // Display prices. The amounts Stripe actually charges live in the API at
   // api/src/billing/plan-pricing.ts — keep these in sync. Yearly = 50% off

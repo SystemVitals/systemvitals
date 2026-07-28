@@ -303,40 +303,6 @@ export const DELETE_STATUS_PAGE = gql`
   }
 `;
 
-export const ESCALATION_POLICIES = gql`
-  query escalationPolicies($projectId: ID!) {
-    escalationPolicies(projectId: $projectId) {
-      id
-      steps {
-        channelId
-        delaySeconds
-      }
-    }
-  }
-`;
-
-export const CREATE_ESCALATION_POLICY = gql`
-  mutation createEscalationPolicy($projectId: ID!, $stepsJson: String!) {
-    createEscalationPolicy(projectId: $projectId, stepsJson: $stepsJson) {
-      id
-    }
-  }
-`;
-
-export const UPDATE_ESCALATION_POLICY = gql`
-  mutation updateEscalationPolicy($id: ID!, $stepsJson: String!) {
-    updateEscalationPolicy(id: $id, stepsJson: $stepsJson) {
-      id
-    }
-  }
-`;
-
-export const DELETE_ESCALATION_POLICY = gql`
-  mutation deleteEscalationPolicy($id: ID!) {
-    deleteEscalationPolicy(id: $id)
-  }
-`;
-
 export const MY_SUBSCRIPTION = gql`
   query mySubscription {
     mySubscription {
