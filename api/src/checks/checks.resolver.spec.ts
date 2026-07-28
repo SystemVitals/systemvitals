@@ -17,6 +17,9 @@ const principal: ApiPrincipal = {
 function harness() {
   const service = {
     projectIdForCheck: jest.fn().mockResolvedValue('project-source'),
+    effectiveNotificationChannelIds: jest
+      .fn()
+      .mockResolvedValue(['channel-fallback']),
     update: jest.fn().mockResolvedValue({ id: 'check-1' }),
     pause: jest.fn().mockResolvedValue({ id: 'check-1' }),
     resume: jest.fn().mockResolvedValue({ id: 'check-1' }),
@@ -27,6 +30,38 @@ function harness() {
     resolver: new ChecksResolver(service as unknown as ChecksService),
   };
 }
+
+describe('ChecksResolver notificationChannelIds', () => {
+  it('returns preloaded IDs without querying the service', () => {
+    const h = harness();
+
+    expect(
+      h.resolver.notificationChannelIds({
+        id: 'check-1',
+        projectId: 'project-source',
+        notificationChannelIds: [],
+      } as never),
+    ).toEqual([]);
+
+    expect(h.service.effectiveNotificationChannelIds).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the service for mutation return objects', async () => {
+    const h = harness();
+
+    await expect(
+      h.resolver.notificationChannelIds({
+        id: 'check-1',
+        projectId: 'project-source',
+      } as never),
+    ).resolves.toEqual(['channel-fallback']);
+
+    expect(h.service.effectiveNotificationChannelIds).toHaveBeenCalledWith(
+      'check-1',
+      'project-source',
+    );
+  });
+});
 
 describe('ChecksResolver mutation project binding', () => {
   it('passes the project authorized for updateCheck into the service write', async () => {

@@ -147,6 +147,7 @@ type CheckModel {
   method: String
   name: String!
   nextExpectedAt: DateTime
+  notificationChannelIds: [ID!]!
   periodSeconds: Int
   pingSlug: String
   projectId: ID!

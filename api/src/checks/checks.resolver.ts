@@ -70,6 +70,15 @@ export class ChecksResolver {
     return this.checksService.eventsForCheck(check.id, limit);
   }
 
+  @ResolveField(() => [ID])
+  notificationChannelIds(@Parent() check: CheckModel) {
+    if (check.notificationChannelIds) return check.notificationChannelIds;
+    return this.checksService.effectiveNotificationChannelIds(
+      check.id,
+      check.projectId,
+    );
+  }
+
   @ResolveField(() => Date, { nullable: true })
   nextExpectedAt(@Parent() check: CheckModel): Date | null {
     const c = check as unknown as {

@@ -420,6 +420,192 @@ function moveHarness() {
   };
 }
 
+function readHarness() {
+  const checks = [
+    {
+      id: 'check-1',
+      name: 'API',
+      slug: 'api',
+      projectId: 'project-a',
+    },
+    {
+      id: 'check-2',
+      name: 'Worker',
+      slug: 'worker',
+      projectId: 'project-a',
+    },
+  ];
+  const project = { id: 'project-a', organizationId: 'org-a' };
+  const activeChannels = [
+    { id: 'channel-1' },
+    { id: 'channel-2' },
+    { id: 'channel-3' },
+  ];
+  const exclusions = [
+    { checkId: 'check-1', channelId: 'channel-2' },
+    { checkId: 'check-2', channelId: 'channel-1' },
+    { checkId: 'check-2', channelId: 'channel-3' },
+  ];
+  const prisma = {
+    project: {
+      findUnique: jest.fn().mockResolvedValue(project),
+    },
+    membership: {
+      findUnique: jest.fn().mockResolvedValue({ id: 'membership-1' }),
+    },
+    check: {
+      findMany: jest.fn().mockResolvedValue(checks),
+      findUnique: jest.fn().mockResolvedValue({ ...checks[0], project }),
+      findFirst: jest.fn().mockResolvedValue(checks[0]),
+    },
+    notificationChannel: {
+      findMany: jest.fn().mockResolvedValue(activeChannels),
+    },
+    checkChannelExclusion: {
+      findMany: jest.fn().mockResolvedValue(exclusions),
+    },
+  };
+  const entitlements = {
+    lockUsers: jest.fn(),
+    forUser: jest.fn(),
+    assertInterval: jest.fn(),
+    assertCanAddCheck: jest.fn(),
+  };
+
+  return {
+    checks,
+    project,
+    activeChannels,
+    exclusions,
+    prisma,
+    service: new ChecksService(
+      prisma as unknown as PrismaService,
+      entitlements as unknown as AccountEntitlementsService,
+    ),
+  };
+}
+
+describe('ChecksService effective notification channels', () => {
+  it('returns only enabled same-project channels without matching exclusions', async () => {
+    const h = readHarness();
+    h.prisma.notificationChannel.findMany.mockResolvedValue([
+      { id: 'channel-1' },
+      { id: 'channel-3' },
+    ]);
+
+    await expect(
+      h.service.effectiveNotificationChannelIds('check-1', h.project.id),
+    ).resolves.toEqual(['channel-1', 'channel-3']);
+
+    expect(h.prisma.notificationChannel.findMany).toHaveBeenCalledWith({
+      where: {
+        projectId: h.project.id,
+        enabled: true,
+        checkExclusions: { none: { checkId: 'check-1' } },
+      },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+  });
+
+  it('returns an empty list when every enabled channel is excluded', async () => {
+    const h = readHarness();
+    h.prisma.notificationChannel.findMany.mockResolvedValue([]);
+
+    await expect(
+      h.service.effectiveNotificationChannelIds('check-1', h.project.id),
+    ).resolves.toEqual([]);
+  });
+
+  it('ignores disabled and pending-verification channels', async () => {
+    const h = readHarness();
+    h.prisma.notificationChannel.findMany.mockResolvedValue([
+      { id: 'verified-enabled' },
+    ]);
+
+    await expect(
+      h.service.effectiveNotificationChannelIds('check-1', h.project.id),
+    ).resolves.toEqual(['verified-enabled']);
+
+    expect(h.prisma.notificationChannel.findMany).toHaveBeenCalledWith({
+      where: {
+        projectId: h.project.id,
+        enabled: true,
+        checkExclusions: { none: { checkId: 'check-1' } },
+      },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+  });
+
+  it('uses the provided transaction client', async () => {
+    const h = readHarness();
+    const tx = {
+      notificationChannel: {
+        findMany: jest.fn().mockResolvedValue([{ id: 'transaction-channel' }]),
+      },
+    };
+
+    await expect(
+      h.service.effectiveNotificationChannelIds(
+        'check-1',
+        h.project.id,
+        tx as unknown as Prisma.TransactionClient,
+      ),
+    ).resolves.toEqual(['transaction-channel']);
+
+    expect(tx.notificationChannel.findMany).toHaveBeenCalledTimes(1);
+    expect(h.prisma.notificationChannel.findMany).not.toHaveBeenCalled();
+  });
+
+  it('loads active project channels and exclusions once for the entire list', async () => {
+    const h = readHarness();
+
+    await expect(h.service.list('member', h.project.id)).resolves.toEqual([
+      {
+        ...h.checks[0],
+        notificationChannelIds: ['channel-1', 'channel-3'],
+      },
+      {
+        ...h.checks[1],
+        notificationChannelIds: ['channel-2'],
+      },
+    ]);
+
+    expect(h.prisma.notificationChannel.findMany).toHaveBeenCalledTimes(1);
+    expect(h.prisma.notificationChannel.findMany).toHaveBeenCalledWith({
+      where: { projectId: h.project.id, enabled: true },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+    expect(h.prisma.checkChannelExclusion.findMany).toHaveBeenCalledTimes(1);
+    expect(h.prisma.checkChannelExclusion.findMany).toHaveBeenCalledWith({
+      where: { checkId: { in: ['check-1', 'check-2'] } },
+      select: { checkId: true, channelId: true },
+    });
+  });
+
+  it('attaches effective channel IDs to single-check reads', async () => {
+    const h = readHarness();
+    h.prisma.notificationChannel.findMany.mockResolvedValue([
+      { id: 'channel-1' },
+      { id: 'channel-3' },
+    ]);
+
+    await expect(h.service.findOne('member', 'check-1')).resolves.toEqual({
+      ...h.checks[0],
+      project: h.project,
+      notificationChannelIds: ['channel-1', 'channel-3'],
+    });
+    await expect(
+      h.service.findBySlug('member', 'org', 'project', 'api'),
+    ).resolves.toEqual({
+      ...h.checks[0],
+      notificationChannelIds: ['channel-1', 'channel-3'],
+    });
+  });
+});
+
 describe('ChecksService shared account quota', () => {
   it.each([
     [

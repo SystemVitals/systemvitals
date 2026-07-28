@@ -27,6 +27,10 @@ type LockedExpectedCheck = Prisma.CheckGetPayload<{
   include: { project: true };
 }>;
 
+export type CheckWithNotificationChannels<T> = T & {
+  notificationChannelIds: string[];
+};
+
 @Injectable()
 export class ChecksService {
   constructor(
@@ -355,14 +359,47 @@ export class ChecksService {
 
   async list(userId: string, projectId: string) {
     await this.assertProjectAccess(userId, projectId);
-    return this.prisma.check.findMany({
+    const checks = await this.prisma.check.findMany({
       where: { projectId },
       orderBy: { createdAt: 'asc' },
+    });
+    const [channels, exclusions] = await Promise.all([
+      this.prisma.notificationChannel.findMany({
+        where: { projectId, enabled: true },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true },
+      }),
+      this.prisma.checkChannelExclusion.findMany({
+        where: { checkId: { in: checks.map(({ id }) => id) } },
+        select: { checkId: true, channelId: true },
+      }),
+    ]);
+    const channelIds = channels.map(({ id }) => id);
+    const excludedByCheck = new Map<string, Set<string>>();
+    for (const { checkId, channelId } of exclusions) {
+      const excluded = excludedByCheck.get(checkId) ?? new Set<string>();
+      excluded.add(channelId);
+      excludedByCheck.set(checkId, excluded);
+    }
+
+    return checks.map((check) => {
+      const excluded = excludedByCheck.get(check.id);
+      return {
+        ...check,
+        notificationChannelIds: excluded
+          ? channelIds.filter((channelId) => !excluded.has(channelId))
+          : [...channelIds],
+      };
     });
   }
 
   async findOne(userId: string, checkId: string) {
-    return this.assertCheckAccess(userId, checkId);
+    const check = await this.assertCheckAccess(userId, checkId);
+    const notificationChannelIds = await this.effectiveNotificationChannelIds(
+      check.id,
+      check.projectId,
+    );
+    return { ...check, notificationChannelIds };
   }
 
   async projectIdForCheck(userId: string, checkId: string): Promise<string> {
@@ -399,7 +436,29 @@ export class ChecksService {
 
     if (!check) throw new NotFoundException('Check not found');
 
-    return check;
+    const notificationChannelIds = await this.effectiveNotificationChannelIds(
+      check.id,
+      check.projectId,
+    );
+    return { ...check, notificationChannelIds };
+  }
+
+  async effectiveNotificationChannelIds(
+    checkId: string,
+    projectId: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<string[]> {
+    const client = tx ?? this.prisma;
+    const channels = await client.notificationChannel.findMany({
+      where: {
+        projectId,
+        enabled: true,
+        checkExclusions: { none: { checkId } },
+      },
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+    return channels.map(({ id }) => id);
   }
 
   async update(
