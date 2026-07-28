@@ -461,6 +461,7 @@ function moveHarness() {
 }
 
 function channelToggleHarness() {
+  const order: string[] = [];
   let excluded = false;
   const enabledChannels = [
     { id: 'channel-later' },
@@ -477,7 +478,13 @@ function channelToggleHarness() {
     project: sourceProject,
   };
   const tx = {
-    $queryRaw: jest.fn().mockResolvedValue([]),
+    $queryRaw: jest.fn().mockImplementation((strings: TemplateStringsArray) => {
+      const query = strings.join(' ');
+      if (query.includes('FROM notification_channels')) {
+        order.push('lock:channel');
+      }
+      return [];
+    }),
     check: {
       findUnique: jest.fn().mockResolvedValue(check),
     },
@@ -488,7 +495,10 @@ function channelToggleHarness() {
       findUnique: jest.fn().mockResolvedValue({ id: 'membership' }),
     },
     notificationChannel: {
-      findFirst: jest.fn().mockResolvedValue(channel),
+      findFirst: jest.fn().mockImplementation(() => {
+        order.push('validate:channel');
+        return channel;
+      }),
       findMany: jest
         .fn()
         .mockImplementation(() =>
@@ -497,6 +507,7 @@ function channelToggleHarness() {
     },
     checkChannelExclusion: {
       upsert: jest.fn().mockImplementation(() => {
+        order.push('exclusion:upsert');
         excluded = true;
         return {
           checkId: check.id,
@@ -504,6 +515,7 @@ function channelToggleHarness() {
         };
       }),
       deleteMany: jest.fn().mockImplementation(() => {
+        order.push('exclusion:deleteMany');
         const count = excluded ? 1 : 0;
         excluded = false;
         return { count };
@@ -526,6 +538,7 @@ function channelToggleHarness() {
   };
 
   return {
+    order,
     channel,
     check,
     tx,
@@ -725,6 +738,33 @@ describe('ChecksService effective notification channels', () => {
 });
 
 describe('ChecksService setCheckChannelEnabled', () => {
+  it.each([
+    [false, 'exclusion:upsert'],
+    [true, 'exclusion:deleteMany'],
+  ] as const)(
+    'locks the same-project channel before validation and the %s write',
+    async (enabled, writeStep) => {
+      const h = channelToggleHarness();
+
+      await setCheckChannelEnabled(
+        h.service,
+        'owner',
+        h.check.id,
+        sourceProject.id,
+        h.channel.id,
+        enabled,
+      );
+
+      expect(h.tx.$queryRaw).toHaveBeenCalledTimes(3);
+      const [query, channelId, projectId] = h.tx.$queryRaw.mock
+        .calls[2] as unknown as [TemplateStringsArray, string, string];
+      expect(query.join(' ')).toContain('SELECT id FROM notification_channels');
+      expect(query.join(' ')).toContain('FOR UPDATE');
+      expect([channelId, projectId]).toEqual([h.channel.id, sourceProject.id]);
+      expect(h.order).toEqual(['lock:channel', 'validate:channel', writeStep]);
+    },
+  );
+
   it('upserts one exclusion and repeated disable remains idempotent', async () => {
     const h = channelToggleHarness();
 

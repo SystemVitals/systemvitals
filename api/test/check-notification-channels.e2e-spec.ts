@@ -6,6 +6,7 @@ import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { AlertQueueService } from '../src/queue/alert-queue.service';
+import { ChecksService } from '../src/checks/checks.service';
 import { generateToken } from '../src/tokens/token.util';
 import { cleanupTestUsers } from './cleanup-test-users';
 
@@ -81,6 +82,19 @@ interface Fixture {
   crossProjectChannelId: string;
 }
 
+interface Deferred {
+  promise: Promise<void>;
+  resolve: () => void;
+}
+
+function deferred(): Deferred {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 describe('per-check notification channels (e2e)', () => {
   const runId = randomUUID().replaceAll('-', '').slice(0, 12);
   const fixtureEmails: string[] = [];
@@ -92,6 +106,7 @@ describe('per-check notification channels (e2e)', () => {
   let app: NestFastifyApplication;
   let prisma: PrismaService;
   let jwt: JwtService;
+  let checksService: ChecksService;
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
@@ -105,6 +120,7 @@ describe('per-check notification channels (e2e)', () => {
     await app.getHttpAdapter().getInstance().ready();
     prisma = app.get(PrismaService);
     jwt = app.get(JwtService);
+    checksService = app.get(ChecksService);
   });
 
   afterAll(async () => {
@@ -270,6 +286,43 @@ describe('per-check notification channels (e2e)', () => {
       checkId: fixture.checkId,
       channelId,
       enabled,
+    });
+  }
+
+  async function waitForBlockedChannelQuery(
+    queryFragment: string,
+  ): Promise<void> {
+    const deadline = Date.now() + 5_000;
+    const queryPattern = `%${queryFragment}%`;
+
+    while (Date.now() < deadline) {
+      const rows = await prisma.$queryRaw<Array<{ count: number }>>`
+        SELECT COUNT(*)::int AS count
+        FROM pg_stat_activity
+        WHERE pid <> pg_backend_pid()
+          AND wait_event_type = 'Lock'
+          AND query ILIKE ${queryPattern}
+          AND query ILIKE '%notification_channels%'
+      `;
+      if ((rows[0]?.count ?? 0) > 0) return;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+
+    throw new Error(
+      `Timed out waiting for blocked notification_channels query matching ${queryFragment}`,
+    );
+  }
+
+  async function seedExclusionForEnable(
+    fixture: Fixture,
+    enabled: boolean,
+  ): Promise<void> {
+    if (!enabled) return;
+    await prisma.checkChannelExclusion.create({
+      data: {
+        checkId: fixture.checkId,
+        channelId: fixture.channelIds[0],
+      },
     });
   }
 
@@ -441,4 +494,109 @@ describe('per-check notification channels (e2e)', () => {
       allowed.data?.setCheckChannelEnabled?.notificationChannelIds,
     ).toEqual([fixture.channelIds[1]]);
   });
+
+  it.each([false, true])(
+    'serializes enabled:%s before a concurrent channel deletion',
+    async (enabled) => {
+      const fixture = await createFixture();
+      const channelId = fixture.channelIds[0];
+      await seedExclusionForEnable(fixture, enabled);
+      const reachedEffectiveRead = deferred();
+      const releaseToggle = deferred();
+      const originalEffectiveIds =
+        checksService.effectiveNotificationChannelIds.bind(checksService);
+      const effectiveIdsSpy = jest
+        .spyOn(checksService, 'effectiveNotificationChannelIds')
+        .mockImplementation(async (...args) => {
+          if (args[0] === fixture.checkId) {
+            reachedEffectiveRead.resolve();
+            await releaseToggle.promise;
+          }
+          return originalEffectiveIds(...args);
+        });
+      let deletePromise: Promise<unknown> | undefined;
+
+      try {
+        const togglePromise = toggle(fixture, channelId, enabled);
+        await reachedEffectiveRead.promise;
+
+        deletePromise = Promise.resolve(
+          prisma.notificationChannel.delete({
+            where: { id: channelId },
+          }),
+        );
+        await waitForBlockedChannelQuery('DELETE');
+        releaseToggle.resolve();
+
+        const [response] = await Promise.all([togglePromise, deletePromise]);
+        expect(response.errors).toBeUndefined();
+        expect(
+          response.data?.setCheckChannelEnabled?.notificationChannelIds,
+        ).toEqual(
+          enabled
+            ? [fixture.channelIds[0], fixture.channelIds[1]]
+            : [fixture.channelIds[1]],
+        );
+        expect(
+          await prisma.notificationChannel.count({
+            where: { id: channelId },
+          }),
+        ).toBe(0);
+        expect(
+          await prisma.checkChannelExclusion.count({
+            where: { checkId: fixture.checkId, channelId },
+          }),
+        ).toBe(0);
+      } finally {
+        releaseToggle.resolve();
+        effectiveIdsSpy.mockRestore();
+        await deletePromise?.catch(() => undefined);
+      }
+    },
+  );
+
+  it.each([false, true])(
+    'returns NotFound when channel deletion wins the enabled:%s race',
+    async (enabled) => {
+      const fixture = await createFixture();
+      const channelId = fixture.channelIds[0];
+      await seedExclusionForEnable(fixture, enabled);
+      const deletionHasRowLock = deferred();
+      const releaseDeletion = deferred();
+      const deletionPromise = prisma.$transaction(async (tx) => {
+        await tx.notificationChannel.delete({ where: { id: channelId } });
+        deletionHasRowLock.resolve();
+        await releaseDeletion.promise;
+      });
+      let togglePromise: Promise<GraphQlResponse> | undefined;
+
+      try {
+        await deletionHasRowLock.promise;
+        togglePromise = toggle(fixture, channelId, enabled);
+        await waitForBlockedChannelQuery(
+          'SELECT id FROM notification_channels',
+        );
+        releaseDeletion.resolve();
+        await deletionPromise;
+
+        const response = await togglePromise;
+        expect(response.data).toBeNull();
+        expect(response.errors?.[0]?.message).toBe(
+          'Notification channel not found',
+        );
+        expect(response.errors?.[0]?.message).not.toMatch(
+          /P2003|foreign key|constraint/i,
+        );
+        expect(
+          await prisma.checkChannelExclusion.count({
+            where: { checkId: fixture.checkId, channelId },
+          }),
+        ).toBe(0);
+      } finally {
+        releaseDeletion.resolve();
+        await deletionPromise.catch(() => undefined);
+        await togglePromise?.catch(() => undefined);
+      }
+    },
+  );
 });

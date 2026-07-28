@@ -474,6 +474,11 @@ export class ChecksService {
       checkId,
       expectedProjectId,
       async (tx, check) => {
+        await tx.$queryRaw`
+          SELECT id FROM notification_channels
+          WHERE id = ${channelId} AND project_id = ${check.projectId}
+          FOR UPDATE
+        `;
         const channel = await tx.notificationChannel.findFirst({
           where: { id: channelId, projectId: check.projectId },
           select: { id: true, enabled: true },
