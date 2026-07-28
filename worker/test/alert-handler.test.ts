@@ -296,7 +296,6 @@ function makeDeps(httpPost: NotifierDeps["httpPost"]): NotifierDeps {
       status: 200,
       body: { ok: true, result: { message_id: 123 } },
     }),
-    enqueueEscalation: vi.fn().mockResolvedValue(undefined),
     telegramBotToken: "managed-test-token",
   };
 }
@@ -305,7 +304,6 @@ describe("handleAlert", () => {
   it("sends to EMAIL + SLACK channels, writes 2 AlertLogs, returns 2", async () => {
     const httpPost = vi.fn().mockResolvedValue({ ok: true, status: 200 });
     const mailer = new CollectingMailer();
-    const enqueueEscalation = vi.fn().mockResolvedValue(undefined);
     const deps: NotifierDeps = {
       mailer,
       httpPost,
@@ -314,7 +312,6 @@ describe("handleAlert", () => {
         status: 200,
         body: { ok: true, result: { message_id: 123 } },
       }),
-      enqueueEscalation,
       telegramBotToken: "managed-test-token",
     };
 
@@ -385,7 +382,6 @@ describe("handleAlert", () => {
 
     const httpPost = vi.fn().mockResolvedValue({ ok: true, status: 200 });
     const mailer = new CollectingMailer();
-    const enqueueEscalation = vi.fn().mockResolvedValue(undefined);
     const deps: NotifierDeps = {
       mailer,
       httpPost,
@@ -394,7 +390,6 @@ describe("handleAlert", () => {
         status: 200,
         body: { ok: true, result: { message_id: 123 } },
       }),
-      enqueueEscalation,
       telegramBotToken: "managed-test-token",
     };
 
@@ -405,7 +400,6 @@ describe("handleAlert", () => {
 
     expect(sent).toBe(2);
     expect(mailer.sent[0]?.subject.toLowerCase()).toContain("recover");
-    expect(enqueueEscalation).not.toHaveBeenCalled();
 
     await prisma.alertLog.deleteMany({ where: { checkId: checkWithChannelId } });
   });
@@ -650,7 +644,6 @@ describe("handleAlert", () => {
       .fn()
       .mockResolvedValue({ ok: false, status: 500 });
     const mailer = new CollectingMailer();
-    const enqueueEscalation = vi.fn().mockResolvedValue(undefined);
     const deps: NotifierDeps = {
       mailer,
       httpPost,
@@ -659,7 +652,6 @@ describe("handleAlert", () => {
         status: 200,
         body: { ok: true, result: { message_id: 123 } },
       }),
-      enqueueEscalation,
       telegramBotToken: "managed-test-token",
     };
 
@@ -698,11 +690,10 @@ describe("handleAlert", () => {
     await prisma.alertLog.deleteMany({ where: { checkId: checkWithChannelId } });
   });
 
-  it("calls enqueueEscalation when kind=down and project HAS an escalation policy", async () => {
+  it("dispatches a selected channel on DOWN without consulting escalation policies", async () => {
     await prisma.alertLog.deleteMany({ where: { checkId: checkWithPolicyId } });
 
     const httpPost = vi.fn().mockResolvedValue({ ok: true, status: 200 });
-    const enqueueEscalation = vi.fn().mockResolvedValue(undefined);
     const mailer = new CollectingMailer();
     const deps: NotifierDeps = {
       mailer,
@@ -712,63 +703,51 @@ describe("handleAlert", () => {
         status: 200,
         body: { ok: true, result: { message_id: 123 } },
       }),
-      enqueueEscalation,
       telegramBotToken: "managed-test-token",
     };
-
-    await handleAlert(prisma, deps, { checkId: checkWithPolicyId, kind: "down" });
-
-    expect(enqueueEscalation).toHaveBeenCalled();
-
-    await prisma.alertLog.deleteMany({ where: { checkId: checkWithPolicyId } });
-  });
-
-  it("still schedules legacy DOWN escalation when the transition snapshot is empty", async () => {
-    await prisma.checkChannelExclusion.create({
-      data: { checkId: checkWithPolicyId, channelId: policyChannelId },
-    });
-    const httpPost = vi.fn().mockResolvedValue({ ok: true, status: 200 });
-    const deps = makeDeps(httpPost);
+    const escalationLookup = vi.spyOn(
+      prisma.escalationPolicy,
+      "findMany",
+    );
 
     const sent = await handleAlert(prisma, deps, {
       checkId: checkWithPolicyId,
       kind: "down",
-      channelIds: [],
+      channelIds: [policyChannelId],
     });
 
-    expect(sent).toBe(0);
-    expect((deps.mailer as CollectingMailer).sent).toHaveLength(0);
-    expect(httpPost).not.toHaveBeenCalled();
-    expect(deps.telegramPost).not.toHaveBeenCalled();
-    expect(
-      await prisma.alertLog.count({ where: { checkId: checkWithPolicyId } }),
-    ).toBe(0);
-    expect(deps.enqueueEscalation).toHaveBeenCalledOnce();
+    expect(sent).toBe(1);
+    expect(mailer.sent).toHaveLength(1);
+    expect(mailer.sent[0]?.to).toBe("policy@example.com");
+    expect(escalationLookup).not.toHaveBeenCalled();
+
+    await prisma.alertLog.deleteMany({ where: { checkId: checkWithPolicyId } });
   });
 
-  it("does NOT call enqueueEscalation when kind=down but project has NO escalation policy", async () => {
-    await prisma.alertLog.deleteMany({ where: { checkId: checkNoPolicyId } });
-
+  it("dispatches the same selected channel on recovery without consulting escalation policies", async () => {
     const httpPost = vi.fn().mockResolvedValue({ ok: true, status: 200 });
-    const enqueueEscalation = vi.fn().mockResolvedValue(undefined);
-    const mailer = new CollectingMailer();
-    const deps: NotifierDeps = {
-      mailer,
-      httpPost,
-      telegramPost: vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        body: { ok: true, result: { message_id: 123 } },
-      }),
-      enqueueEscalation,
-      telegramBotToken: "managed-test-token",
-    };
+    const deps = makeDeps(httpPost);
+    const escalationLookup = vi.spyOn(
+      prisma.escalationPolicy,
+      "findMany",
+    );
 
-    await handleAlert(prisma, deps, { checkId: checkNoPolicyId, kind: "down" });
+    const sent = await handleAlert(prisma, deps, {
+      checkId: checkWithPolicyId,
+      kind: "recovery",
+      channelIds: [policyChannelId],
+    });
 
-    expect(enqueueEscalation).not.toHaveBeenCalled();
+    expect(sent).toBe(1);
+    expect((deps.mailer as CollectingMailer).sent).toHaveLength(1);
+    expect((deps.mailer as CollectingMailer).sent[0]?.to).toBe(
+      "policy@example.com",
+    );
+    expect(httpPost).not.toHaveBeenCalled();
+    expect(deps.telegramPost).not.toHaveBeenCalled();
+    expect(escalationLookup).not.toHaveBeenCalled();
 
-    await prisma.alertLog.deleteMany({ where: { checkId: checkNoPolicyId } });
+    await prisma.alertLog.deleteMany({ where: { checkId: checkWithPolicyId } });
   });
 
   it("delivers a managed Telegram row with the environment token and records success", async () => {
@@ -783,7 +762,6 @@ describe("handleAlert", () => {
       mailer: new CollectingMailer(),
       httpPost,
       telegramPost,
-      enqueueEscalation: vi.fn().mockResolvedValue(undefined),
       telegramBotToken: "managed-test-token",
     };
 
@@ -833,7 +811,6 @@ describe("handleAlert", () => {
       mailer: new CollectingMailer(),
       httpPost: vi.fn().mockResolvedValue({ ok: true, status: 200 }),
       telegramPost,
-      enqueueEscalation: vi.fn().mockResolvedValue(undefined),
       telegramBotToken: "managed-test-token",
     };
 

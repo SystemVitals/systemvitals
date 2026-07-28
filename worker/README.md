@@ -23,8 +23,9 @@ DOWN-to-UP transition. Each channel is attempted independently and gets its own
 successful or failed `AlertLog`, so one notifier failure does not block another
 channel.
 
-Release 1 temporarily continues to schedule the legacy escalation policy after
-immediate DOWN delivery. Recovery notifications do not schedule escalation.
+The worker emits exactly two notification events: an immediate alert on a DOWN
+transition and a recovery notification on the following DOWN-to-UP transition.
+It does not schedule delayed escalation jobs.
 
 ## Validation
 

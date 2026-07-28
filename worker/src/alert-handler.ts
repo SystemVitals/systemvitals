@@ -3,7 +3,6 @@ import { CheckStatus } from "@systemvitals/database";
 import type { AlertJob } from "./watchdog.js";
 import type { NotifierDeps } from "./notifiers.js";
 import { dispatchChannel } from "./notifiers.js";
-import { scheduleEscalation } from "./escalation.js";
 
 /**
  * Process an alert job: dispatch its transition-time channel snapshot, or
@@ -92,12 +91,6 @@ export async function handleAlert(
         },
       });
     }
-  }
-
-  // After immediate dispatch, schedule escalation steps if this is a DOWN alert
-  if (kind === "down") {
-    await scheduleEscalation(prisma, deps.enqueueEscalation, checkId, new Date())
-      .catch((err) => console.error("[alert-handler] scheduleEscalation failed:", err));
   }
 
   return successes;
