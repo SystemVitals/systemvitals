@@ -1,0 +1,63 @@
+import { Args, ID, Mutation, Query, Resolver } from '@nestjs/graphql';
+import { UseGuards } from '@nestjs/common';
+import { ApiAuthGuard } from '../tokens/api-auth.guard';
+import { CurrentUser } from '../common/current-user.decorator';
+import type { JwtUser } from '../auth/jwt.strategy';
+import { StatusPagesService } from './status-pages.service';
+import { StatusPageModel } from './status-page.model';
+
+@Resolver(() => StatusPageModel)
+@UseGuards(ApiAuthGuard)
+export class StatusPagesResolver {
+  constructor(private readonly statusPagesService: StatusPagesService) {}
+
+  @Query(() => [StatusPageModel])
+  statusPages(
+    @CurrentUser() user: JwtUser,
+    @Args('projectId', { type: () => ID }) projectId: string,
+  ) {
+    return this.statusPagesService.list(user.userId, projectId);
+  }
+
+  @Mutation(() => StatusPageModel)
+  createStatusPage(
+    @CurrentUser() user: JwtUser,
+    @Args('projectId', { type: () => ID }) projectId: string,
+    @Args('slug') slug: string,
+    @Args('title') title: string,
+    @Args('checkIds', { type: () => [ID] }) checkIds: string[],
+    @Args('brandingJson', { nullable: true }) brandingJson?: string,
+  ) {
+    return this.statusPagesService.create(
+      user.userId,
+      projectId,
+      slug,
+      title,
+      checkIds,
+      brandingJson,
+    );
+  }
+
+  @Mutation(() => StatusPageModel)
+  updateStatusPage(
+    @CurrentUser() user: JwtUser,
+    @Args('id', { type: () => ID }) id: string,
+    @Args('title', { nullable: true }) title?: string,
+    @Args('checkIds', { type: () => [ID], nullable: true }) checkIds?: string[],
+    @Args('brandingJson', { nullable: true }) brandingJson?: string,
+  ) {
+    return this.statusPagesService.update(user.userId, id, {
+      title,
+      checkIds,
+      brandingJson,
+    });
+  }
+
+  @Mutation(() => Boolean)
+  deleteStatusPage(
+    @CurrentUser() user: JwtUser,
+    @Args('id', { type: () => ID }) id: string,
+  ) {
+    return this.statusPagesService.delete(user.userId, id);
+  }
+}

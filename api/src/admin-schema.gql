@@ -1,0 +1,316 @@
+# ------------------------------------------------------
+# THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+# ------------------------------------------------------
+
+type AdminCheckList {
+  items: [AdminCheckModel!]!
+  total: Int!
+}
+
+type AdminCheckModel {
+  id: ID!
+  name: String!
+  organizationId: ID!
+  organizationName: String!
+  projectId: ID!
+  projectName: String!
+  status: String!
+  type: String!
+}
+
+type AdminMemberRef {
+  email: String!
+  role: String!
+  userId: ID!
+}
+
+type AdminMetrics {
+  alertsLast24h: Int!
+  checksByStatus: [StatusCount!]!
+  recentSignups: [AdminUserRef!]!
+  signupsPerDay: [DayCount!]!
+  totalChecks: Int!
+  totalOrgs: Int!
+  totalProjects: Int!
+  totalUsers: Int!
+}
+
+type AdminOrgList {
+  items: [AdminOrganizationModel!]!
+  total: Int!
+}
+
+type AdminOrgRef {
+  id: ID!
+  name: String!
+  role: String!
+}
+
+type AdminOrganizationModel {
+  createdAt: DateTime!
+  id: ID!
+  members: [AdminMemberRef!]!
+  name: String!
+  plan: String
+  projectCount: Int!
+}
+
+type AdminProjectList {
+  items: [AdminProjectModel!]!
+  total: Int!
+}
+
+type AdminProjectModel {
+  checkCount: Int!
+  createdAt: DateTime!
+  id: ID!
+  name: String!
+  organizationId: ID!
+  organizationName: String!
+}
+
+type AdminSubscriptionList {
+  items: [AdminSubscriptionModel!]!
+  total: Int!
+}
+
+type AdminSubscriptionModel {
+  createdAt: DateTime!
+  id: ID!
+  limitsJson: String
+  manualOverride: Boolean!
+  plan: String!
+  status: String!
+  stripeSubscriptionId: String
+  userEmail: String!
+  userId: ID!
+}
+
+type AdminUserList {
+  items: [AdminUserModel!]!
+  total: Int!
+}
+
+type AdminUserModel {
+  createdAt: DateTime!
+  email: String!
+  id: ID!
+  isAdmin: Boolean!
+  organizations: [AdminOrgRef!]!
+  suspendedAt: DateTime
+}
+
+type AdminUserRef {
+  createdAt: DateTime!
+  email: String!
+  id: ID!
+}
+
+type ApiTokenCreateResult {
+  createdAt: DateTime!
+  expiresAt: DateTime
+  id: ID!
+  lastUsedAt: DateTime
+  name: String!
+  organizationName: String
+  plaintext: String!
+  prefix: String!
+  projectId: ID
+  projectName: String
+  revokedAt: DateTime
+  scopes: [String!]!
+}
+
+type ApiTokenModel {
+  createdAt: DateTime!
+  expiresAt: DateTime
+  id: ID!
+  lastUsedAt: DateTime
+  name: String!
+  organizationName: String
+  prefix: String!
+  projectId: ID
+  projectName: String
+  revokedAt: DateTime
+  scopes: [String!]!
+}
+
+type AuditLogList {
+  items: [AuditLogModel!]!
+  total: Int!
+}
+
+type AuditLogModel {
+  action: String!
+  actorEmail: String!
+  actorUserId: String!
+  createdAt: DateTime!
+  id: ID!
+  targetId: String
+  targetType: String
+}
+
+type ChannelModel {
+  configJson: String!
+  enabled: Boolean!
+  id: ID!
+  projectId: ID!
+  type: String!
+}
+
+type CheckEventModel {
+  error: String
+  id: ID!
+  responseTimeMs: Int
+  status: String!
+  statusCode: Int
+  timestamp: DateTime!
+}
+
+type CheckModel {
+  events(limit: Int! = 50): [CheckEventModel!]!
+  expectedStatus: Int
+  graceSeconds: Int
+  id: ID!
+  intervalSeconds: Int
+  lastEventAt: DateTime
+  method: String
+  name: String!
+  nextExpectedAt: DateTime
+  periodSeconds: Int
+  pingSlug: String
+  projectId: ID!
+  schedule: String
+  slug: String!
+  status: String!
+  target: String
+  timeoutMs: Int
+  type: String!
+  tz: String
+}
+
+"""
+A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
+"""
+scalar DateTime
+
+type DayCount {
+  count: Int!
+  day: String!
+}
+
+type EscalationPolicyModel {
+  id: ID!
+  projectId: ID!
+  steps: [EscalationStepModel!]!
+}
+
+type EscalationStepModel {
+  channelId: ID!
+  delaySeconds: Int!
+}
+
+type ImpersonationResult {
+  expiresAt: DateTime!
+  token: String!
+}
+
+type InviteModel {
+  acceptUrl: String!
+  createdAt: DateTime!
+  email: String!
+  expiresAt: DateTime!
+  id: ID!
+  role: String!
+  token: String!
+}
+
+type InvitePreviewModel {
+  maskedEmail: String!
+  organizationName: String!
+  status: String!
+}
+
+type MemberModel {
+  createdAt: DateTime!
+  email: String!
+  id: ID!
+  role: String!
+  userId: ID!
+}
+
+type Mutation {
+  adminDeleteCheck(id: ID!): Boolean!
+  adminDeleteOrganization(id: ID!): Boolean!
+  adminDeleteUser(id: ID!): Boolean!
+  adminImpersonate(userId: ID!): ImpersonationResult!
+  adminPauseCheck(id: ID!): AdminCheckModel!
+  adminResumeCheck(id: ID!): AdminCheckModel!
+  adminSetUserAdmin(id: ID!, isAdmin: Boolean!): AdminUserModel!
+  adminSetUserPlan(limitsJson: String, manualOverride: Boolean, plan: String!, userId: ID!): AdminSubscriptionModel!
+  adminSuspendUser(id: ID!): AdminUserModel!
+  adminUnsuspendUser(id: ID!): AdminUserModel!
+}
+
+type OrganizationModel {
+  creatorLabel: String!
+  creatorUserId: ID!
+  id: ID!
+  name: String!
+  plan: String!
+  projects: [ProjectModel!]!
+  role: String!
+  slug: String!
+}
+
+type ProjectModel {
+  id: ID!
+  name: String!
+  organizationId: ID!
+  pingKey: String!
+  slug: String!
+}
+
+type Query {
+  adminAuditLog(page: Int, pageSize: Int): AuditLogList!
+  adminChecks(page: Int, pageSize: Int, status: String): AdminCheckList!
+  adminMetrics: AdminMetrics!
+  adminOrganization(id: ID!): AdminOrganizationModel!
+  adminOrganizations(page: Int, pageSize: Int, search: String): AdminOrgList!
+  adminPing: String!
+  adminProjects(page: Int, pageSize: Int, search: String): AdminProjectList!
+  adminSubscriptions(page: Int, pageSize: Int): AdminSubscriptionList!
+  adminUser(id: ID!): AdminUserModel!
+  adminUsers(page: Int, pageSize: Int, search: String): AdminUserList!
+}
+
+type StatusCount {
+  count: Int!
+  status: String!
+}
+
+type StatusPageModel {
+  branding: String
+  checkIds: [String!]!
+  id: ID!
+  projectId: ID!
+  slug: String!
+  title: String!
+}
+
+type SubscriptionStatus {
+  checkCount: Int!
+  maxChecks: Int!
+  organizationCount: Int!
+  plan: String!
+  status: String!
+}
+
+type UserModel {
+  email: String!
+  googleLinked: Boolean!
+  hasPassword: Boolean!
+  id: ID!
+  isAdmin: Boolean!
+  organizations: [OrganizationModel!]!
+}

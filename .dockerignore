@@ -1,0 +1,21 @@
+# Root .dockerignore — used when build context is the repo root (api, worker images)
+.git
+.gitignore
+.superpowers
+*.md
+frontend/.next
+frontend/node_modules
+api/node_modules
+api/dist
+worker/node_modules
+database/node_modules
+integrations/node_modules
+**/.env
+**/.env.*
+**/coverage
+**/test
+**/*.spec.ts
+**/*.test.ts
+docker-compose.yml
+docker-compose.prod.yml
+dev.sh

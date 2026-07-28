@@ -1,0 +1,363 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum CheckType {
+  HEARTBEAT
+  HTTP
+  TCP
+  PING
+}
+
+enum CheckStatus {
+  NEW
+  UP
+  GRACE
+  DOWN
+  PAUSED
+}
+
+enum ChannelType {
+  EMAIL
+  SLACK
+  TELEGRAM
+  WEBHOOK
+}
+
+enum PlanTier {
+  SOLO
+  SIGNAL
+  FLEET
+}
+
+model User {
+  id                       String            @id @default(cuid())
+  email                    String            @unique
+  googleId                 String?           @unique @map("google_id")
+  passwordHash             String?           @map("password_hash")
+  stripeCustomerId         String?           @unique @map("stripe_customer_id")
+  billingStateVersion      Int               @default(0) @map("billing_state_version")
+  checkoutInFlightCount    Int               @default(0) @map("checkout_in_flight_count")
+  checkoutAttemptId        String?           @unique @map("checkout_attempt_id")
+  checkoutAttemptPlan      PlanTier?         @map("checkout_attempt_plan")
+  checkoutAttemptInterval  String?           @map("checkout_attempt_interval")
+  checkoutAttemptCreatedAt DateTime?         @map("checkout_attempt_created_at")
+  checkoutSessionId        String?           @unique @map("checkout_session_id")
+  checkoutSessionUrl       String?           @map("checkout_session_url")
+  checkoutSessionExpiresAt DateTime?         @map("checkout_session_expires_at")
+  checkoutCleanupSessionId String?           @unique @map("checkout_cleanup_session_id")
+  checkoutCleanupCreatedAt DateTime?         @map("checkout_cleanup_created_at")
+  createdAt                DateTime          @default(now()) @map("created_at")
+  updatedAt                DateTime          @updatedAt @map("updated_at")
+  memberships              Membership[]
+  subscription             Subscription?
+  createdOrganizations     Organization[]    @relation("OrganizationCreator")
+  apiTokens                ApiToken[]
+  acknowledgements         Acknowledgement[]
+  isAdmin                  Boolean           @default(false) @map("is_admin")
+  suspendedAt              DateTime?         @map("suspended_at")
+  auditLogs                AuditLog[]
+  sentInvites              Invite[]
+  checkoutCleanupIntents   CheckoutCleanupIntent[]
+  checkoutOperations       CheckoutOperation[]
+
+  @@map("users")
+}
+
+model CheckoutCleanupIntent {
+  id              String   @id @default(cuid())
+  userId          String   @map("user_id")
+  stripeSessionId String   @unique @map("stripe_session_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("checkout_cleanup_intents")
+}
+
+model CheckoutOperation {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @map("user_id")
+  operationKind    String    @default("CHECKOUT") @map("operation_kind")
+  attemptId        String?   @map("attempt_id")
+  requestedPlan    PlanTier? @map("requested_plan")
+  interval         String?
+  stripePriceId    String?   @map("stripe_price_id")
+  successUrl       String?   @map("success_url")
+  cancelUrl        String?   @map("cancel_url")
+  stripeCustomerId String?   @map("stripe_customer_id")
+  portalReturnUrl  String?   @map("portal_return_url")
+  ownerToken       String    @default(uuid()) @map("owner_token") @db.Uuid
+  state            String    @default("ACTIVE")
+  leaseExpiresAt   DateTime  @map("lease_expires_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, leaseExpiresAt])
+  @@map("checkout_operations")
+}
+
+model Organization {
+  id               String        @id @default(cuid())
+  name             String
+  slug             String        @unique
+  stripeCustomerId String?       @unique @map("stripe_customer_id")
+  creatorUserId    String        @map("creator_user_id")
+  creator          User          @relation("OrganizationCreator", fields: [creatorUserId], references: [id], onDelete: Restrict)
+  createdAt        DateTime      @default(now()) @map("created_at")
+  memberships      Membership[]
+  projects         Project[]
+  subscription     Subscription?
+  invites          Invite[]
+
+  @@index([creatorUserId])
+  @@map("organizations")
+}
+
+model Membership {
+  id             String       @id @default(cuid())
+  role           Role         @default(MEMBER)
+  userId         String       @map("user_id")
+  organizationId String       @map("organization_id")
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  @@unique([userId, organizationId])
+  @@map("memberships")
+}
+
+model Invite {
+  id              String    @id @default(cuid())
+  email           String
+  organizationId  String    @map("organization_id")
+  role            Role      @default(MEMBER)
+  // Bearer secret in the accept URL. Deliberately has NO @default: the service
+  // layer supplies a randomBytes(32) hex value, because cuid embeds a timestamp
+  // and counter and is not built to be unguessable. Stored plaintext (unlike
+  // ApiToken.tokenHash) because the /team page re-displays the copy link after
+  // creation, which hashing would make impossible.
+  token           String    @unique
+  invitedByUserId String    @map("invited_by_user_id")
+  expiresAt       DateTime  @map("expires_at")
+  acceptedAt      DateTime? @map("accepted_at")
+  revokedAt       DateTime? @map("revoked_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invitedBy    User         @relation(fields: [invitedByUserId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@map("invites")
+}
+
+model Project {
+  id                 String                @id @default(cuid())
+  name               String
+  slug               String
+  pingKey            String                @unique @default(cuid()) @map("ping_key")
+  organizationId     String                @map("organization_id")
+  organization       Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  checks             Check[]
+  channels           NotificationChannel[]
+  escalationPolicies EscalationPolicy[]
+  statusPages        StatusPage[]
+  apiTokens          ApiToken[]
+  createdAt          DateTime              @default(now()) @map("created_at")
+
+  @@unique([organizationId, slug])
+  @@map("projects")
+}
+
+model ApiToken {
+  id                       String    @id @default(cuid())
+  name                     String
+  prefix                   String // first 8 chars, shown for identification
+  tokenHash                String    @unique @map("token_hash")
+  scopes                   String[] // e.g. ["read","write"]
+  userId                   String    @map("user_id")
+  projectId                String?   @map("project_id") // optional narrowing to one project
+  projectNameSnapshot      String?   @map("project_name_snapshot")
+  organizationNameSnapshot String?   @map("organization_name_snapshot")
+  user                     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project                  Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  lastUsedAt               DateTime? @map("last_used_at")
+  revokedAt                DateTime? @map("revoked_at")
+  expiresAt                DateTime? @map("expires_at")
+  createdAt                DateTime  @default(now()) @map("created_at")
+
+  @@map("api_tokens")
+}
+
+model Check {
+  id               String            @id @default(cuid())
+  name             String
+  slug             String
+  type             CheckType
+  status           CheckStatus       @default(NEW)
+  projectId        String            @map("project_id")
+  project          Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  // passive (heartbeat)
+  pingSlug         String?           @unique @map("ping_slug")
+  periodSeconds    Int?              @map("period_seconds")
+  graceSeconds     Int?              @map("grace_seconds")
+  schedule         String?           @map("schedule")
+  tz               String?           @map("tz")
+  // active (http/tcp/ping)
+  target           String?
+  method           String?
+  expectedStatus   Int?              @map("expected_status")
+  intervalSeconds  Int?              @map("interval_seconds")
+  timeoutMs        Int?              @map("timeout_ms")
+  lastEventAt      DateTime?         @map("last_event_at")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+  events           CheckEvent[]
+  alertLogs        AlertLog[]
+  acknowledgements Acknowledgement[]
+
+  @@unique([projectId, slug])
+  @@index([projectId])
+  @@map("checks")
+}
+
+model CheckEvent {
+  id             String      @id @default(cuid())
+  checkId        String      @map("check_id")
+  check          Check       @relation(fields: [checkId], references: [id], onDelete: Cascade)
+  timestamp      DateTime    @default(now())
+  status         CheckStatus
+  responseTimeMs Int?        @map("response_time_ms")
+  statusCode     Int?        @map("status_code")
+  error          String?
+
+  @@index([checkId, timestamp])
+  @@map("check_events")
+}
+
+model NotificationChannel {
+  id                      String      @id @default(cuid())
+  projectId               String      @map("project_id")
+  project                 Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  type                    ChannelType
+  destinationKey          String?     @map("destination_key")
+  config                  Json
+  enabled                 Boolean     @default(true)
+  verifiedAt              DateTime?   @default(now()) @map("verified_at")
+  verificationTokenHash   String?     @unique @map("verification_token_hash")
+  verificationExpiresAt   DateTime?   @map("verification_expires_at")
+  verificationSentAt      DateTime?   @map("verification_sent_at")
+  createdAt               DateTime    @default(now()) @map("created_at")
+  alertLogs               AlertLog[]
+
+  @@unique([projectId, type, destinationKey])
+  @@map("notification_channels")
+}
+
+model TelegramConnectionChallenge {
+  id               String    @id @default(cuid())
+  tokenHash        String    @unique @map("token_hash")
+  telegramUpdateId String    @unique @map("telegram_update_id")
+  chatId           String    @map("chat_id")
+  chatType         String    @map("chat_type")
+  chatTitle        String?   @map("chat_title")
+  messageThreadId  Int?      @map("message_thread_id")
+  expiresAt        DateTime  @map("expires_at")
+  deliveredAt      DateTime? @map("delivered_at")
+  consumedAt       DateTime? @map("consumed_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  @@index([chatId, messageThreadId, createdAt], map: "telegram_connection_challenges_chat_id_message_thread_id_create")
+  @@index([expiresAt])
+  @@map("telegram_connection_challenges")
+}
+
+model EscalationPolicy {
+  id        String   @id @default(cuid())
+  projectId String   @map("project_id")
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  steps     Json // ordered [{ channelId, delaySeconds }]
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("escalation_policies")
+}
+
+model Acknowledgement {
+  id        String   @id @default(cuid())
+  checkId   String   @map("check_id")
+  check     Check    @relation(fields: [checkId], references: [id], onDelete: Cascade)
+  userId    String?  @map("user_id")
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("acknowledgements")
+}
+
+model AlertLog {
+  id        String               @id @default(cuid())
+  checkId   String               @map("check_id")
+  check     Check                @relation(fields: [checkId], references: [id], onDelete: Cascade)
+  channelId String?              @map("channel_id")
+  channel   NotificationChannel? @relation(fields: [channelId], references: [id], onDelete: SetNull)
+  status    CheckStatus
+  payload   Json
+  sentAt    DateTime             @default(now()) @map("sent_at")
+
+  @@index([checkId, sentAt])
+  @@map("alert_logs")
+}
+
+model StatusPage {
+  id        String   @id @default(cuid())
+  projectId String   @map("project_id")
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  slug      String   @unique
+  title     String
+  branding  Json?
+  checkIds  String[] @map("check_ids")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("status_pages")
+}
+
+model Subscription {
+  id                   String        @id @default(cuid())
+  organizationId       String?       @unique @map("organization_id")
+  organization         Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  userId               String?       @unique @map("user_id")
+  user                 User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan                 PlanTier      @default(SOLO)
+  stripeSubscriptionId String?       @unique @map("stripe_subscription_id")
+  status               String        @default("active")
+  limits               Json? // { maxChecks, minIntervalSeconds }
+  manualOverride       Boolean       @default(false) @map("manual_override")
+  createdAt            DateTime      @default(now()) @map("created_at")
+
+  @@map("subscriptions")
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorUserId String   @map("actor_user_id")
+  actor       User     @relation(fields: [actorUserId], references: [id], onDelete: Cascade)
+  action      String
+  targetType  String?  @map("target_type")
+  targetId    String?  @map("target_id")
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@index([actorUserId])
+  @@map("audit_logs")
+}

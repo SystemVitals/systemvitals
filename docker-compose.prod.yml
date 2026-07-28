@@ -1,0 +1,128 @@
+# Production docker-compose for SystemVitals
+#
+# Required environment variables (define in .env.production at repo root):
+#
+#   POSTGRES_USER        — PostgreSQL username (default: systemvitals)
+#   POSTGRES_PASSWORD    — PostgreSQL password  (required, no default)
+#   POSTGRES_DB          — PostgreSQL database   (default: systemvitals)
+#   DATABASE_URL         — Full Postgres DSN, e.g. postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+#   REDIS_URL            — Redis DSN, e.g. redis://redis:6379
+#   JWT_SECRET           — Min 16-char secret for signing session JWTs
+#   STRIPE_SECRET_KEY    — Stripe secret key (sk_live_...)
+#   STRIPE_WEBHOOK_SECRET— Stripe webhook signing secret (whsec_...)
+#   NEXT_PUBLIC_API_URL  — Public URL of the API (e.g. https://api.example.com)
+#   NEXT_PUBLIC_APP_URL  — Public URL of the frontend (e.g. https://app.example.com)
+#
+# Usage:
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d
+#
+# API and worker entrypoints deploy pending database migrations before starting.
+# Advisory-lock contention is retried so rolling replacements can start independently.
+
+services:
+  # ── Infrastructure ───────────────────────────────────────────
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    env_file: .env.production
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-systemvitals}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-systemvitals}
+    volumes:
+      - sv_pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-systemvitals}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    volumes:
+      - sv_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Application services ─────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    restart: unless-stopped
+    env_file: .env.production
+    environment:
+      NODE_ENV: production
+      PORT: "8888"
+      DATABASE_URL: ${DATABASE_URL:-postgresql://systemvitals:${POSTGRES_PASSWORD}@postgres:5432/systemvitals}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      JWT_SECRET: ${JWT_SECRET}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      APP_URL: ${APP_URL:-http://localhost:9999}
+      # Google OAuth — all three required together; absent disables Google
+      # sign-in (routes 404) rather than crashing boot.
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_CALLBACK_URL: ${GOOGLE_CALLBACK_URL:-}
+    ports:
+      - "8888:8888"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    restart: unless-stopped
+    env_file: .env.production
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://systemvitals:${POSTGRES_PASSWORD}@postgres:5432/systemvitals}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      QUEUE_ALERT: ${QUEUE_ALERT:-alert}
+      WATCHDOG_INTERVAL_MS: ${WATCHDOG_INTERVAL_MS:-30000}
+      MAIL_FROM: ${MAIL_FROM:-noreply@systemvitals.io}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      # Worker talks directly to postgres + redis only; it does not call the
+      # api and must not be blocked by api health (e.g. during api restarts).
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      # NOTE: NEXT_PUBLIC_* vars are baked into the bundle at build time by
+      # Next.js — setting them only in environment: has no effect on the built
+      # bundle. Changing these values requires a full image rebuild.
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8888}
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:9999}
+        # Baked into the bundle at build time — setting it only under
+        # environment: below would NOT make the Google button appear.
+        NEXT_PUBLIC_GOOGLE_AUTH_ENABLED: ${NEXT_PUBLIC_GOOGLE_AUTH_ENABLED:-false}
+    restart: unless-stopped
+    env_file: .env.production
+    environment:
+      PORT: "9999"
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8888}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:9999}
+      NEXT_PUBLIC_GOOGLE_AUTH_ENABLED: ${NEXT_PUBLIC_GOOGLE_AUTH_ENABLED:-false}
+    ports:
+      - "9999:9999"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  sv_pgdata:
+  sv_redisdata:

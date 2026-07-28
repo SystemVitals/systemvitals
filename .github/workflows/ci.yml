@@ -1,0 +1,206 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+permissions:
+  contents: read
+
+jobs:
+  # ── database + api + worker (need Postgres + Redis) ─────────────────────────
+  db-api-worker:
+    name: database / api / worker
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: systemvitals
+          POSTGRES_PASSWORD: systemvitals
+          POSTGRES_DB: systemvitals
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U systemvitals"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://systemvitals:systemvitals@localhost:5432/systemvitals?schema=public
+      REDIS_URL: redis://localhost:6379
+      JWT_SECRET: ci-secret-at-least-16-chars
+      SSRF_ALLOW_PRIVATE: "true"
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: |
+            database/package-lock.json
+            api/package-lock.json
+            worker/package-lock.json
+
+      # ── database ────────────────────────────────────────────────
+      - name: Install database deps
+        run: npm ci
+        working-directory: database
+
+      - name: Generate Prisma client
+        run: npm run generate
+        working-directory: database
+
+      # Migrations must run before ANY step that touches the database. The
+      # Postgres service container starts empty, so a database test that reads
+      # or writes a table (smoke.test.ts creates a user) fails with
+      # "table public.users does not exist" until the schema is applied.
+      - name: Apply migrations
+        run: npm run migrate:deploy
+        working-directory: database
+
+      - name: Test database
+        run: npm test
+        working-directory: database
+
+      # ── api ─────────────────────────────────────────────────────
+      - name: Install api deps
+        run: npm ci
+        working-directory: api
+
+      - name: Lint api
+        run: npm run lint
+        working-directory: api
+
+      - name: Type-check api
+        run: npx tsc --noEmit
+        working-directory: api
+
+      - name: E2E test api
+        run: npm run test:e2e
+        working-directory: api
+
+      # ── worker ───────────────────────────────────────────────────
+      - name: Install worker deps
+        run: npm ci
+        working-directory: worker
+
+      - name: Type-check worker
+        run: npx tsc --noEmit
+        working-directory: worker
+
+      - name: Test worker
+        run: npm test
+        working-directory: worker
+        env:
+          # The worker suite writes to a real database. Point it explicitly at
+          # this job's throwaway service container; the config's own default is
+          # a scratch database so a local run can never hit a dev database.
+          DATABASE_URL: postgresql://systemvitals:systemvitals@localhost:5432/systemvitals?schema=public
+
+  # ── frontend (no DB required) ────────────────────────────────────────────────
+  frontend:
+    name: frontend
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend deps
+        run: npm ci
+        working-directory: frontend
+
+      - name: Lint frontend
+        run: npm run lint
+        working-directory: frontend
+
+      - name: Type-check frontend
+        run: npx tsc --noEmit
+        working-directory: frontend
+
+      - name: Test frontend
+        run: npm test
+        working-directory: frontend
+
+  # ── deployment images + entrypoints ────────────────────────────────────────
+  deploy-images:
+    name: deployment images
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Check deployment shell
+        run: |
+          shellcheck api/docker-entrypoint.sh worker/docker-entrypoint.sh scripts/test/docker-entrypoints.test.sh
+          bash scripts/test/docker-entrypoints.test.sh
+
+      - name: Build api image
+        run: docker build -f api/Dockerfile -t systemvitals-api:ci .
+
+      - name: Build worker image
+        run: docker build -f worker/Dockerfile -t systemvitals-worker:ci .
+
+      - name: Build frontend image
+        run: |
+          docker build -f frontend/Dockerfile -t systemvitals-frontend:ci \
+            --build-arg NEXT_PUBLIC_API_URL=http://localhost:8888 \
+            --build-arg NEXT_PUBLIC_APP_URL=http://localhost:9999 \
+            --build-arg NEXT_PUBLIC_GOOGLE_AUTH_ENABLED=false \
+            frontend
+
+      - name: Inspect and smoke-test images
+        env:
+          TEST_BUILT_IMAGES: "1"
+          API_IMAGE: systemvitals-api:ci
+          WORKER_IMAGE: systemvitals-worker:ci
+          FRONTEND_IMAGE: systemvitals-frontend:ci
+        run: timeout 300 bash scripts/test/docker-entrypoints.test.sh
+
+  # ── integrations/mcp (no DB required) ───────────────────────────────────────
+  mcp:
+    name: integrations/mcp
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: integrations/mcp/package-lock.json
+
+      - name: Install mcp deps
+        run: npm ci
+        working-directory: integrations/mcp
+
+      - name: Type-check mcp
+        run: npx tsc --noEmit
+        working-directory: integrations/mcp
+
+      - name: Test mcp
+        run: npm test
+        working-directory: integrations/mcp

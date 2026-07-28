@@ -1,0 +1,363 @@
+# ------------------------------------------------------
+# THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+# ------------------------------------------------------
+
+type AdminCheckModel {
+  id: ID!
+  name: String!
+  organizationId: ID!
+  organizationName: String!
+  projectId: ID!
+  projectName: String!
+  status: String!
+  type: String!
+}
+
+type AdminMemberRef {
+  email: String!
+  role: String!
+  userId: ID!
+}
+
+type AdminOrgRef {
+  id: ID!
+  name: String!
+  role: String!
+}
+
+type AdminOrganizationModel {
+  createdAt: DateTime!
+  id: ID!
+  members: [AdminMemberRef!]!
+  name: String!
+  plan: String
+  projectCount: Int!
+}
+
+type AdminProjectModel {
+  checkCount: Int!
+  createdAt: DateTime!
+  id: ID!
+  name: String!
+  organizationId: ID!
+  organizationName: String!
+}
+
+type AdminSubscriptionModel {
+  createdAt: DateTime!
+  id: ID!
+  limitsJson: String
+  manualOverride: Boolean!
+  plan: String!
+  status: String!
+  stripeSubscriptionId: String
+  userEmail: String!
+  userId: ID!
+}
+
+type AdminUserModel {
+  createdAt: DateTime!
+  email: String!
+  id: ID!
+  isAdmin: Boolean!
+  organizations: [AdminOrgRef!]!
+  suspendedAt: DateTime
+}
+
+type AdminUserRef {
+  createdAt: DateTime!
+  email: String!
+  id: ID!
+}
+
+type ApiCredential {
+  authKind: String!
+  capabilities: [String!]!
+  credentialMode: String!
+  projectId: ID
+  projectName: String
+}
+
+type ApiTokenCreateResult {
+  createdAt: DateTime!
+  expiresAt: DateTime
+  id: ID!
+  lastUsedAt: DateTime
+  name: String!
+  organizationName: String
+  plaintext: String!
+  prefix: String!
+  projectId: ID
+  projectName: String
+  revokedAt: DateTime
+  scopes: [String!]!
+}
+
+type ApiTokenModel {
+  createdAt: DateTime!
+  expiresAt: DateTime
+  id: ID!
+  lastUsedAt: DateTime
+  name: String!
+  organizationName: String
+  prefix: String!
+  projectId: ID
+  projectName: String
+  revokedAt: DateTime
+  scopes: [String!]!
+}
+
+type AuditLogModel {
+  action: String!
+  actorEmail: String!
+  actorUserId: String!
+  createdAt: DateTime!
+  id: ID!
+  targetId: String
+  targetType: String
+}
+
+type ChannelModel {
+  configJson: String!
+  enabled: Boolean!
+  id: ID!
+  projectId: ID!
+  type: String!
+  verificationDeliveryStatus: String!
+  verificationExpiresAt: DateTime
+  verificationStatus: String!
+}
+
+type CheckEventModel {
+  error: String
+  id: ID!
+  responseTimeMs: Int
+  status: String!
+  statusCode: Int
+  timestamp: DateTime!
+}
+
+type CheckModel {
+  events(limit: Int! = 50): [CheckEventModel!]!
+  expectedStatus: Int
+  graceSeconds: Int
+  id: ID!
+  intervalSeconds: Int
+  lastEventAt: DateTime
+  method: String
+  name: String!
+  nextExpectedAt: DateTime
+  periodSeconds: Int
+  pingSlug: String
+  projectId: ID!
+  schedule: String
+  slug: String!
+  status: String!
+  target: String
+  timeoutMs: Int
+  type: String!
+  tz: String
+}
+
+input CreateApiTokenInput {
+  capabilities: [String!]!
+  expirationDays: Int
+  name: String!
+  projectId: ID!
+}
+
+"""
+A date-time string at UTC, such as 2019-12-03T09:54:33Z, compliant with the date-time format.
+"""
+scalar DateTime
+
+type DayCount {
+  count: Int!
+  day: String!
+}
+
+type EmailVerificationConfirmationModel {
+  maskedEmail: String
+  projectName: String
+  status: String!
+}
+
+type EmailVerificationPreviewModel {
+  expiresAt: DateTime
+  maskedEmail: String
+  projectName: String
+  status: String!
+}
+
+type EscalationPolicyModel {
+  id: ID!
+  projectId: ID!
+  steps: [EscalationStepModel!]!
+}
+
+type EscalationStepModel {
+  channelId: ID!
+  delaySeconds: Int!
+}
+
+type InviteModel {
+  acceptUrl: String!
+  createdAt: DateTime!
+  email: String!
+  expiresAt: DateTime!
+  id: ID!
+  role: String!
+  token: String!
+}
+
+type InvitePreviewModel {
+  maskedEmail: String!
+  organizationName: String!
+  status: String!
+}
+
+type ManagedTelegramBotModel {
+  available: Boolean!
+  username: String
+}
+
+type MemberModel {
+  createdAt: DateTime!
+  email: String!
+  id: ID!
+  role: String!
+  userId: ID!
+}
+
+type Mutation {
+  acceptInvite(token: String!): MemberModel!
+  acknowledgeCheck(checkId: ID!): Boolean!
+  connectTelegramChannel(projectId: ID!, token: String!): ChannelModel!
+  createActiveCheck(expectedStatus: Int, intervalSeconds: Int!, method: String, name: String!, projectId: ID!, target: String!, timeoutMs: Int!, type: String!): CheckModel!
+  createApiToken(name: String!, scopes: [String!]!): ApiTokenCreateResult!
+  createChannel(configJson: String!, projectId: ID!, type: String!): ChannelModel!
+  createCheck(graceSeconds: Int!, name: String!, periodSeconds: Int, projectId: ID!, schedule: String, tz: String): CheckModel!
+  createEscalationPolicy(projectId: ID!, stepsJson: String!): EscalationPolicyModel!
+  createOrganization(name: String!): OrganizationModel!
+  createProject(name: String!, organizationId: ID!): ProjectModel!
+  createScopedApiToken(input: CreateApiTokenInput!): ApiTokenCreateResult!
+  createStatusPage(brandingJson: String, checkIds: [ID!]!, projectId: ID!, slug: String!, title: String!): StatusPageModel!
+  deleteChannel(id: ID!): Boolean!
+  deleteCheck(id: ID!): Boolean!
+  deleteEscalationPolicy(id: ID!): Boolean!
+  deleteOrganization(organizationId: ID!): Boolean!
+  deleteStatusPage(id: ID!): Boolean!
+  inviteMember(email: String!, organizationId: ID!, role: String!): InviteModel!
+  leaveOrganization(organizationId: ID!): Boolean!
+  moveCheck(checkId: ID!, destinationProjectId: ID!): CheckModel!
+  pauseCheck(id: ID!): CheckModel!
+  regeneratePingKey(projectId: ID!): ProjectModel!
+  removeMember(membershipId: ID!): Boolean!
+  resendEmailChannelVerification(channelId: ID!): ChannelModel!
+  resumeCheck(id: ID!): CheckModel!
+  revokeApiToken(id: ID!): Boolean!
+  revokeInvite(inviteId: ID!): Boolean!
+  setPassword(currentPassword: String, newPassword: String!): Boolean!
+  transferOrganizationCreatorship(newCreatorUserId: ID!, organizationId: ID!): OrganizationModel!
+  updateCheck(id: ID!, input: UpdateCheckInput!): CheckModel!
+  updateEscalationPolicy(id: ID!, stepsJson: String!): EscalationPolicyModel!
+  updateMemberRole(membershipId: ID!, role: String!): MemberModel!
+  updateOrganization(name: String, organizationId: ID!, slug: String): OrganizationModel!
+  updateOrganizationSlug(organizationId: ID!, slug: String!): OrganizationModel!
+  updateStatusPage(brandingJson: String, checkIds: [ID!], id: ID!, title: String): StatusPageModel!
+  verifyEmailChannel(token: String!): EmailVerificationConfirmationModel!
+}
+
+type OrganizationModel {
+  creatorLabel: String!
+  creatorUserId: ID!
+  id: ID!
+  name: String!
+  plan: String!
+  projects: [ProjectModel!]!
+  role: String!
+  slug: String!
+}
+
+type ProjectModel {
+  id: ID!
+  name: String!
+  organizationId: ID!
+  pingKey: String!
+  slug: String!
+}
+
+type Query {
+  apiCredential: ApiCredential!
+  apiTokens: [ApiTokenModel!]!
+  channels(projectId: ID!): [ChannelModel!]!
+  check(id: ID!): CheckModel!
+  checkBySlug(checkSlug: String!, orgSlug: String!, projectSlug: String!): CheckModel!
+  checks(projectId: ID!): [CheckModel!]!
+  emailChannelVerificationPreview(token: String!): EmailVerificationPreviewModel!
+  escalationPolicies(projectId: ID!): [EscalationPolicyModel!]!
+  health: String!
+  invitePreview(token: String!): InvitePreviewModel!
+  managedTelegramBot: ManagedTelegramBotModel!
+  me: UserModel!
+  mySubscription: SubscriptionStatus!
+  organizationInvites(organizationId: ID!): [InviteModel!]!
+  organizationMembers(organizationId: ID!): [MemberModel!]!
+  projects: [ProjectModel!]!
+  statusPages(projectId: ID!): [StatusPageModel!]!
+  telegramConnectionPreview(token: String!): TelegramConnectionPreviewModel!
+}
+
+type StatusCount {
+  count: Int!
+  status: String!
+}
+
+type StatusPageModel {
+  branding: String
+  checkIds: [String!]!
+  id: ID!
+  projectId: ID!
+  slug: String!
+  title: String!
+}
+
+type SubscriptionStatus {
+  checkCount: Int!
+  maxChecks: Int!
+  organizationCount: Int!
+  plan: String!
+  status: String!
+}
+
+type TelegramConnectionPreviewModel {
+  chatId: String!
+  chatTitle: String
+  chatType: String!
+  expiresAt: DateTime!
+  messageThreadId: Int
+}
+
+input UpdateCheckInput {
+  expectedStatus: Int
+  graceSeconds: Int
+  intervalSeconds: Int
+  method: String
+  name: String
+  periodSeconds: Int
+  schedule: String
+  slug: String
+  target: String
+  timeoutMs: Int
+  type: String
+  tz: String
+}
+
+type UserModel {
+  email: String!
+  googleLinked: Boolean!
+  hasPassword: Boolean!
+  id: ID!
+  isAdmin: Boolean!
+  organizations: [OrganizationModel!]!
+}

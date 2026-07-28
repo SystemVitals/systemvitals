@@ -1,0 +1,14 @@
+node_modules
+dist
+.env
+.env.*
+coverage
+test
+*.spec.ts
+*.e2e-spec.ts
+.git
+.gitignore
+.superpowers
+README.md
+CLAUDE.md
+AGENTS.md

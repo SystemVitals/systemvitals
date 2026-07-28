@@ -1,0 +1,37 @@
+{
+  "name": "@systemvitals/mcp",
+  "version": "0.1.0",
+  "description": "SystemVitals MCP server for Claude Code",
+  "type": "module",
+  "license": "Apache-2.0",
+  "bin": {
+    "systemvitals-mcp": "./dist/cli/mcp.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "start": "tsx cli/mcp.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "prepack": "npm run build",
+    "test": "vitest run && npm run test:pack",
+    "test:pack": "node scripts/pack-smoke.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.13.0",
+    "zod": "^3.25.56"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.29",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

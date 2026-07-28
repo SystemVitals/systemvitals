@@ -1,0 +1,69 @@
+# Persistent production infrastructure for the split Dokploy deployment.
+# Supply the existing production volume names at apply time; never replace them
+# with Compose-derived volumes.
+#
+# CUTOVER SAFETY: never run a normal `docker compose up` with this file.
+# Profiles are a guardrail, not a hard safety boundary. The live read-only
+# preflight is authoritative: it must confirm Dokploy auto-deploy is disabled,
+# no effective COMPOSE_PROFILES value or custom command can activate an
+# ordinary update, and all backup/runtime checks pass. Only then may later
+# confirmed provisioning attach the existing containers to the overlay network
+# before using exactly:
+#   docker compose ... --profile infrastructure-cutover up -d --no-recreate postgres redis
+# A normal `up`, any command without `--no-recreate`, or infrastructure
+# auto-deploy during cutover is unsupported because it may recreate stateful
+# containers. Network creation and all mutations belong to later provisioning.
+
+services:
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    stop_grace_period: 60s
+    profiles:
+      - infrastructure-cutover
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-systemvitals}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set and nonempty}
+      POSTGRES_DB: ${POSTGRES_DB:-systemvitals}
+    volumes:
+      - sv_pgdata:/var/lib/postgresql
+    networks:
+      systemvitals-internal:
+        aliases:
+          - sv-postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-systemvitals}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    stop_grace_period: 60s
+    profiles:
+      - infrastructure-cutover
+    volumes:
+      - sv_redisdata:/data
+    networks:
+      systemvitals-internal:
+        aliases:
+          - sv-redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  systemvitals-internal:
+    external: true
+    name: systemvitals-internal
+
+volumes:
+  sv_pgdata:
+    external: true
+    name: ${SYSTEMVITALS_POSTGRES_VOLUME:?SYSTEMVITALS_POSTGRES_VOLUME must be set and nonempty}
+  sv_redisdata:
+    external: true
+    name: ${SYSTEMVITALS_REDIS_VOLUME:?SYSTEMVITALS_REDIS_VOLUME must be set and nonempty}
