@@ -1,5 +1,7 @@
 # SystemVitals
 
+[![CI](https://github.com/SystemVitals/systemvitals/actions/workflows/ci.yml/badge.svg)](https://github.com/SystemVitals/systemvitals/actions/workflows/ci.yml)
+
 <p align="center">
   <img src="frontend/app/icon.svg" width="96" alt="SystemVitals logo">
 </p>
