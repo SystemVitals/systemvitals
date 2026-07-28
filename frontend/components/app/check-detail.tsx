@@ -103,7 +103,7 @@ function CheckNotificationChannelsSection({
   );
 
   useEffect(() => {
-    if (error) {
+    if (error && !data) {
       Promise.resolve().then(() => setErrorDialogOpen(true));
     } else if (data) {
       Promise.resolve().then(() => setErrorDialogOpen(false));
@@ -129,7 +129,7 @@ function CheckNotificationChannelsSection({
       )}
 
       <Dialog
-        open={errorDialogOpen}
+        open={errorDialogOpen && !data}
         onOpenChange={(open) => setErrorDialogOpen(open)}
       >
         <DialogContent>

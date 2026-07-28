@@ -1,9 +1,14 @@
 import { beforeEach, describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MockedProvider } from "@apollo/client/testing/react";
-import { print } from "graphql";
+import { GraphQLError, print } from "graphql";
 import { CheckDetail, type CheckDetailData } from "@/components/app/check-detail";
-import { CHANNELS, CHECK, CHECK_BY_SLUG } from "@/lib/queries";
+import {
+  CHANNELS,
+  CHECK,
+  CHECK_BY_SLUG,
+  SET_CHECK_CHANNEL_ENABLED,
+} from "@/lib/queries";
 import type { Org } from "@/lib/org-context";
 
 const orgContext = vi.hoisted(() => ({
@@ -308,6 +313,66 @@ describe("CheckDetail", () => {
         }),
       ).not.toBeInTheDocument(),
     );
+  });
+
+  it("keeps cached controls and shows only the save error when its recovery refetch fails", async () => {
+    const failedRefetch = vi.fn(() => ({
+      errors: [new GraphQLError("refetch unavailable")],
+    }));
+    renderDetail({}, [
+      {
+        request: {
+          query: CHANNELS,
+          variables: { projectId: "project-1" },
+        },
+        result: { data: { channels: ENABLED_CHANNELS } },
+      },
+      {
+        request: {
+          query: SET_CHECK_CHANNEL_ENABLED,
+          variables: {
+            checkId: "c1",
+            channelId: "email",
+            enabled: false,
+          },
+        },
+        error: new Error("save unavailable"),
+      },
+      {
+        request: {
+          query: CHANNELS,
+          variables: { projectId: "project-1" },
+        },
+        result: failedRefetch,
+      },
+    ]);
+
+    const emailSwitch = await screen.findByRole("switch", {
+      name: /Nightly backup.*Email notifications/i,
+    });
+    expect(emailSwitch).toBeChecked();
+
+    fireEvent.click(emailSwitch);
+
+    const saveDialog = await screen.findByRole("dialog", { name: "Error" });
+    expect(saveDialog).toHaveTextContent(
+      "Could not update notifications for Nightly backup. Please try again.",
+    );
+    await waitFor(() => expect(emailSwitch).toBeChecked());
+    await waitFor(() => expect(failedRefetch).toHaveBeenCalledTimes(1));
+    expect(
+      screen.getByRole("switch", {
+        name: /Nightly backup.*Webhook notifications/i,
+        hidden: true,
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("dialog", {
+        name: "Notification channels unavailable",
+        hidden: true,
+      }),
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByRole("dialog", { hidden: true })).toHaveLength(1);
   });
 
   it("shows DOWN and recovery history with routing but no acknowledge action", async () => {
