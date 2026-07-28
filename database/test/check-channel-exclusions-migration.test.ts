@@ -17,12 +17,19 @@ describe("check channel exclusions migration contract", () => {
 
     expect(sql).toContain('CREATE TABLE "check_channel_exclusions"');
     expect(sql).toContain('PRIMARY KEY ("check_id","channel_id")');
-    expect(sql).toContain('REFERENCES "checks"("id")');
-    expect(sql).toContain('REFERENCES "notification_channels"("id")');
+    expect(sql).toMatch(
+      /ADD CONSTRAINT "check_channel_exclusions_check_id_fkey"\s+FOREIGN KEY \("check_id"\) REFERENCES "checks"\("id"\)\s+ON DELETE CASCADE ON UPDATE CASCADE/,
+    );
+    expect(sql).toMatch(
+      /ADD CONSTRAINT "check_channel_exclusions_channel_id_fkey"\s+FOREIGN KEY \("channel_id"\) REFERENCES "notification_channels"\("id"\)\s+ON DELETE CASCADE ON UPDATE CASCADE/,
+    );
     expect(sql).toContain("ON DELETE CASCADE ON UPDATE CASCADE");
     expect(sql.match(/ON DELETE CASCADE ON UPDATE CASCADE/g)).toHaveLength(2);
     expect(sql).toContain(
       'CREATE INDEX "check_channel_exclusions_channel_id_idx"',
+    );
+    expect(sql).toMatch(
+      /CREATE INDEX "check_channel_exclusions_channel_id_idx"\s+ON "check_channel_exclusions"\("channel_id"\)/,
     );
     expect(sql).not.toMatch(/\bINSERT\b/i);
   });
