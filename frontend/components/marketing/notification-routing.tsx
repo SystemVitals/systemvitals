@@ -54,7 +54,7 @@ export function NotificationRouting() {
                   HTTP · every 30s
                 </p>
               </div>
-              <span className="rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 font-mono text-[11px] font-semibold tracking-wide text-primary">
+              <span className="rounded-full border border-border bg-muted px-2.5 py-1 font-mono text-xs font-semibold tracking-wide text-foreground">
                 DOWN + RECOVERY
               </span>
             </div>

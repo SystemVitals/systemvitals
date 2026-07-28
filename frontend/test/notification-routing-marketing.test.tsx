@@ -22,10 +22,13 @@ describe("per-check notification routing product surface", () => {
       }),
     ).toBeInTheDocument();
     expect(within(routing).getByText("Database API")).toBeInTheDocument();
-    expect(within(routing).getByText("DOWN + RECOVERY")).toBeInTheDocument();
+    const eventBadge = within(routing).getByText("DOWN + RECOVERY");
+    expect(eventBadge).toHaveClass("text-foreground");
+    expect(eventBadge).not.toHaveClass("text-primary");
     expect(
       within(routing).getByText(/recovery is sent only when a down check returns up/i),
     ).toBeInTheDocument();
+    expect(screen.getByText("We notify on recovery")).toBeInTheDocument();
 
     for (const [name, icon] of [
       ["Email", "mail"],
