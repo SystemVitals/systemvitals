@@ -6,9 +6,9 @@ import { dispatchChannel } from "./notifiers.js";
 import { scheduleEscalation } from "./escalation.js";
 
 /**
- * Process an alert job: find ALL enabled notification channels for the check's
- * project, dispatch to each one, and write an AlertLog per channel (success or
- * failure). One failing channel does not block the others.
+ * Process an alert job: find the effective selected enabled notification
+ * channels for the check, dispatch to each one, and write an AlertLog per
+ * channel (success or failure). One failing channel does not block the others.
  *
  * @returns The number of channels that were dispatched successfully.
  */
@@ -30,11 +30,12 @@ export async function handleAlert(
     return 0;
   }
 
-  // Find ALL enabled channels (any type) for the check's project
+  // Find selected enabled channels (any type) for the check's project
   const channels = await prisma.notificationChannel.findMany({
     where: {
       projectId: check.projectId,
       enabled: true,
+      checkExclusions: { none: { checkId: check.id } },
     },
   });
 

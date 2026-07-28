@@ -1,4 +1,12 @@
-import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
+import {
+  describe,
+  it,
+  expect,
+  vi,
+  beforeAll,
+  beforeEach,
+  afterAll,
+} from "vitest";
 import { PrismaClient, CheckStatus, ChannelType } from "@systemvitals/database";
 import { handleAlert } from "../src/alert-handler.js";
 import type { NotifierDeps } from "../src/notifiers.js";
@@ -215,6 +223,17 @@ beforeAll(async () => {
   telegramChannelId = telegramChannel.id;
 });
 
+beforeEach(async () => {
+  await prisma.checkChannelExclusion.deleteMany({
+    where: { checkId: checkWithChannelId },
+  });
+  await prisma.notificationChannel.updateMany({
+    where: { id: { in: [emailChannelId, slackChannelId] } },
+    data: { enabled: true },
+  });
+  await prisma.alertLog.deleteMany({ where: { checkId: checkWithChannelId } });
+});
+
 afterAll(async () => {
   // Clean up in dependency order
   await prisma.alertLog.deleteMany({
@@ -388,6 +407,152 @@ describe("handleAlert", () => {
     await prisma.alertLog.deleteMany({ where: { checkId: checkWithChannelId } });
   });
 
+  it("dispatches DOWN only to selected enabled channels and logs only their attempts", async () => {
+    await prisma.checkChannelExclusion.create({
+      data: { checkId: checkWithChannelId, channelId: slackChannelId },
+    });
+    const httpPost = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    const deps = makeDeps(httpPost);
+
+    const sent = await handleAlert(prisma, deps, {
+      checkId: checkWithChannelId,
+      kind: "down",
+    });
+
+    expect(sent).toBe(1);
+    expect((deps.mailer as CollectingMailer).sent).toHaveLength(1);
+    expect(
+      (deps.mailer as CollectingMailer).sent[0]?.subject,
+    ).toContain("DOWN");
+    expect(httpPost).not.toHaveBeenCalled();
+    const logs = await prisma.alertLog.findMany({
+      where: { checkId: checkWithChannelId },
+    });
+    expect(logs).toHaveLength(1);
+    expect(logs[0]?.channelId).toBe(emailChannelId);
+    expect(logs[0]?.status).toBe(CheckStatus.DOWN);
+    expect(logs[0]?.payload).toEqual({ type: "EMAIL", ok: true });
+  });
+
+  it("uses the same channel exclusion for recovery dispatch", async () => {
+    await prisma.checkChannelExclusion.create({
+      data: { checkId: checkWithChannelId, channelId: slackChannelId },
+    });
+    const httpPost = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    const deps = makeDeps(httpPost);
+
+    const sent = await handleAlert(prisma, deps, {
+      checkId: checkWithChannelId,
+      kind: "recovery",
+    });
+
+    expect(sent).toBe(1);
+    expect((deps.mailer as CollectingMailer).sent).toHaveLength(1);
+    expect(httpPost).not.toHaveBeenCalled();
+    const logs = await prisma.alertLog.findMany({
+      where: { checkId: checkWithChannelId },
+    });
+    expect(logs).toHaveLength(1);
+    expect(logs[0]?.channelId).toBe(emailChannelId);
+    expect(logs[0]?.status).toBe(CheckStatus.UP);
+  });
+
+  it("selects an enabled channel created after the check when it has no exclusion", async () => {
+    const lateChannel = await prisma.notificationChannel.create({
+      data: {
+        projectId: projectNoPolicyId,
+        type: ChannelType.EMAIL,
+        config: { email: "late-channel@example.com" },
+        enabled: true,
+      },
+    });
+    const deps = makeDeps(
+      vi.fn().mockResolvedValue({ ok: true, status: 200 }),
+    );
+
+    try {
+      const sent = await handleAlert(prisma, deps, {
+        checkId: checkNoPolicyId,
+        kind: "down",
+      });
+
+      expect(sent).toBe(1);
+      expect((deps.mailer as CollectingMailer).sent).toHaveLength(1);
+      const logs = await prisma.alertLog.findMany({
+        where: { checkId: checkNoPolicyId },
+      });
+      expect(logs).toHaveLength(1);
+      expect(logs[0]?.channelId).toBe(lateChannel.id);
+    } finally {
+      await prisma.alertLog.deleteMany({ where: { checkId: checkNoPolicyId } });
+      await prisma.notificationChannel.delete({ where: { id: lateChannel.id } });
+    }
+  });
+
+  it("returns zero without dispatch or logs when every enabled channel is excluded", async () => {
+    await prisma.checkChannelExclusion.createMany({
+      data: [
+        { checkId: checkWithChannelId, channelId: emailChannelId },
+        { checkId: checkWithChannelId, channelId: slackChannelId },
+      ],
+    });
+    const httpPost = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    const deps = makeDeps(httpPost);
+
+    const sent = await handleAlert(prisma, deps, {
+      checkId: checkWithChannelId,
+      kind: "down",
+    });
+
+    expect(sent).toBe(0);
+    expect((deps.mailer as CollectingMailer).sent).toHaveLength(0);
+    expect(httpPost).not.toHaveBeenCalled();
+    expect(deps.telegramPost).not.toHaveBeenCalled();
+    expect(
+      await prisma.alertLog.count({ where: { checkId: checkWithChannelId } }),
+    ).toBe(0);
+  });
+
+  it("does not dispatch or log a globally disabled channel", async () => {
+    await prisma.notificationChannel.update({
+      where: { id: slackChannelId },
+      data: { enabled: false },
+    });
+    await prisma.checkChannelExclusion.create({
+      data: { checkId: checkWithChannelId, channelId: emailChannelId },
+    });
+    const httpPost = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    const deps = makeDeps(httpPost);
+
+    const sent = await handleAlert(prisma, deps, {
+      checkId: checkWithChannelId,
+      kind: "down",
+    });
+
+    expect(sent).toBe(0);
+    expect((deps.mailer as CollectingMailer).sent).toHaveLength(0);
+    expect(httpPost).not.toHaveBeenCalled();
+    expect(
+      await prisma.alertLog.count({ where: { checkId: checkWithChannelId } }),
+    ).toBe(0);
+  });
+
+  it("does not dispatch when an exclusion configuration changes", async () => {
+    const httpPost = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    const deps = makeDeps(httpPost);
+
+    await prisma.checkChannelExclusion.create({
+      data: { checkId: checkWithChannelId, channelId: slackChannelId },
+    });
+
+    expect((deps.mailer as CollectingMailer).sent).toHaveLength(0);
+    expect(httpPost).not.toHaveBeenCalled();
+    expect(deps.telegramPost).not.toHaveBeenCalled();
+    expect(
+      await prisma.alertLog.count({ where: { checkId: checkWithChannelId } }),
+    ).toBe(0);
+  });
+
   it("one failing channel does not block others; returns partial success count", async () => {
     await prisma.alertLog.deleteMany({ where: { checkId: checkWithChannelId } });
 
@@ -424,6 +589,22 @@ describe("handleAlert", () => {
       where: { checkId: checkWithChannelId },
     });
     expect(logs).toHaveLength(2);
+    expect(logs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          channelId: emailChannelId,
+          payload: { type: "EMAIL", ok: true },
+        }),
+        expect.objectContaining({
+          channelId: slackChannelId,
+          payload: {
+            type: "SLACK",
+            ok: false,
+            error: expect.stringContaining("500"),
+          },
+        }),
+      ]),
+    );
 
     await prisma.alertLog.deleteMany({ where: { checkId: checkWithChannelId } });
   });
