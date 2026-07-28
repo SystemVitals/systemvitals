@@ -13,7 +13,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@systemvitals/database": "file:../database",
-    "bullmq": "^5.79.0",
+    "bullmq": "^5.81.2",
     "commander": "^14.0.0",
     "cron-parser": "^4.9.0",
     "dotenv": "^17.4.2",
