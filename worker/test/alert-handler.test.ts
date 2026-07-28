@@ -225,13 +225,15 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await prisma.checkChannelExclusion.deleteMany({
-    where: { checkId: checkWithChannelId },
+    where: { checkId: { in: [checkWithChannelId, checkWithPolicyId] } },
   });
   await prisma.notificationChannel.updateMany({
     where: { id: { in: [emailChannelId, slackChannelId] } },
     data: { enabled: true },
   });
-  await prisma.alertLog.deleteMany({ where: { checkId: checkWithChannelId } });
+  await prisma.alertLog.deleteMany({
+    where: { checkId: { in: [checkWithChannelId, checkWithPolicyId] } },
+  });
 });
 
 afterAll(async () => {
@@ -537,22 +539,6 @@ describe("handleAlert", () => {
     ).toBe(0);
   });
 
-  it("does not dispatch when an exclusion configuration changes", async () => {
-    const httpPost = vi.fn().mockResolvedValue({ ok: true, status: 200 });
-    const deps = makeDeps(httpPost);
-
-    await prisma.checkChannelExclusion.create({
-      data: { checkId: checkWithChannelId, channelId: slackChannelId },
-    });
-
-    expect((deps.mailer as CollectingMailer).sent).toHaveLength(0);
-    expect(httpPost).not.toHaveBeenCalled();
-    expect(deps.telegramPost).not.toHaveBeenCalled();
-    expect(
-      await prisma.alertLog.count({ where: { checkId: checkWithChannelId } }),
-    ).toBe(0);
-  });
-
   it("one failing channel does not block others; returns partial success count", async () => {
     await prisma.alertLog.deleteMany({ where: { checkId: checkWithChannelId } });
 
@@ -632,6 +618,28 @@ describe("handleAlert", () => {
     expect(enqueueEscalation).toHaveBeenCalled();
 
     await prisma.alertLog.deleteMany({ where: { checkId: checkWithPolicyId } });
+  });
+
+  it("still schedules legacy DOWN escalation when every immediate channel is excluded", async () => {
+    await prisma.checkChannelExclusion.create({
+      data: { checkId: checkWithPolicyId, channelId: policyChannelId },
+    });
+    const httpPost = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    const deps = makeDeps(httpPost);
+
+    const sent = await handleAlert(prisma, deps, {
+      checkId: checkWithPolicyId,
+      kind: "down",
+    });
+
+    expect(sent).toBe(0);
+    expect((deps.mailer as CollectingMailer).sent).toHaveLength(0);
+    expect(httpPost).not.toHaveBeenCalled();
+    expect(deps.telegramPost).not.toHaveBeenCalled();
+    expect(
+      await prisma.alertLog.count({ where: { checkId: checkWithPolicyId } }),
+    ).toBe(0);
+    expect(deps.enqueueEscalation).toHaveBeenCalledOnce();
   });
 
   it("does NOT call enqueueEscalation when kind=down but project has NO escalation policy", async () => {

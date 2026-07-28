@@ -39,10 +39,6 @@ export async function handleAlert(
     },
   });
 
-  if (channels.length === 0) {
-    return 0;
-  }
-
   const statusLabel = kind === "down" ? "DOWN" : "recovered";
   const subject = `[SystemVitals] ${check.name} is ${statusLabel}`;
   const now = new Date().toISOString();
