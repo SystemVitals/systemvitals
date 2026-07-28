@@ -1,10 +1,17 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useQuery, useMutation } from "@apollo/client/react";
 import { useAuth } from "@/lib/auth-context";
 import { useOrg } from "@/lib/org-context";
-import { CHECKS, CREATE_CHECK, PAUSE_CHECK, RESUME_CHECK, CREATE_ACTIVE_CHECK } from "@/lib/queries";
+import {
+  CHANNELS,
+  CHECKS,
+  CREATE_CHECK,
+  PAUSE_CHECK,
+  RESUME_CHECK,
+  CREATE_ACTIVE_CHECK,
+} from "@/lib/queries";
 import { StatusBadge } from "@/components/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -34,6 +41,10 @@ import { isValidCron, nextCronFires } from "@/lib/cron";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CopyField } from "@/components/app/copy-field";
 import { ConnectAgentDialog } from "@/components/app/connect-agent-dialog";
+import {
+  CheckNotificationChannels,
+  type NotificationChannelOption,
+} from "@/components/app/check-notification-channels";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8888";
 
@@ -53,6 +64,7 @@ interface CheckItem {
   schedule: string | null;
   tz: string | null;
   lastEventAt: string | null;
+  notificationChannelIds: string[];
 }
 
 function TypeBadge({ type }: { type: string }) {
@@ -413,6 +425,15 @@ function ChecksList({ projectId, projectName, orgSlug, projectSlug }: ChecksList
     notifyOnNetworkStatusChange: false,
   });
   const { data, refetch, loading, error: queryError } = query;
+  const { data: channelData } = useQuery<{
+    channels: NotificationChannelOption[];
+  }>(CHANNELS, {
+    variables: { projectId },
+  });
+  const channels = useMemo(
+    () => (channelData?.channels ?? []).filter((channel) => channel.enabled),
+    [channelData],
+  );
 
   usePollWhenVisible(query, CHECK_POLL_INTERVAL_MS);
 
@@ -528,6 +549,13 @@ function ChecksList({ projectId, projectName, orgSlug, projectSlug }: ChecksList
                     Last event: {new Date(check.lastEventAt).toLocaleString()}
                   </div>
                 )}
+                <CheckNotificationChannels
+                  checkId={check.id}
+                  checkName={check.name}
+                  notificationChannelIds={check.notificationChannelIds}
+                  channels={channels}
+                  variant="compact"
+                />
                 <div>
                   {isPaused ? (
                     <Button

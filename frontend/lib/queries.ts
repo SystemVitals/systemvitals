@@ -16,6 +16,7 @@ export const CHECKS = gql`
       tz
       nextExpectedAt
       lastEventAt
+      notificationChannelIds
     }
   }
 `;
