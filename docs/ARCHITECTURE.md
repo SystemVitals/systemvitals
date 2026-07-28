@@ -26,10 +26,14 @@ flowchart LR
 ## Monitoring flow
 
 1. A service sends a heartbeat, or the worker schedules an active probe.
-2. The API or worker records a check event in PostgreSQL.
-3. An actual transition to `DOWN`, or from `DOWN` to `UP`, atomically snapshots
-   the check's effective channel IDs and queues a notification job in Redis.
-4. The worker validates the snapshotted channels, delivers the transition
+2. The API or worker records the check event and status in a locked PostgreSQL
+   transaction.
+3. If the event causes an actual transition to `DOWN`, or from `DOWN` to `UP`,
+   that same transaction snapshots the effective channel IDs; the status,
+   event, and snapshot commit atomically.
+4. After that transaction commits, the producer queues a notification job in
+   Redis carrying the snapshot.
+5. The worker validates the snapshotted channels, delivers the transition
    notification, and records one delivery result per attempted channel.
 
 Ordinary successful events do not produce recovery notifications, and changing
