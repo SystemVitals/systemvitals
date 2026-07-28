@@ -11,7 +11,7 @@ export const SITE = {
     { label: "Features", href: "/#features" },
     { label: "How it works", href: "/#how-it-works" },
     { label: "Pricing", href: "/#pricing" },
-    { label: "Docs", href: "https://github.com/nihey/systemvitals" },
+    { label: "Docs", href: "https://github.com/SystemVitals/systemvitals" },
   ],
   capabilities: {
     monitors: ["HTTP", "TCP", "Ping", "Heartbeat"],

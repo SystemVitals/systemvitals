@@ -25,7 +25,6 @@ channel.
 
 The worker emits exactly two notification events: an immediate alert on a DOWN
 transition and a recovery notification on the following DOWN-to-UP transition.
-It does not schedule delayed escalation jobs.
 
 ## Validation
 
