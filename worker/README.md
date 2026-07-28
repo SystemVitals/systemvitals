@@ -6,10 +6,12 @@ supporting background jobs such as invitations and email verification.
 
 ## Alert delivery
 
-Recipients are snapshotted when a check transitions. The effective recipient
-set is the check's enabled project channels minus that check's channel
-exclusions. An empty exclusion set therefore selects every enabled channel,
-including channels added after the check was created.
+Producers resolve recipients while holding the locked database transaction for
+a check transition, then put those in-memory IDs in the alert job after the
+transaction commits. The effective recipient set is the check's enabled
+project channels minus that check's channel exclusions. An empty exclusion set
+therefore selects every enabled channel, including channels added after the
+check was created.
 
 Alert consumption uses that snapshot instead of re-reading check exclusions,
 so later routing toggles affect only future transitions. A channel that was

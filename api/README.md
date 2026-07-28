@@ -33,8 +33,11 @@ notification work. Moving a check to another project clears its exclusions, so
 the destination project's enabled channels become the new defaults.
 
 Selected channels receive notifications when a check transitions to `DOWN` and
-when it later recovers from `DOWN` to `UP`. Recipient routing is snapshotted
-atomically at each transition. Later per-check channel changes affect only
-future transitions; already queued jobs retain their original recipients.
-Consumers may still skip a snapshotted channel if it is deleted or globally
-disabled before delivery.
+when it later recovers from `DOWN` to `UP`. Recipient routing is resolved
+while the producer holds the transition transaction's database lock. After the
+status and event commit, the producer carries those IDs in memory into the
+queued job. PostgreSQL and Redis are not joined by a transactional outbox, so
+an enqueue failure can leave a committed transition without a notification
+job. Later per-check channel changes affect only future transitions; already
+queued jobs retain their original recipients. Consumers may still skip a
+snapshotted channel if it is deleted or globally disabled before delivery.

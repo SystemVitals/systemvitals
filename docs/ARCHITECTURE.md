@@ -29,11 +29,15 @@ flowchart LR
 2. The API or worker records the check event and status in a locked PostgreSQL
    transaction.
 3. If the event causes an actual transition to `DOWN`, or from `DOWN` to `UP`,
-   that same transaction snapshots the effective channel IDs; the status,
-   event, and snapshot commit atomically.
+   the producer resolves the effective channel IDs while holding that
+   transaction's lock. The status and event commit atomically; the returned
+   channel IDs exist only in producer memory.
 4. After that transaction commits, the producer queues a notification job in
-   Redis carrying the snapshot.
-5. The worker validates the snapshotted channels, delivers the transition
+   Redis carrying those IDs.
+5. PostgreSQL and Redis are not coupled by a transactional outbox. An enqueue
+   failure can therefore leave a committed transition without a notification
+   job.
+6. The worker validates the job's channels, delivers the transition
    notification, and records one delivery result per attempted channel.
 
 Ordinary successful events do not produce recovery notifications, and changing
@@ -60,23 +64,43 @@ GraphQL exposes the resulting IDs as
 one exclusion after checking project ownership and the channel's global
 enabled state. It does not create a check event or queue delivery work.
 
-Recipient IDs are snapshotted inside the same locked database transaction that
-commits a status transition. A worker treats a job's `channelIds` as
-authoritative, including an empty array. Before delivery it still checks that
-each channel exists, belongs to the check's current project, and remains
-globally enabled; it does not reapply exclusions changed after the transition.
-Only legacy jobs without `channelIds` resolve current exclusions at consumption
-time, which keeps rolling deployments compatible with older producers.
+The producer resolves recipient IDs while it holds the same database lock used
+for the transition, returns those IDs in process memory after the transaction
+commits, and then puts them in the Redis job. A worker treats a present
+`channelIds` field as authoritative, including an empty array. Before delivery
+it still checks that each channel exists, belongs to the check's current
+project, and remains globally enabled; it does not reapply exclusions changed
+after the transition. Only legacy jobs without `channelIds` resolve current
+exclusions at consumption time, which keeps rolling deployments compatible
+with older producers.
 
-## Historical Release 2 to Release 3 cleanup window
+## Release 2 compatibility window and Release 3 exit criteria
 
 Release 2 retired the acknowledgement and delayed-escalation API, UI, worker
 scheduling, and worker consumption paths. The legacy Prisma
 `EscalationPolicy` and `Acknowledgement` models and tables remain dormant for
 one rollback and observation window, as do the unused `QUEUE_ESCALATION`
 configuration and Dokploy provisioning entry. No live product path reads or
-writes those tables, and no worker produces or consumes that queue. Release 3
-removes these compatibility artifacts after the observation window.
+writes those tables, and no current worker produces or consumes that queue.
+Release 2 remains an application-only rollout; it does not change or deploy
+the infrastructure Compose project.
+
+Do not begin the irreversible Release 3 cleanup until all of these conditions
+are met:
+
+- the Release 2 API, frontend, and worker are healthy and serving the intended
+  current commit;
+- no Release 1 application containers remain;
+- the legacy queue has no active, delayed, or retry escalation jobs, or those
+  jobs have been deliberately drained or purged;
+- a verified `DOWN` followed by `DOWN` to `UP` recovery cycle creates no
+  escalation work;
+- a current database backup is verified restorable;
+- the operator explicitly decides that rollback to Release 1 is no longer
+  required.
+
+After those gates pass, Release 3 can remove the dormant database models,
+tables, queue configuration, and provisioning entry.
 
 ## Deployment boundaries
 

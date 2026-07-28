@@ -27,17 +27,28 @@ Keep the infrastructure Compose deployment stateful and set its auto-deploy to d
 
 Each application should run one replica, use a start-first update order, and roll back when its health check fails. The worker has no public HTTP route; its Docker health check validates the readiness marker. Use the documented API and frontend readiness paths when configuring application health checks.
 
-### Serialized application releases
+### Automatic triggers and required release order
 
-For Release 2, deploy automatically from the merged `main` commit in this
-order:
+The API, frontend, and worker are independent applications, each configured to
+auto-deploy when `main` changes. Repository provisioning enables each
+application's `autoDeploy` flag independently; it does not define cross-app
+dependencies or readiness ordering.
+
+For the Release 2 cutover, the required and verified application order is:
 
 1. API
 2. Frontend
 3. Worker
 
-Wait for each application's readiness gate to pass before starting the next
-deployment. If a gate fails, stop the sequence and roll back that application.
+Merging to `main` still triggers all three applications automatically. Observe
+the Dokploy deployment queue and application status during every release.
+Release 1 was observed to run in the required order, but that observation is
+not an orchestration guarantee. Verify that each predecessor reaches its
+readiness gate before allowing the next application rollout to continue. If
+the order differs, deployments overlap, or a readiness gate fails, intervene
+manually to stop the later rollout and roll back the failed application before
+continuing.
+
 Release 2 is application-only: do not modify, restart, or deploy the
 infrastructure Compose project.
 
