@@ -29,11 +29,12 @@ Use the idempotent GraphQL mutation
 change one channel. The channel must be enabled and belong to the check's
 project. Repeating the same value is safe, including disabling every channel.
 Changing routing does not send notifications, create alert logs, or enqueue
-escalation work. Moving a check to another project clears its exclusions, so
+notification work. Moving a check to another project clears its exclusions, so
 the destination project's enabled channels become the new defaults.
 
-Recipient routing is snapshotted atomically when a check transitions to
-`DOWN` or recovers from `DOWN` to `UP`. Later per-check channel changes affect
-only future transitions; already queued jobs retain their original recipients.
+Selected channels receive notifications when a check transitions to `DOWN` and
+when it later recovers from `DOWN` to `UP`. Recipient routing is snapshotted
+atomically at each transition. Later per-check channel changes affect only
+future transitions; already queued jobs retain their original recipients.
 Consumers may still skip a snapshotted channel if it is deleted or globally
 disabled before delivery.
