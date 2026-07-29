@@ -25,7 +25,6 @@ export interface AdminOrganization {
   id: string;
   name: string;
   createdAt: string;
-  projectCount: number;
   plan: string;
   members: AdminOrgMember[];
 }

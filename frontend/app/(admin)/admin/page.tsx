@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@apollo/client/react";
 import Link from "next/link";
-import { Users, Building2, FolderKanban, Activity, Bell } from "lucide-react";
+import { Users, Building2, Activity, Bell } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
@@ -36,7 +36,6 @@ interface DayCount {
 interface AdminMetrics {
   totalUsers: number;
   totalOrgs: number;
-  totalProjects: number;
   totalChecks: number;
   alertsLast24h: number;
   checksByStatus: StatusCount[];
@@ -47,7 +46,6 @@ interface AdminMetrics {
 const METRIC_CARDS = [
   { key: "totalUsers" as const, label: "Users", Icon: Users },
   { key: "totalOrgs" as const, label: "Organizations", Icon: Building2 },
-  { key: "totalProjects" as const, label: "Projects", Icon: FolderKanban },
   { key: "totalChecks" as const, label: "Checks", Icon: Activity },
   { key: "alertsLast24h" as const, label: "Alerts (24h)", Icon: Bell },
 ];
@@ -98,8 +96,8 @@ export default function AdminOverviewPage() {
         <div>
           <h1 className="font-heading text-2xl font-semibold tracking-tight">Platform overview</h1>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-          {[0, 1, 2, 3, 4].map((i) => (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          {[0, 1, 2, 3].map((i) => (
             <Card key={i}>
               <CardHeader className="pb-2">
                 <Skeleton className="h-4 w-3/4 rounded-lg" />
@@ -123,7 +121,7 @@ export default function AdminOverviewPage() {
       </div>
 
       {/* Totals row */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {METRIC_CARDS.map(({ key, label, Icon }) => (
           <Card key={key}>
             <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">

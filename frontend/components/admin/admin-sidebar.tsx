@@ -10,7 +10,7 @@ export const ADMIN_NAV = [
   { label: "Overview", href: "/admin", icon: LayoutDashboard },
   { label: "Users", href: "/admin/users", icon: Users },
   { label: "Organizations", href: "/admin/organizations", icon: Building2 },
-  { label: "Projects & Checks", href: "/admin/checks", icon: CheckSquare },
+  { label: "Checks", href: "/admin/checks", icon: CheckSquare },
   { label: "Subscriptions", href: "/admin/subscriptions", icon: CreditCard },
   { label: "Audit log", href: "/admin/audit", icon: FileText },
 ];

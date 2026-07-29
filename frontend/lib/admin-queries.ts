@@ -101,7 +101,6 @@ export const ADMIN_ORGANIZATIONS = gql`
         id
         name
         createdAt
-        projectCount
         plan
         members {
           userId
@@ -120,7 +119,6 @@ export const ADMIN_ORGANIZATION = gql`
       id
       name
       createdAt
-      projectCount
       plan
       members {
         userId
@@ -145,8 +143,6 @@ export const ADMIN_CHECKS = gql`
         name
         type
         status
-        projectId
-        projectName
         organizationId
         organizationName
       }
@@ -227,7 +223,6 @@ export const ADMIN_METRICS = gql`
     adminMetrics {
       totalUsers
       totalOrgs
-      totalProjects
       totalChecks
       alertsLast24h
       checksByStatus {

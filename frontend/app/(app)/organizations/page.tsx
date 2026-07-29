@@ -257,8 +257,9 @@ function OrgRow({
           <DialogHeader>
             <DialogTitle>Leave {org.name}?</DialogTitle>
             <DialogDescription>
-              You will lose access to {org.name} and its projects, checks, and
-              history. You&apos;ll need a new invitation to regain access.
+              You will lose access to {org.name}, including its checks,
+              notification channels, status pages, members, and data.
+              You&apos;ll need a new invitation to regain access.
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-2">
@@ -283,10 +284,10 @@ function OrgRow({
           <DialogHeader>
             <DialogTitle>Delete {org.name}?</DialogTitle>
             <DialogDescription>
-              This permanently deletes all of {org.name}&apos;s projects, checks,
-              and history. Account billing is unaffected. Manage billing
-              separately. This cannot be undone. Type the organization name to
-              confirm.
+              This permanently deletes all of {org.name}&apos;s checks,
+              notification channels, status pages, members, and data. Account
+              billing is unaffected. Manage billing separately. This cannot be
+              undone. Type the organization name to confirm.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">

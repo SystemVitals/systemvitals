@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation } from "@apollo/client/react";
 import Link from "next/link";
-import { ArrowLeft, Trash2, Users, Layers } from "lucide-react";
+import { ArrowLeft, Trash2, Users } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
@@ -111,20 +111,11 @@ export default function AdminOrganizationDetailPage() {
               <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Created</p>
               <p className="text-sm mt-0.5">{new Date(org.createdAt).toLocaleString()}</p>
             </div>
-            <div className="flex gap-6">
-              <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Projects</p>
-                <div className="flex items-center gap-1.5 mt-1">
-                  <Layers className="h-4 w-4 text-muted-foreground" />
-                  <p className="text-sm font-medium">{org.projectCount}</p>
-                </div>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Members</p>
-                <div className="flex items-center gap-1.5 mt-1">
-                  <Users className="h-4 w-4 text-muted-foreground" />
-                  <p className="text-sm font-medium">{org.members.length}</p>
-                </div>
+            <div>
+              <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Members</p>
+              <div className="flex items-center gap-1.5 mt-1">
+                <Users className="h-4 w-4 text-muted-foreground" />
+                <p className="text-sm font-medium">{org.members.length}</p>
               </div>
             </div>
           </CardContent>
@@ -202,7 +193,9 @@ export default function AdminOrganizationDetailPage() {
           <DialogHeader>
             <DialogTitle>Delete organization</DialogTitle>
             <DialogDescription>
-              This will permanently delete <strong>{org.name}</strong> and all associated projects, checks, and data. This action cannot be undone.
+              This will permanently delete <strong>{org.name}</strong> and all
+              associated checks, notification channels, status pages, members,
+              and data. This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter showCloseButton>
