@@ -6,15 +6,15 @@ import { LegacyCheckRouteRedirect } from "@/components/app/legacy-check-route-re
 export default function LegacyCheckDetailPage({
   params,
 }: {
-  params: Promise<{ org: string; project: string; check: string }>;
+  params: Promise<{ org: string; check: string; legacyCheck: string }>;
 }) {
-  const { org, project, check } = use(params);
+  const { org, check, legacyCheck } = use(params);
 
   return (
     <LegacyCheckRouteRedirect
       orgSlug={org}
-      projectSlug={project}
-      checkSlug={check}
+      projectSlug={check}
+      checkSlug={legacyCheck}
     />
   );
 }

@@ -5,7 +5,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { print } from "graphql";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import CanonicalCheckPage from "@/app/(app)/[org]/[check]/page";
-import LegacyCheckPage from "@/app/(app)/[org]/[project]/[check]/page";
+import LegacyCheckPage from "@/app/(app)/[org]/[check]/[legacyCheck]/page";
 import type { Org } from "@/lib/org-context";
 import { CHECK_BY_ORGANIZATION_SLUG } from "@/lib/queries";
 
@@ -426,8 +426,8 @@ async function renderLegacyPage(
           <LegacyCheckPage
             params={Promise.resolve({
               org: "source",
-              project: "legacy-project",
-              check: "old-slug",
+              check: "legacy-project",
+              legacyCheck: "old-slug",
             })}
           />
         </Suspense>
