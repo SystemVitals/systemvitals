@@ -1,7 +1,7 @@
 # SystemVitals MCP Server
 
 Drive [SystemVitals](../../README.md) from Claude Code or any MCP-compatible
-client. Session and legacy broad credentials expose the 26 tools listed below;
+client. Session and legacy broad credentials expose the 25 tools listed below;
 project-scoped connections expose only their authorized check tools.
 
 > **This package is prepared for public publication, but is not currently
@@ -83,7 +83,7 @@ needed.
 
 The server introspects the credential before registering tools:
 
-- Session JWTs and legacy broad `read`/`write` tokens retain all **26** tools
+- Session JWTs and legacy broad `read`/`write` tokens retain all **25** tools
   below for compatibility.
 - A full project-scoped agent connection exposes **9** check tools: two reads
   and seven mutations.
@@ -98,7 +98,11 @@ credential instead of silently widening access.
 requires `checks:read` and reports the effective notification channel IDs,
 including an empty selection.
 
-## Legacy/session tool catalog (26 total)
+> **Migration note:** Creating an organization automatically provisions its
+> sole internal workspace. Use `create_organization`; no separate
+> project-creation step is needed.
+
+## Legacy/session tool catalog (25 total)
 
 ### Read tools (5)
 
@@ -110,11 +114,10 @@ including an empty selection.
 | `list_channels` | List notification channels for a given project, including already-connected Telegram rows |
 | `list_members` | List the members of an organization, with membership id and role |
 
-### Write/mutation tools (21)
+### Write/mutation tools (20)
 
 | Tool | Description |
 |---|---|
-| `create_project` | Create a new project inside an organization |
 | `regenerate_ping_key` | Regenerate the ping key for a project (old key immediately invalidated) |
 | `create_heartbeat_check` | Create a heartbeat (dead-man's-switch) check — alerts if pings stop arriving. Provide either `periodSeconds` for a simple period, or `schedule` + `tz` for a cron schedule |
 | `create_active_check` | Create an active HTTP or TCP probe check |
