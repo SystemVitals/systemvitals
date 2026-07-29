@@ -78,15 +78,15 @@ with older producers.
 
 Release 3 cleanup is complete. Its operational gates passed, the retired
 escalation queue was confirmed empty, and its remaining BullMQ metadata was
-purged. The dormant acknowledgement and escalation persistence, worker queue
+purged. The dormant legacy incident-state persistence, worker queue
 configuration, environment example, and Dokploy provisioning entry have been
 removed. Per-check notification routing through `CheckChannelExclusion`
 remains the active model.
 
 The current database is no longer compatible with application releases that
-depend on the retired acknowledgement or escalation tables. Recovering that
-data requires restoring a pre-Release 3 database backup together with a
-matching application release.
+depend on those retired database tables. Recovering that data requires
+restoring a pre-Release 3 database backup together with a matching application
+release.
 
 ## Deployment boundaries
 

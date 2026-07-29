@@ -384,27 +384,21 @@ describe('moveCheck (e2e)', () => {
       periodSeconds: 30,
       graceSeconds: 10,
     });
-    const [
-      check,
-      events,
-      alerts,
-      sourcePages,
-      destination,
-      exclusions,
-    ] = await Promise.all([
-      prisma.check.findUniqueOrThrow({ where: { id: fixture.checkId } }),
-      prisma.checkEvent.findMany({ where: { checkId: fixture.checkId } }),
-      prisma.alertLog.findMany({ where: { checkId: fixture.checkId } }),
-      prisma.statusPage.findMany({
-        where: { id: { in: fixture.sourcePageIds } },
-      }),
-      prisma.statusPage.findUniqueOrThrow({
-        where: { id: fixture.destinationPageId },
-      }),
-      prisma.checkChannelExclusion.findMany({
-        where: { checkId: fixture.checkId },
-      }),
-    ]);
+    const [check, events, alerts, sourcePages, destination, exclusions] =
+      await Promise.all([
+        prisma.check.findUniqueOrThrow({ where: { id: fixture.checkId } }),
+        prisma.checkEvent.findMany({ where: { checkId: fixture.checkId } }),
+        prisma.alertLog.findMany({ where: { checkId: fixture.checkId } }),
+        prisma.statusPage.findMany({
+          where: { id: { in: fixture.sourcePageIds } },
+        }),
+        prisma.statusPage.findUniqueOrThrow({
+          where: { id: fixture.destinationPageId },
+        }),
+        prisma.checkChannelExclusion.findMany({
+          where: { checkId: fixture.checkId },
+        }),
+      ]);
     expect(check).toMatchObject({
       id: fixture.checkId,
       name: 'Nightly backup',
