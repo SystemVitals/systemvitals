@@ -363,7 +363,7 @@ describe('active checks (e2e)', () => {
     )) as GqlCreateActiveCheckResponse;
 
     expect(res.errors).toBeDefined();
-    expect(res.errors?.[0]?.message).toMatch(/not a member/i);
+    expect(res.errors?.[0]?.message).toBe('Workspace not found');
   });
 
   it('checks(projectId) includes active checks created via createActiveCheck', async () => {
