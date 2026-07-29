@@ -111,6 +111,7 @@ function mutationRecoveryFor(message: string): Recovery {
 
   if (
     normalized.includes("organization not found") ||
+    normalized.includes("workspace not found") ||
     normalized.includes("not a member of this organization")
   ) {
     return {

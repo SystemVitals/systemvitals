@@ -426,6 +426,7 @@ describe("TelegramConnectPage", () => {
 
   it.each([
     "Organization not found",
+    "Workspace not found",
     "Not a member of this organization",
   ])(
     "keeps the challenge usable when organization access fails with %s",
