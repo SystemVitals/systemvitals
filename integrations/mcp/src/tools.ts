@@ -68,6 +68,10 @@ interface RegeneratePingKeyResponse {
   regeneratePingKey: { id: string; pingKey: string };
 }
 
+interface RegenerateOrganizationPingKeyResponse {
+  regenerateOrganizationPingKey: { id: string; pingKey: string };
+}
+
 interface UpdateCheckResponse {
   updateCheck: {
     id: string;
@@ -98,6 +102,7 @@ interface Organization {
   plan: string;
   creatorUserId: string;
   creatorLabel: string;
+  pingKey: string;
   projects: Project[];
 }
 
@@ -236,14 +241,114 @@ function text(str: string): ToolResult {
   return { content: [{ type: "text", text: str }] };
 }
 
+export type WorkspaceToolArgs = {
+  organizationId?: string;
+  projectId?: string;
+};
+
+type WorkspaceSelector =
+  | { organizationId: string }
+  | { projectId: string };
+
+export function readWorkspaceSelector(
+  args: Record<string, unknown>,
+): WorkspaceSelector {
+  const organizationId =
+    typeof args["organizationId"] === "string" &&
+    args["organizationId"].length > 0
+      ? args["organizationId"]
+      : undefined;
+  const projectId =
+    typeof args["projectId"] === "string" && args["projectId"].length > 0
+      ? args["projectId"]
+      : undefined;
+
+  if ((organizationId === undefined) === (projectId === undefined)) {
+    throw new Error(
+      "Exactly one workspace selector is required: organizationId or deprecated projectId.",
+    );
+  }
+
+  if (organizationId !== undefined) {
+    return { organizationId };
+  }
+  if (projectId !== undefined) {
+    return { projectId };
+  }
+  throw new Error("Workspace selector validation failed.");
+}
+
+const workspaceInputSchema = {
+  organizationId: z
+    .string()
+    .min(1)
+    .optional()
+    .describe("The organization workspace ID"),
+  projectId: z
+    .string()
+    .min(1)
+    .optional()
+    .describe("Deprecated compatibility selector: the legacy project ID"),
+};
+
+function workspaceGraphql(selector: WorkspaceSelector): {
+  variableDefinition: string;
+  argument: string;
+  variables: Record<string, unknown>;
+  label: string;
+} {
+  if ("organizationId" in selector) {
+    return {
+      variableDefinition: "$organizationId: ID!",
+      argument: "organizationId: $organizationId",
+      variables: selector,
+      label: `organization ${selector.organizationId}`,
+    };
+  }
+  return {
+    variableDefinition: "$projectId: ID!",
+    argument: "projectId: $projectId",
+    variables: selector,
+    label: `legacy project ${selector.projectId}`,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Tools
 // ---------------------------------------------------------------------------
 
+const listOrganizations: ToolDef = {
+  name: "list_organizations",
+  description:
+    "List all organization workspaces accessible with the current API token.",
+  inputSchema: {},
+  handler: async (_args, gql) => {
+    const data = await gql(`{
+      me {
+        organizations {
+          id
+          name
+          plan
+          creatorUserId
+          creatorLabel
+          pingKey
+        }
+      }
+    }`);
+
+    const { me } = cast<MeResponse>(data);
+    const lines = me.organizations.map(
+      (org) =>
+        `Organization: ${org.name} (${org.id}) — ${org.plan} plan inherited from ${org.creatorLabel} (${org.creatorUserId}), pingKey: ${org.pingKey}`,
+    );
+    return text(lines.length > 0 ? lines.join("\n") : "No organizations found.");
+  },
+};
+
 const listProjects: ToolDef = {
   name: "list_projects",
   description:
-    "List all organizations and their projects accessible with the current API token.",
+    "Deprecated compatibility tool: list all organizations and their legacy projects accessible with the current API token.",
   inputSchema: {},
   handler: async (_args, gql) => {
     const data = await gql(`{
@@ -285,13 +390,14 @@ const listProjects: ToolDef = {
 
 const listChecks: ToolDef = {
   name: "list_checks",
-  description: "List all checks for a given project.",
-  inputSchema: { projectId: z.string().min(1).describe("The project ID to list checks for") },
+  description:
+    "List all checks for an organization workspace. Deprecated projectId compatibility remains available for this release.",
+  inputSchema: workspaceInputSchema,
   handler: async (args, gql) => {
-    const projectId = args["projectId"] as string;
+    const workspace = workspaceGraphql(readWorkspaceSelector(args));
     const data = await gql(
-      `query checks($projectId: ID!) {
-        checks(projectId: $projectId) {
+      `query checks(${workspace.variableDefinition}) {
+        checks(${workspace.argument}) {
           id
           name
           slug
@@ -306,12 +412,12 @@ const listChecks: ToolDef = {
           lastEventAt
         }
       }`,
-      { projectId },
+      workspace.variables,
     );
 
     const { checks } = cast<ChecksResponse>(data);
     if (checks.length === 0) {
-      return text(`No checks found for project ${projectId}.`);
+      return text(`No checks found for ${workspace.label}.`);
     }
 
     const lines = checks.map((c) => {
@@ -328,7 +434,7 @@ const listChecks: ToolDef = {
       return `- ${c.name} [${c.type}] status: ${c.status}${slug} ${interval} (${last})${next}`;
     });
 
-    return text(`Checks for project ${projectId}:\n${lines.join("\n")}`);
+    return text(`Checks for ${workspace.label}:\n${lines.join("\n")}`);
   },
 };
 
@@ -406,13 +512,13 @@ const getCheck: ToolDef = {
 const listChannels: ToolDef = {
   name: "list_channels",
   description:
-    "List notification channels for a given project, including already-connected Telegram rows.",
-  inputSchema: { projectId: z.string().min(1).describe("The project ID") },
+    "List notification channels for an organization workspace, including already-connected Telegram rows. Deprecated projectId compatibility remains available for this release.",
+  inputSchema: workspaceInputSchema,
   handler: async (args, gql) => {
-    const projectId = args["projectId"] as string;
+    const workspace = workspaceGraphql(readWorkspaceSelector(args));
     const data = await gql(
-      `query channels($projectId: ID!) {
-        channels(projectId: $projectId) {
+      `query channels(${workspace.variableDefinition}) {
+        channels(${workspace.argument}) {
           id
           type
           enabled
@@ -421,12 +527,12 @@ const listChannels: ToolDef = {
           verificationExpiresAt
         }
       }`,
-      { projectId },
+      workspace.variables,
     );
 
     const { channels } = cast<ChannelsResponse>(data);
     if (channels.length === 0) {
-      return text(`No channels found for project ${projectId}.`);
+      return text(`No channels found for ${workspace.label}.`);
     }
 
     const lines = channels.map((ch) => {
@@ -441,7 +547,7 @@ const listChannels: ToolDef = {
       return `- ${ch.type} (id: ${ch.id}) enabled: ${ch.enabled}${verification}`;
     });
 
-    return text(`Channels for project ${projectId}:\n${lines.join("\n")}`);
+    return text(`Channels for ${workspace.label}:\n${lines.join("\n")}`);
   },
 };
 
@@ -452,9 +558,9 @@ const listChannels: ToolDef = {
 const createHeartbeatCheck: ToolDef = {
   name: "create_heartbeat_check",
   description:
-    "Create a new heartbeat (dead-man's-switch) check for a project. The check expects pings on a schedule; if none arrive within the grace window it alerts. Provide either periodSeconds for a simple fixed period, or a cron schedule + tz for cron-based scheduling — exactly one of the two is required.",
+    "Create a new heartbeat (dead-man's-switch) check for an organization workspace. The check expects pings on a schedule; if none arrive within the grace window it alerts. Provide either periodSeconds for a simple fixed period, or a cron schedule + tz for cron-based scheduling — exactly one of the two is required. Deprecated projectId compatibility remains available for this release.",
   inputSchema: {
-    projectId: z.string().min(1).describe("The project ID to create the check in"),
+    ...workspaceInputSchema,
     name: z.string().describe("Human-readable name for the check"),
     periodSeconds: z
       .number()
@@ -476,7 +582,7 @@ const createHeartbeatCheck: ToolDef = {
     graceSeconds: z.number().int().describe("Grace period after a missed ping before alerting"),
   },
   handler: async (args, gql) => {
-    const projectId = args["projectId"] as string;
+    const workspace = workspaceGraphql(readWorkspaceSelector(args));
     const name = args["name"] as string;
     const periodSeconds = args["periodSeconds"] as number | undefined;
     const schedule = args["schedule"] as string | undefined;
@@ -485,7 +591,7 @@ const createHeartbeatCheck: ToolDef = {
 
     const data = await gql(
       `mutation createCheck(
-        $projectId: ID!
+        ${workspace.variableDefinition}
         $name: String!
         $graceSeconds: Int!
         $periodSeconds: Int
@@ -493,7 +599,7 @@ const createHeartbeatCheck: ToolDef = {
         $tz: String
       ) {
         createCheck(
-          projectId: $projectId
+          ${workspace.argument}
           name: $name
           graceSeconds: $graceSeconds
           periodSeconds: $periodSeconds
@@ -503,7 +609,14 @@ const createHeartbeatCheck: ToolDef = {
           id
         }
       }`,
-      { projectId, name, graceSeconds, periodSeconds, schedule, tz },
+      {
+        ...workspace.variables,
+        name,
+        graceSeconds,
+        periodSeconds,
+        schedule,
+        tz,
+      },
     );
 
     const { createCheck } = cast<CreateCheckResponse>(data);
@@ -514,9 +627,9 @@ const createHeartbeatCheck: ToolDef = {
 const createActiveCheck: ToolDef = {
   name: "create_active_check",
   description:
-    "Create a new active (HTTP or TCP) check for a project. The monitoring worker will probe the target on the given interval.",
+    "Create a new active (HTTP or TCP) check for an organization workspace. The monitoring worker will probe the target on the given interval. Deprecated projectId compatibility remains available for this release.",
   inputSchema: {
-    projectId: z.string().min(1).describe("The project ID"),
+    ...workspaceInputSchema,
     name: z.string().describe("Human-readable name for the check"),
     type: z.enum(["HTTP", "TCP"]).describe("Check type: HTTP or TCP"),
     target: z.string().describe("URL (HTTP) or host:port (TCP) to probe"),
@@ -526,7 +639,7 @@ const createActiveCheck: ToolDef = {
     expectedStatus: z.number().int().optional().describe("Expected HTTP status code (e.g. 200)"),
   },
   handler: async (args, gql) => {
-    const projectId = args["projectId"] as string;
+    const workspace = workspaceGraphql(readWorkspaceSelector(args));
     const name = args["name"] as string;
     const type = args["type"] as string;
     const target = args["target"] as string;
@@ -537,7 +650,7 @@ const createActiveCheck: ToolDef = {
 
     const data = await gql(
       `mutation createActiveCheck(
-        $projectId: ID!
+        ${workspace.variableDefinition}
         $name: String!
         $type: String!
         $target: String!
@@ -547,7 +660,7 @@ const createActiveCheck: ToolDef = {
         $expectedStatus: Int
       ) {
         createActiveCheck(
-          projectId: $projectId
+          ${workspace.argument}
           name: $name
           type: $type
           target: $target
@@ -559,7 +672,16 @@ const createActiveCheck: ToolDef = {
           id
         }
       }`,
-      { projectId, name, type, target, intervalSeconds, timeoutMs, method, expectedStatus },
+      {
+        ...workspace.variables,
+        name,
+        type,
+        target,
+        intervalSeconds,
+        timeoutMs,
+        method,
+        expectedStatus,
+      },
     );
 
     const { createActiveCheck: result } = cast<CreateActiveCheckResponse>(data);
@@ -671,9 +793,9 @@ const deleteCheck: ToolDef = {
 const createChannel: ToolDef = {
   name: "create_channel",
   description:
-    "Create an EMAIL, SLACK, or WEBHOOK notification channel. Telegram destinations require the interactive SystemVitals managed-bot handshake in the web app; agents cannot bypass destination validation.",
+    "Create an EMAIL, SLACK, or WEBHOOK notification channel in an organization workspace. Telegram destinations require the interactive SystemVitals managed-bot handshake in the web app; agents cannot bypass destination validation. Deprecated projectId compatibility remains available for this release.",
   inputSchema: {
-    projectId: z.string().min(1).describe("The project ID"),
+    ...workspaceInputSchema,
     type: z.enum(["EMAIL", "SLACK", "WEBHOOK"]).describe("Channel type"),
     configJson: z
       .string()
@@ -682,13 +804,13 @@ const createChannel: ToolDef = {
       ),
   },
   handler: async (args, gql) => {
-    const projectId = args["projectId"] as string;
+    const workspace = workspaceGraphql(readWorkspaceSelector(args));
     const type = args["type"] as string;
     const configJson = args["configJson"] as string;
 
     const data = await gql(
-      `mutation createChannel($projectId: ID!, $type: String!, $configJson: String!) {
-        createChannel(projectId: $projectId, type: $type, configJson: $configJson) {
+      `mutation createChannel(${workspace.variableDefinition}, $type: String!, $configJson: String!) {
+        createChannel(${workspace.argument}, type: $type, configJson: $configJson) {
           id
           type
           enabled
@@ -697,7 +819,7 @@ const createChannel: ToolDef = {
           verificationExpiresAt
         }
       }`,
-      { projectId, type, configJson },
+      { ...workspace.variables, type, configJson },
     );
 
     const { createChannel: result } = cast<CreateChannelResponse>(data);
@@ -775,12 +897,26 @@ const deleteChannel: ToolDef = {
 const regeneratePingKey: ToolDef = {
   name: "regenerate_ping_key",
   description:
-    "Regenerate the ping key for a project. The old key is immediately invalidated.",
-  inputSchema: {
-    projectId: z.string().min(1).describe("The project ID whose ping key to regenerate"),
-  },
+    "Regenerate the ping key for an organization workspace. The old key is immediately invalidated. Deprecated projectId compatibility remains available for this release.",
+  inputSchema: workspaceInputSchema,
   handler: async (args, gql) => {
-    const projectId = args["projectId"] as string;
+    const selector = readWorkspaceSelector(args);
+    if ("organizationId" in selector) {
+      const data = await gql(
+        `mutation regenerateOrganizationPingKey($organizationId: ID!) {
+          regenerateOrganizationPingKey(organizationId: $organizationId) {
+            id
+            pingKey
+          }
+        }`,
+        selector,
+      );
+      const { regenerateOrganizationPingKey: result } =
+        cast<RegenerateOrganizationPingKeyResponse>(data);
+      return text(
+        `Ping key regenerated for organization ${result.id}. New pingKey: ${result.pingKey}`,
+      );
+    }
 
     const data = await gql(
       `mutation regeneratePingKey($projectId: ID!) {
@@ -789,11 +925,12 @@ const regeneratePingKey: ToolDef = {
           pingKey
         }
       }`,
-      { projectId },
+      selector,
     );
-
     const { regeneratePingKey: result } = cast<RegeneratePingKeyResponse>(data);
-    return text(`Ping key regenerated for project ${result.id}. New pingKey: ${result.pingKey}`);
+    return text(
+      `Ping key regenerated for legacy project ${result.id}. New pingKey: ${result.pingKey}`,
+    );
   },
 };
 
@@ -1190,6 +1327,7 @@ const deleteOrganization: ToolDef = {
 };
 
 const toolDefinitions: ToolDef[] = [
+  listOrganizations,
   listProjects,
   listChecks,
   getCheck,

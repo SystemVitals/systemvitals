@@ -1,8 +1,8 @@
 # SystemVitals MCP Server
 
 Drive [SystemVitals](../../README.md) from Claude Code or any MCP-compatible
-client. Session and legacy broad credentials expose the 25 tools listed below;
-project-scoped connections expose only their authorized check tools.
+client. Session and legacy broad credentials expose the 26 tools listed below;
+organization-scoped connections expose only their authorized check tools.
 
 > **This package is prepared for public publication, but is not currently
 > published.** Publish `@systemvitals/mcp` before deploying frontend setup that
@@ -14,7 +14,7 @@ project-scoped connections expose only their authorized check tools.
 
 - Node.js 22+
 - A running SystemVitals API (default: `http://localhost:8888/graphql`)
-- A SystemVitals agent connection secret (`svt_...`) — open a project and
+- A SystemVitals agent connection secret (`svt_...`) — open an organization and
   choose **Connect agent**. Existing connections and revocation history live
   under **Account > Agent connections**.
 
@@ -83,16 +83,35 @@ needed.
 
 The server introspects the credential before registering tools:
 
-- Session JWTs and legacy broad `read`/`write` tokens retain all **25** tools
+- Session JWTs and legacy broad `read`/`write` tokens retain all **26** tools
   below for compatibility.
-- A full project-scoped agent connection exposes **9** check tools: two reads
-  and seven mutations.
+- A full organization-scoped agent connection exposes **9** check tools: two
+  reads and seven mutations.
 - A read-only scoped credential exposes only **2** tools: `list_checks` and
   `get_check`.
 
-For scoped credentials, the server injects the bound project and no tool schema
-exposes a project selector. Startup fails for a malformed unbound scoped
-credential instead of silently widening access.
+For scoped credentials, the server injects the bound organization and no tool
+schema exposes a workspace selector. When connected to an older API that
+returns only a bound project, the server injects that legacy project instead.
+Startup fails when neither workspace ID is present instead of silently widening
+access.
+
+For session and legacy broad credentials, workspace-scoped tools take exactly
+one selector. Use `organizationId`; the deprecated `projectId` selector remains
+accepted for this compatibility release only. Supplying both or neither is an
+error. Resource-scoped tools such as `get_check`, `pause_check`, and
+`delete_channel` continue to take their resource ID directly.
+
+Organization-first tool call example:
+
+```json
+{
+  "name": "list_checks",
+  "arguments": {
+    "organizationId": "org_123"
+  }
+}
+```
 
 `set_check_channel_enabled` requires the `checks:write` capability. `get_check`
 requires `checks:read` and reports the effective notification channel IDs,
@@ -102,23 +121,27 @@ including an empty selection.
 > sole internal workspace. Use `create_organization`; no separate
 > project-creation step is needed.
 
-## Legacy/session tool catalog (25 total)
+## Legacy/session tool catalog (26 total)
 
-### Read tools (5)
+### Read tools (6)
 
 | Tool | Description |
 |---|---|
+| `list_organizations` | List organization workspaces and their plan, creator, and ping-key metadata |
 | `list_projects` | List all organizations and projects accessible with the current API token |
-| `list_checks` | List all checks for a given project (with status, interval, last event) |
+| `list_checks` | List all checks for an organization workspace (with status, interval, last event) |
 | `get_check` | Get full details and recent events for a specific check |
-| `list_channels` | List notification channels for a given project, including already-connected Telegram rows |
+| `list_channels` | List notification channels for an organization workspace, including already-connected Telegram rows |
 | `list_members` | List the members of an organization, with membership id and role |
+
+`list_projects` is deprecated and remains available for one compatibility
+release. New clients should discover workspaces with `list_organizations`.
 
 ### Write/mutation tools (20)
 
 | Tool | Description |
 |---|---|
-| `regenerate_ping_key` | Regenerate the ping key for a project (old key immediately invalidated) |
+| `regenerate_ping_key` | Regenerate the ping key for an organization workspace (old key immediately invalidated) |
 | `create_heartbeat_check` | Create a heartbeat (dead-man's-switch) check — alerts if pings stop arriving. Provide either `periodSeconds` for a simple period, or `schedule` + `tz` for a cron schedule |
 | `create_active_check` | Create an active HTTP or TCP probe check |
 | `update_check` | Update mutable fields on an existing check (name, period, grace) |
@@ -170,17 +193,17 @@ connection from **Account > Agent connections**.
 
 ## Credential errors
 
-MCP credential and project-policy errors identify the recovery action without
-echoing bearer secrets or inaccessible project details:
+MCP credential and organization-workspace policy errors identify the recovery
+action without echoing bearer secrets or inaccessible workspace details:
 
 | Error | Action |
 |---|---|
 | Credential expired or revoked | Create a new agent connection and update `SYSTEMVITALS_API_TOKEN` |
 | Credential owner account suspended | Ask an administrator to restore the account before reconnecting |
-| Bound project deleted | Connect the agent to an existing project |
-| Bound project access removed | Restore the owner's project membership or create a new connection |
+| Bound organization workspace deleted | Connect the agent to an existing organization |
+| Bound organization access removed | Restore the owner's organization membership or create a new connection |
 | Missing `checks:read` or `checks:write` | Create a connection with the named capability |
-| Credential bound to another project | Use the bound project or connect with a credential for the requested project |
+| Credential bound to another organization | Use the bound organization or connect with a credential for the requested organization |
 | Credential rejected for another reason | Verify `SYSTEMVITALS_API_TOKEN` or create a new connection |
 
 ---

@@ -5,6 +5,8 @@ export type Credential = {
   authKind: "session" | "api-token";
   credentialMode: "SESSION" | "LEGACY_BROAD" | "PROJECT_SCOPED";
   capabilities: readonly string[];
+  organizationId: string | null;
+  organizationName: string | null;
   projectId: string | null;
   projectName: string | null;
 };
@@ -30,6 +32,8 @@ export async function fetchCredential(gql: Gql): Promise<Credential> {
       authKind
       credentialMode
       capabilities
+      organizationId
+      organizationName
       projectId
       projectName
     }
@@ -47,9 +51,16 @@ export function toolsForCredential(
     return tools;
   }
 
-  if (credential.projectId === null) {
+  const workspaceSelector =
+    credential.organizationId !== null
+      ? { organizationId: credential.organizationId }
+      : credential.projectId !== null
+        ? { projectId: credential.projectId }
+        : null;
+
+  if (workspaceSelector === null) {
     throw new Error(
-      "Scoped API credential reports check capabilities but has no project ID.",
+      "Scoped API credential reports check capabilities but has no organization workspace ID.",
     );
   }
 
@@ -65,15 +76,25 @@ export function toolsForCredential(
   return [...names].map((name) => {
     const definition = byName.get(name);
     if (!definition) throw new Error(`MCP tool definition missing: ${name}`);
-    const { projectId: _projectId, ...inputSchema } = definition.inputSchema;
+    const {
+      organizationId: _organizationId,
+      projectId: _projectId,
+      ...inputSchema
+    } = definition.inputSchema;
     return {
       ...definition,
       inputSchema,
-      handler: (args, gql) =>
-        definition.handler(
-          { ...args, projectId: credential.projectId },
+      handler: (args, gql) => {
+        const {
+          organizationId: _callerOrganizationId,
+          projectId: _callerProjectId,
+          ...resourceArgs
+        } = args;
+        return definition.handler(
+          { ...resourceArgs, ...workspaceSelector },
           gql,
-        ),
+        );
+      },
     };
   });
 }

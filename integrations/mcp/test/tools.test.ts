@@ -6,8 +6,10 @@ import { buildServer } from "../src/server.js";
 import { tools } from "../src/tools.js";
 import {
   EMAIL_VERIFICATION_TOOL_ALLOWLIST,
+  LEGACY_PROJECT_TOOL_ALLOWLIST,
   emailVerificationLifecycleToolNames,
   isEmailVerificationLifecycleTool,
+  legacyProjectToolNames,
 } from "./email-verification-tool-boundary.js";
 
 // ---------------------------------------------------------------------------
@@ -27,6 +29,41 @@ function findTool(name: string) {
   if (!tool) throw new Error(`Tool "${name}" not found`);
   return tool;
 }
+
+// ---------------------------------------------------------------------------
+// list_organizations
+// ---------------------------------------------------------------------------
+describe("list_organizations", () => {
+  it("returns canonical organization workspace metadata without project labels", async () => {
+    const { gql, calls } = makeFakeGql({
+      me: {
+        organizations: [
+          {
+            id: "org1",
+            name: "Acme",
+            plan: "SIGNAL",
+            creatorUserId: "user1",
+            creatorLabel: "owner@example.com",
+            pingKey: "pk_org",
+          },
+        ],
+      },
+    });
+
+    const result = await findTool("list_organizations").handler({}, gql);
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].query).toContain("organizations");
+    expect(calls[0].query).toContain("pingKey");
+    expect(calls[0].query).not.toContain("projects");
+    expect(result.content[0].text).toContain("Acme");
+    expect(result.content[0].text).toContain("org1");
+    expect(result.content[0].text).toContain("SIGNAL");
+    expect(result.content[0].text).toContain("owner@example.com");
+    expect(result.content[0].text).toContain("pk_org");
+    expect(result.content[0].text).not.toMatch(/projects?/i);
+  });
+});
 
 // ---------------------------------------------------------------------------
 // list_projects
@@ -69,6 +106,117 @@ describe("list_projects", () => {
   });
 });
 
+const workspaceToolCases = [
+  {
+    name: "list_checks",
+    args: {},
+    data: { checks: [] },
+    operation: "checks(organizationId: $organizationId)",
+  },
+  {
+    name: "list_channels",
+    args: {},
+    data: { channels: [] },
+    operation: "channels(organizationId: $organizationId)",
+  },
+  {
+    name: "create_heartbeat_check",
+    args: {
+      name: "Nightly job",
+      periodSeconds: 300,
+      graceSeconds: 60,
+    },
+    data: { createCheck: { id: "check-heartbeat" } },
+    operation: "organizationId: $organizationId",
+  },
+  {
+    name: "create_active_check",
+    args: {
+      name: "Homepage",
+      type: "HTTP",
+      target: "https://example.com",
+      intervalSeconds: 60,
+      timeoutMs: 5000,
+    },
+    data: { createActiveCheck: { id: "check-active" } },
+    operation: "organizationId: $organizationId",
+  },
+  {
+    name: "create_channel",
+    args: {
+      type: "SLACK",
+      configJson: '{"webhookUrl":"https://example.com/hook"}',
+    },
+    data: {
+      createChannel: {
+        id: "channel-1",
+        type: "SLACK",
+        enabled: true,
+        verificationStatus: "NOT_REQUIRED",
+        verificationDeliveryStatus: "NOT_REQUIRED",
+        verificationExpiresAt: null,
+      },
+    },
+    operation: "organizationId: $organizationId",
+  },
+  {
+    name: "regenerate_ping_key",
+    args: {},
+    data: {
+      regenerateOrganizationPingKey: {
+        id: "org1",
+        pingKey: "pk_new",
+      },
+    },
+    operation:
+      "regenerateOrganizationPingKey(organizationId: $organizationId)",
+  },
+] as const;
+
+describe.each(workspaceToolCases)(
+  "$name organization workspace selector",
+  ({ name, args, data, operation }) => {
+    it("sends the canonical organizationId variable and argument", async () => {
+      const { gql, calls } = makeFakeGql(data);
+
+      await findTool(name).handler({ ...args, organizationId: "org1" }, gql);
+
+      expect(calls).toHaveLength(1);
+      expect(calls[0].variables).toMatchObject({ organizationId: "org1" });
+      expect(calls[0].variables).not.toHaveProperty("projectId");
+      expect(calls[0].query).toContain(operation);
+      expect(calls[0].query).not.toContain("projectId");
+    });
+
+    it("exposes optional canonical and deprecated compatibility selectors", () => {
+      const schema = findTool(name).inputSchema;
+
+      expect(schema.organizationId.safeParse(undefined).success).toBe(true);
+      expect(schema.projectId.safeParse(undefined).success).toBe(true);
+      expect(schema.organizationId.description).toMatch(/organization/i);
+      expect(schema.projectId.description).toMatch(/deprecated/i);
+    });
+
+    it.each([
+      ["neither", {}],
+      [
+        "both",
+        {
+          organizationId: "org1",
+          projectId: "legacy-project",
+        },
+      ],
+    ])("rejects %s selector before GraphQL", async (_case, selector) => {
+      const gql = vi.fn<Gql>().mockResolvedValue(data);
+
+      await expect(
+        findTool(name).handler({ ...args, ...selector }, gql),
+      ).rejects.toThrow(/exactly one.*organizationId.*projectId/i);
+      expect(gql).not.toHaveBeenCalled();
+    });
+  },
+);
+
 describe("safe API errors", () => {
   const cases = [
     [
@@ -85,11 +233,19 @@ describe("safe API errors", () => {
     ],
     [
       "Credential project no longer exists",
-      "The project bound to this SystemVitals credential no longer exists. Connect the agent to an existing project.",
+      "The organization workspace bound to this SystemVitals credential no longer exists. Connect the agent to an existing organization.",
+    ],
+    [
+      "Credential organization no longer exists",
+      "The organization workspace bound to this SystemVitals credential no longer exists. Connect the agent to an existing organization.",
     ],
     [
       "Credential project is no longer accessible",
-      "Access to the project bound to this SystemVitals credential was removed. Restore the owner's project membership or create a new agent connection.",
+      "Access to the organization workspace bound to this SystemVitals credential was removed. Restore the owner's organization membership or create a new agent connection.",
+    ],
+    [
+      "Credential organization is no longer accessible",
+      "Access to the organization workspace bound to this SystemVitals credential was removed. Restore the owner's organization membership or create a new agent connection.",
     ],
     [
       "Missing capability: checks:write",
@@ -97,7 +253,11 @@ describe("safe API errors", () => {
     ],
     [
       "Credential is bound to a different project",
-      "This SystemVitals credential is bound to a different project. Use the bound project or connect with a credential for the requested project.",
+      "This SystemVitals credential is bound to a different organization workspace. Use the bound organization or connect with a credential for the requested organization.",
+    ],
+    [
+      "Credential is bound to a different organization",
+      "This SystemVitals credential is bound to a different organization workspace. Use the bound organization or connect with a credential for the requested organization.",
     ],
     [
       "Unauthorized",
@@ -109,7 +269,7 @@ describe("safe API errors", () => {
     ],
     [
       "Forbidden resource",
-      "This credential cannot perform that project operation.",
+      "This credential cannot perform that organization workspace operation.",
     ],
   ] as const;
 
@@ -120,10 +280,10 @@ describe("safe API errors", () => {
     };
 
     await expect(
-      findTool("list_checks").handler({ projectId: "p1" }, gql),
+      findTool("list_checks").handler({ organizationId: "org1" }, gql),
     ).rejects.toThrow(expected);
     await expect(
-      findTool("list_checks").handler({ projectId: "p1" }, gql),
+      findTool("list_checks").handler({ organizationId: "org1" }, gql),
     ).rejects.not.toThrow(secret);
   });
 });
@@ -844,6 +1004,9 @@ describe("delete_channel", () => {
 describe("project creation", () => {
   it("does not expose create_project", () => {
     expect(tools.map(({ name }) => name)).not.toContain("create_project");
+    expect(legacyProjectToolNames(tools.map(({ name }) => name))).toEqual(
+      LEGACY_PROJECT_TOOL_ALLOWLIST,
+    );
   });
 });
 
