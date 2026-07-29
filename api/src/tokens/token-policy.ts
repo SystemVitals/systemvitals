@@ -24,6 +24,7 @@ const SESSION_ONLY_OPERATIONS = new Set([
   'telegramConnectionPreview',
   'connectTelegramChannel',
   'moveCheck',
+  'organizationCheckAllowance',
 ]);
 
 export function requireOperationAccess(

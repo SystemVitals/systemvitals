@@ -33,12 +33,54 @@ export interface UpdateOrganizationInput {
   slug?: string | null;
 }
 
+export interface OrganizationCheckAllowance {
+  used: number;
+  limit: number;
+  remaining: number;
+}
+
 @Injectable()
 export class OrganizationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly entitlements: AccountEntitlementsService,
   ) {}
+
+  async organizationCheckAllowance(
+    userId: string,
+    organizationId: string,
+  ): Promise<OrganizationCheckAllowance> {
+    return this.prisma.$transaction(async (tx) => {
+      const membership = await tx.membership.findUnique({
+        where: {
+          userId_organizationId: {
+            userId,
+            organizationId,
+          },
+        },
+        select: {
+          organization: {
+            select: { creatorUserId: true },
+          },
+        },
+      });
+      if (!membership) {
+        throw new ForbiddenException('Not a member of this organization');
+      }
+
+      const account = await this.entitlements.forUser(
+        tx,
+        membership.organization.creatorUserId,
+      );
+      const limit = account.limits.maxChecks;
+      const used = account.checkCount;
+      return {
+        used,
+        limit,
+        remaining: Math.max(0, limit - used),
+      };
+    });
+  }
 
   async create(userId: string, name: string): Promise<OrgRow> {
     const trimmed = name.trim();

@@ -115,7 +115,12 @@ describe('requireOperationAccess', () => {
     ).not.toThrow();
   });
 
-  it.each(['telegramConnectionPreview', 'connectTelegramChannel', 'moveCheck'])(
+  it.each([
+    'telegramConnectionPreview',
+    'connectTelegramChannel',
+    'moveCheck',
+    'organizationCheckAllowance',
+  ])(
     'allows sessions to resolve the session-only operation %s',
     (operationName) => {
       expect(() =>
@@ -124,7 +129,12 @@ describe('requireOperationAccess', () => {
     },
   );
 
-  it.each(['telegramConnectionPreview', 'connectTelegramChannel', 'moveCheck'])(
+  it.each([
+    'telegramConnectionPreview',
+    'connectTelegramChannel',
+    'moveCheck',
+    'organizationCheckAllowance',
+  ])(
     'denies scoped API tokens from the session-only operation %s',
     (operationName) => {
       expect(() => {
@@ -133,7 +143,12 @@ describe('requireOperationAccess', () => {
     },
   );
 
-  it.each(['telegramConnectionPreview', 'connectTelegramChannel', 'moveCheck'])(
+  it.each([
+    'telegramConnectionPreview',
+    'connectTelegramChannel',
+    'moveCheck',
+    'organizationCheckAllowance',
+  ])(
     'denies legacy-broad API tokens from the session-only operation %s',
     (operationName) => {
       expect(() => {
