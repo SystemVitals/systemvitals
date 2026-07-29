@@ -44,6 +44,8 @@ describe("AuthProvider", () => {
     const body = JSON.parse(String(request?.body)) as { query: string };
     expect(body.query).toContain("creatorUserId");
     expect(body.query).toContain("creatorLabel");
+    expect(body.query).toMatch(/organizations\s*\{[\s\S]*?pingKey/);
+    expect(body.query).not.toContain("projects");
   });
 
   it("loginWithToken validates the token against /graphql, THEN persists it and sets the user", async () => {

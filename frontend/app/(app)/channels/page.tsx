@@ -1,8 +1,7 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@apollo/client/react";
-import { useSearchParams } from "next/navigation";
 import { Hash, Mail, MessageSquare, Plus, Trash2, Webhook } from "lucide-react";
 import { ManagedTelegramSetup } from "@/components/channels/managed-telegram-setup";
 import { Badge } from "@/components/ui/badge";
@@ -39,20 +38,6 @@ import {
   RESEND_EMAIL_CHANNEL_VERIFICATION,
 } from "@/lib/queries";
 
-interface ProjectReference {
-  id: string;
-}
-
-export function resolveChannelsProject(
-  requestedId: string | null,
-  projects: readonly ProjectReference[]
-): string | null {
-  if (requestedId && projects.some((project) => project.id === requestedId)) {
-    return requestedId;
-  }
-  return projects[0]?.id ?? null;
-}
-
 interface Channel {
   id: string;
   type: string;
@@ -64,7 +49,7 @@ interface Channel {
 }
 
 interface CreateChannelVariables {
-  projectId: string;
+  organizationId: string;
   type: string;
   configJson: string;
 }
@@ -270,7 +255,7 @@ interface ManagedTelegramBotData {
 }
 
 interface ChannelsListProps {
-  projectId: string;
+  organizationId: string;
 }
 
 function getErrorMessage(error: unknown, fallback: string): string {
@@ -281,7 +266,7 @@ function getErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
-function ChannelsList({ projectId }: ChannelsListProps) {
+function ChannelsList({ organizationId }: ChannelsListProps) {
   const [channelType, setChannelType] =
     useState<CreatableChannelType>("EMAIL");
   const [email, setEmail] = useState("");
@@ -298,7 +283,7 @@ function ChannelsList({ projectId }: ChannelsListProps) {
     loading,
     error: queryError,
   } = useQuery<{ channels: Channel[] }>(CHANNELS, {
-    variables: { projectId },
+    variables: { organizationId },
   });
   const {
     data: managedBotData,
@@ -319,7 +304,7 @@ function ChannelsList({ projectId }: ChannelsListProps) {
       try {
         const cached = cache.readQuery<{ channels: Channel[] }>({
           query: CHANNELS,
-          variables: { projectId: variables.projectId },
+          variables: { organizationId: variables.organizationId },
         });
         const cachedChannels = cached?.channels ?? [];
 
@@ -340,7 +325,7 @@ function ChannelsList({ projectId }: ChannelsListProps) {
 
         cache.writeQuery({
           query: CHANNELS,
-          variables: { projectId: variables.projectId },
+          variables: { organizationId: variables.organizationId },
           data: { channels },
         });
       } catch (error) {
@@ -418,7 +403,7 @@ function ChannelsList({ projectId }: ChannelsListProps) {
     try {
       await createChannel({
         variables: {
-          projectId,
+          organizationId,
           type: channelType,
           configJson: buildConfig(),
         },
@@ -734,31 +719,11 @@ function ChannelsList({ projectId }: ChannelsListProps) {
   );
 }
 
-function ChannelsProjectSelection({
-  projects,
-}: {
-  projects: readonly ProjectReference[];
-}) {
-  const searchParams = useSearchParams();
-  const projectId = resolveChannelsProject(
-    searchParams.get("projectId"),
-    projects
-  );
-
-  if (!projectId) {
-    return <p className="text-muted-foreground">No projects found.</p>;
-  }
-
-  return <ChannelsList key={projectId} projectId={projectId} />;
-}
-
 export default function ChannelsPage() {
   const { user } = useAuth();
   const { activeOrg } = useOrg();
 
   if (!user) return null;
-
-  const projects = activeOrg?.projects ?? [];
 
   return (
     <div className="space-y-6 px-4 py-6 sm:px-6">
@@ -771,12 +736,13 @@ export default function ChannelsPage() {
         </p>
       </div>
 
-      {projects.length === 0 ? (
-        <p className="text-muted-foreground">No projects found.</p>
+      {!activeOrg ? (
+        <p className="text-muted-foreground">No organizations found.</p>
       ) : (
-        <Suspense fallback={<Skeleton className="h-56 w-full rounded-xl" />}>
-          <ChannelsProjectSelection projects={projects} />
-        </Suspense>
+        <ChannelsList
+          key={activeOrg.id}
+          organizationId={activeOrg.id}
+        />
       )}
     </div>
   );

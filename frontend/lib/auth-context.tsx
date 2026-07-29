@@ -1,7 +1,6 @@
 "use client";
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 
-export interface Project { id: string; name: string; slug: string; pingKey: string }
 export interface Org {
   id: string;
   name: string;
@@ -10,7 +9,7 @@ export interface Org {
   plan: string;
   creatorUserId: string;
   creatorLabel: string;
-  projects: Project[];
+  pingKey: string;
 }
 interface User { id: string; email: string; isAdmin: boolean; hasPassword: boolean; googleLinked: boolean; organizations: Org[] }
 
@@ -31,7 +30,7 @@ async function fetchMe(token: string): Promise<User | null> {
   const res = await fetch(`${API}/graphql`, {
     method: "POST",
     headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-    body: JSON.stringify({ query: `{ me { id email isAdmin hasPassword googleLinked organizations { id name slug role plan creatorUserId creatorLabel projects { id name slug pingKey } } } }` }),
+    body: JSON.stringify({ query: `{ me { id email isAdmin hasPassword googleLinked organizations { id name slug role plan creatorUserId creatorLabel pingKey } } }` }),
   });
   const json = await res.json();
   return json.data?.me ?? null;

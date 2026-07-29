@@ -40,7 +40,6 @@ import { planIntervalFloor } from "@/lib/plan-limits";
 import { isValidCron, nextCronFires } from "@/lib/cron";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CopyField } from "@/components/app/copy-field";
-import { ConnectAgentDialog } from "@/components/app/connect-agent-dialog";
 import {
   CheckNotificationChannels,
   type NotificationChannelOption,
@@ -112,15 +111,18 @@ function NotificationChannelsPlaceholder({
 interface CreateCheckDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  projectId: string;
+  organizationId: string;
   onCreated: () => void;
 }
 
-function CreateCheckDialog({ open, onOpenChange, projectId, onCreated }: CreateCheckDialogProps) {
+function CreateCheckDialog({
+  open,
+  onOpenChange,
+  organizationId,
+  onCreated,
+}: CreateCheckDialogProps) {
   const { orgs } = useOrg();
-  const owningOrg = orgs.find((org) =>
-    org.projects.some((project) => project.id === projectId),
-  );
+  const owningOrg = orgs.find((org) => org.id === organizationId);
   const floor = planIntervalFloor(owningOrg?.plan ?? "SOLO");
 
   const [checkType, setCheckType] = useState<CheckType>("HEARTBEAT");
@@ -193,7 +195,7 @@ function CreateCheckDialog({ open, onOpenChange, projectId, onCreated }: CreateC
       if (scheduleType === "cron") {
         await createCheck({
           variables: {
-            projectId,
+            organizationId,
             name,
             graceSeconds: parseInt(graceSeconds, 10),
             schedule,
@@ -203,7 +205,7 @@ function CreateCheckDialog({ open, onOpenChange, projectId, onCreated }: CreateC
       } else {
         await createCheck({
           variables: {
-            projectId,
+            organizationId,
             name,
             periodSeconds: parseInt(periodSeconds, 10),
             graceSeconds: parseInt(graceSeconds, 10),
@@ -213,7 +215,7 @@ function CreateCheckDialog({ open, onOpenChange, projectId, onCreated }: CreateC
     } else {
       await createActiveCheck({
         variables: {
-          projectId,
+          organizationId,
           name,
           type: checkType,
           target,
@@ -435,22 +437,23 @@ function CreateCheckDialog({ open, onOpenChange, projectId, onCreated }: CreateC
 }
 
 interface ChecksListProps {
-  projectId: string;
-  projectName: string;
-  orgSlug: string;
-  projectSlug: string;
+  organizationId: string;
+  organizationSlug: string;
 }
 
-function ChecksList({ projectId, projectName, orgSlug, projectSlug }: ChecksListProps) {
+function ChecksList({
+  organizationId,
+  organizationSlug,
+}: ChecksListProps) {
   const [showCreate, setShowCreate] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [channelErrorDialog, setChannelErrorDialog] = useState<{
-    projectId: string;
+    organizationId: string;
     message: string;
   } | null>(null);
 
   const query = useQuery<{ checks: CheckItem[] }>(CHECKS, {
-    variables: { projectId },
+    variables: { organizationId },
     // Apollo 4 defaults this to true, which would flip `loading` on every poll,
     // flashing the skeleton and the empty state over good content every 15s.
     notifyOnNetworkStatusChange: false,
@@ -464,7 +467,7 @@ function ChecksList({ projectId, projectName, orgSlug, projectSlug }: ChecksList
   } = useQuery<{
     channels: NotificationChannelOption[];
   }>(CHANNELS, {
-    variables: { projectId },
+    variables: { organizationId },
   });
   const channels = useMemo(
     () => (channelData?.channels ?? []).filter((channel) => channel.enabled),
@@ -497,18 +500,18 @@ function ChecksList({ projectId, projectName, orgSlug, projectSlug }: ChecksList
     if (channelError) {
       Promise.resolve().then(() =>
         setChannelErrorDialog({
-          projectId,
+          organizationId,
           message: "Could not load notification channels. Please try again.",
         }),
       );
     } else if (channelData) {
       Promise.resolve().then(() =>
         setChannelErrorDialog((current) =>
-          current?.projectId === projectId ? null : current,
+          current?.organizationId === organizationId ? null : current,
         ),
       );
     }
-  }, [channelData, channelError, projectId]);
+  }, [channelData, channelError, organizationId]);
 
   const checks = data?.checks ?? [];
 
@@ -517,7 +520,6 @@ function ChecksList({ projectId, projectName, orgSlug, projectSlug }: ChecksList
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-lg font-medium">Checks</h2>
         <div className="flex flex-wrap items-center gap-2">
-          <ConnectAgentDialog projectId={projectId} projectName={projectName} />
           <Button size="sm" onClick={() => setShowCreate(true)}>
             <Plus className="h-4 w-4 mr-1" />
             New check
@@ -550,11 +552,6 @@ function ChecksList({ projectId, projectName, orgSlug, projectSlug }: ChecksList
                 <Plus className="h-4 w-4 mr-1" />
                 New check
               </Button>
-              <ConnectAgentDialog
-                projectId={projectId}
-                projectName={projectName}
-                secondary
-              />
             </div>
           </CardContent>
         </Card>
@@ -571,7 +568,7 @@ function ChecksList({ projectId, projectName, orgSlug, projectSlug }: ChecksList
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base">
                     <Link
-                      href={`/${orgSlug}/${projectSlug}/${check.slug}`}
+                      href={`/${organizationSlug}/${check.slug}`}
                       className="hover:underline"
                     >
                       {check.name}
@@ -647,7 +644,7 @@ function ChecksList({ projectId, projectName, orgSlug, projectSlug }: ChecksList
       <CreateCheckDialog
         open={showCreate}
         onOpenChange={setShowCreate}
-        projectId={projectId}
+        organizationId={organizationId}
         onCreated={() => refetch()}
       />
 
@@ -662,7 +659,7 @@ function ChecksList({ projectId, projectName, orgSlug, projectSlug }: ChecksList
       </Dialog>
 
       <Dialog
-        open={channelErrorDialog?.projectId === projectId}
+        open={channelErrorDialog?.organizationId === organizationId}
         onOpenChange={(open) => {
           if (!open) setChannelErrorDialog(null);
         }}
@@ -704,24 +701,19 @@ export default function DashboardPage() {
 
   if (!user) return null;
 
-  const firstOrg = activeOrg;
-  const firstProject = activeOrg?.projects[0];
-
   return (
     <div className="px-4 py-6 sm:px-6 space-y-8">
       <div className="flex items-center justify-between mb-6">
         <h1 className="font-heading text-2xl font-semibold tracking-tight">Dashboard</h1>
       </div>
 
-      {!firstOrg || !firstProject ? (
-        <p className="text-muted-foreground">No projects found.</p>
+      {!activeOrg ? (
+        <p className="text-muted-foreground">No organizations found.</p>
       ) : (
         <ChecksList
-          key={firstProject.id}
-          projectId={firstProject.id}
-          projectName={firstProject.name}
-          orgSlug={firstOrg.slug}
-          projectSlug={firstProject.slug}
+          key={activeOrg.id}
+          organizationId={activeOrg.id}
+          organizationSlug={activeOrg.slug}
         />
       )}
     </div>

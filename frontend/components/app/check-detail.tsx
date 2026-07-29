@@ -19,10 +19,7 @@ import { CopyField } from "@/components/app/copy-field";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EventTimeline, type TimelineEvent } from "@/components/app/event-timeline";
 import { EditCheckDialog, type UpdatedCheck } from "@/components/app/edit-check-dialog";
-import {
-  MoveCheckDialog,
-  type MoveDestination,
-} from "@/components/app/move-check-dialog";
+import type { MoveDestination } from "@/components/app/move-check-dialog";
 import {
   CheckNotificationChannels,
   type NotificationChannelOption,
@@ -36,7 +33,7 @@ type CheckEvent = TimelineEvent;
 
 export interface CheckDetailData {
   id: string;
-  projectId: string;
+  organizationId: string;
   notificationChannelIds: string[];
   name: string;
   slug: string;
@@ -95,7 +92,7 @@ function CheckNotificationChannelsSection({
     error,
     refetch,
   } = useQuery<{ channels: NotificationChannelOption[] }>(CHANNELS, {
-    variables: { projectId: check.projectId },
+    variables: { organizationId: check.organizationId },
   });
   const channels = useMemo(
     () => (data?.channels ?? []).filter((channel) => channel.enabled),
@@ -168,7 +165,6 @@ export function CheckDetail({
   loading,
   error,
   onRefetch,
-  onMoved,
 }: {
   check: CheckDetailData | undefined;
   loading: boolean;
@@ -235,12 +231,6 @@ export function CheckDetail({
               <Pencil className="h-4 w-4 mr-1" />
               Edit
             </Button>
-            <MoveCheckDialog
-              checkId={check.id}
-              sourceProjectId={check.projectId}
-              checkSlug={check.slug}
-              onMoved={onMoved}
-            />
           </div>
 
           {pingUrl && (
@@ -295,7 +285,7 @@ export function CheckDetail({
           )}
 
           <CheckNotificationChannelsSection
-            key={`${check.id}:${check.projectId}`}
+            key={`${check.id}:${check.organizationId}`}
             check={check}
           />
 

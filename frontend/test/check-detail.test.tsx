@@ -28,7 +28,7 @@ const ORGS = [
     plan: "SOLO",
     creatorUserId: "creator-source",
     creatorLabel: "source@example.com",
-    projects: [{ id: "project-1", name: "Source", slug: "source", pingKey: "source" }],
+    pingKey: "source",
   },
   {
     id: "org-destination",
@@ -38,20 +38,13 @@ const ORGS = [
     plan: "SOLO",
     creatorUserId: "creator-destination",
     creatorLabel: "destination@example.com",
-    projects: [
-      {
-        id: "project-destination",
-        name: "Production",
-        slug: "production",
-        pingKey: "production",
-      },
-    ],
+    pingKey: "destination",
   },
 ] satisfies Org[];
 
 const CHECK_DATA: CheckDetailData = {
   id: "c1",
-  projectId: "project-1",
+  organizationId: "org-source",
   notificationChannelIds: ["email"],
   name: "Nightly backup",
   slug: "nightly-backup",
@@ -92,6 +85,7 @@ const ENABLED_CHANNELS = [
   {
     __typename: "NotificationChannelModel",
     id: "email",
+    organizationId: "org-source",
     type: "EMAIL",
     configJson: '{"email":"alerts@example.com"}',
     enabled: true,
@@ -102,6 +96,7 @@ const ENABLED_CHANNELS = [
   {
     __typename: "NotificationChannelModel",
     id: "webhook",
+    organizationId: "org-source",
     type: "WEBHOOK",
     configJson: '{"url":"https://hooks.example.com/private-token"}',
     enabled: true,
@@ -112,6 +107,7 @@ const ENABLED_CHANNELS = [
   {
     __typename: "NotificationChannelModel",
     id: "telegram-disabled",
+    organizationId: "org-source",
     type: "TELEGRAM",
     configJson: '{"chatTitle":"Disabled room"}',
     enabled: false,
@@ -124,7 +120,7 @@ const ENABLED_CHANNELS = [
 const channelsMock = {
   request: {
     query: CHANNELS,
-    variables: { projectId: "project-1" },
+    variables: { organizationId: "org-source" },
   },
   result: { data: { channels: ENABLED_CHANNELS } },
 };
@@ -152,9 +148,11 @@ describe("CheckDetail", () => {
     orgContext.orgs = ORGS;
   });
 
-  it("loads project identity and notification selections on both direct check routes", () => {
-    expect(print(CHECK)).toContain("projectId");
+  it("loads canonical organization identity on the direct route and preserves the legacy tuple", () => {
+    expect(print(CHECK)).toContain("organizationId");
+    expect(print(CHECK)).not.toContain("projectId");
     expect(print(CHECK)).toContain("notificationChannelIds");
+    expect(print(CHECK_BY_SLUG)).toContain("organizationId");
     expect(print(CHECK_BY_SLUG)).toContain("projectId");
     expect(print(CHECK_BY_SLUG)).toContain("notificationChannelIds");
   });
@@ -183,21 +181,7 @@ describe("CheckDetail", () => {
     expect(screen.getByText("Not Found")).toBeInTheDocument();
   });
 
-  it("shows move check when another owned organization has a project", () => {
-    renderDetail({ onMoved: vi.fn() });
-
-    expect(screen.getByRole("button", { name: "Move check" })).toBeInTheDocument();
-  });
-
-  it("hides move check when the only destination organization is admin", () => {
-    orgContext.orgs = [ORGS[0], { ...ORGS[1], role: "ADMIN" }];
-
-    renderDetail({ onMoved: vi.fn() });
-
-    expect(screen.queryByRole("button", { name: "Move check" })).not.toBeInTheDocument();
-  });
-
-  it("loads channels once for the check project and renders enabled detail controls", async () => {
+  it("loads channels once for the check organization and renders enabled detail controls", async () => {
     const channelsResult = vi.fn(() => ({
       data: { channels: ENABLED_CHANNELS },
     }));
@@ -206,7 +190,7 @@ describe("CheckDetail", () => {
       {
         request: {
           query: CHANNELS,
-          variables: { projectId: "project-1" },
+          variables: { organizationId: "org-source" },
         },
         result: channelsResult,
       },
@@ -236,7 +220,7 @@ describe("CheckDetail", () => {
       {
         request: {
           query: CHANNELS,
-          variables: { projectId: "project-1" },
+          variables: { organizationId: "org-source" },
         },
         delay: 150,
         result: { data: { channels: ENABLED_CHANNELS } },
@@ -258,7 +242,7 @@ describe("CheckDetail", () => {
     ).toBeChecked();
   });
 
-  it("surfaces channel loading failures and retries for the same project", async () => {
+  it("surfaces channel loading failures and retries for the same organization", async () => {
     const successfulRetry = vi.fn(() => ({
       data: { channels: ENABLED_CHANNELS },
     }));
@@ -266,14 +250,14 @@ describe("CheckDetail", () => {
       {
         request: {
           query: CHANNELS,
-          variables: { projectId: "project-1" },
+          variables: { organizationId: "org-source" },
         },
         error: new Error("network unavailable"),
       },
       {
         request: {
           query: CHANNELS,
-          variables: { projectId: "project-1" },
+          variables: { organizationId: "org-source" },
         },
         result: successfulRetry,
       },
@@ -323,7 +307,7 @@ describe("CheckDetail", () => {
       {
         request: {
           query: CHANNELS,
-          variables: { projectId: "project-1" },
+          variables: { organizationId: "org-source" },
         },
         result: { data: { channels: ENABLED_CHANNELS } },
       },
@@ -341,7 +325,7 @@ describe("CheckDetail", () => {
       {
         request: {
           query: CHANNELS,
-          variables: { projectId: "project-1" },
+          variables: { organizationId: "org-source" },
         },
         result: failedRefetch,
       },

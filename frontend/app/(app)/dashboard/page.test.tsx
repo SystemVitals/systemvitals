@@ -22,7 +22,7 @@ const context = vi.hoisted(() => ({
     plan: "SIGNAL",
     creatorUserId: "creator",
     creatorLabel: "creator@example.com",
-    projects: [{ id: "project-signal", name: "App", slug: "app", pingKey: "key" }],
+    pingKey: "key",
   },
   pollWhenVisible: vi.fn(),
 }));
@@ -55,7 +55,7 @@ vi.mock("@/components/ui/slider", () => ({
 const checksMock = {
   request: {
     query: CHECKS,
-    variables: { projectId: "project-signal" },
+    variables: { organizationId: "org-signal" },
   },
   result: { data: { checks: [] } },
 };
@@ -63,7 +63,7 @@ const checksMock = {
 const channelsMock = {
   request: {
     query: CHANNELS,
-    variables: { projectId: "project-signal" },
+    variables: { organizationId: "org-signal" },
   },
   result: { data: { channels: [] } },
 };
@@ -93,7 +93,7 @@ function renderDashboard(
     subscriptionMock(viewerPlan),
   ],
 ) {
-  render(
+  return render(
     <MockedProvider mocks={mocks}>
       <DashboardPage />
     </MockedProvider>
@@ -165,7 +165,16 @@ const enabledChannels = [
 
 describe("DashboardPage", () => {
   beforeEach(() => {
-    context.activeOrg.plan = "SIGNAL";
+    Object.assign(context.activeOrg, {
+      id: "org-signal",
+      name: "Signal org",
+      slug: "signal-org",
+      role: "MEMBER",
+      plan: "SIGNAL",
+      creatorUserId: "creator",
+      creatorLabel: "creator@example.com",
+      pingKey: "key",
+    });
     context.pollWhenVisible.mockClear();
   });
 
@@ -222,14 +231,14 @@ describe("DashboardPage", () => {
       {
         request: {
           query: CHECKS,
-          variables: { projectId: "project-signal" },
+          variables: { organizationId: "org-signal" },
         },
         result: { data: { checks: dashboardChecks } },
       },
       {
         request: {
           query: CHANNELS,
-          variables: { projectId: "project-signal" },
+          variables: { organizationId: "org-signal" },
         },
         result: channelsResult,
       },
@@ -252,6 +261,73 @@ describe("DashboardPage", () => {
       screen.queryByRole("switch", { name: /Telegram notifications/i }),
     ).not.toBeInTheDocument();
     expect(channelsResult).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("link", { name: "API" })).toHaveAttribute(
+      "href",
+      "/signal-org/api",
+    );
+    expect(screen.queryByText("Default")).not.toBeInTheDocument();
+    expect(screen.queryByText("App")).not.toBeInTheDocument();
+  });
+
+  it("reloads checks and notification channels when the active organization changes", async () => {
+    const mocks = [
+      {
+        request: {
+          query: CHECKS,
+          variables: { organizationId: "org-signal" },
+        },
+        result: {
+          data: { checks: [check({ id: "signal-api", name: "Signal API" })] },
+        },
+      },
+      {
+        request: {
+          query: CHANNELS,
+          variables: { organizationId: "org-signal" },
+        },
+        result: { data: { channels: [] } },
+      },
+      {
+        request: {
+          query: CHECKS,
+          variables: { organizationId: "org-beta" },
+        },
+        result: {
+          data: { checks: [check({ id: "beta-api", name: "Beta API" })] },
+        },
+      },
+      {
+        request: {
+          query: CHANNELS,
+          variables: { organizationId: "org-beta" },
+        },
+        result: { data: { channels: [] } },
+      },
+      subscriptionMock("SIGNAL"),
+    ];
+    const view = renderDashboard("SIGNAL", mocks);
+
+    expect(await screen.findByRole("link", { name: "Signal API" })).toHaveAttribute(
+      "href",
+      "/signal-org/signal-api",
+    );
+
+    Object.assign(context.activeOrg, {
+      id: "org-beta",
+      name: "Beta",
+      slug: "beta",
+      pingKey: "beta-key",
+    });
+    view.rerender(
+      <MockedProvider mocks={mocks}>
+        <DashboardPage />
+      </MockedProvider>,
+    );
+
+    expect(await screen.findByRole("link", { name: "Beta API" })).toHaveAttribute(
+      "href",
+      "/beta/beta-api",
+    );
   });
 
   it("shows a neutral channel loading state without false empty or all-off messaging", async () => {
@@ -259,7 +335,7 @@ describe("DashboardPage", () => {
       {
         request: {
           query: CHECKS,
-          variables: { projectId: "project-signal" },
+          variables: { organizationId: "org-signal" },
         },
         result: {
           data: {
@@ -276,7 +352,7 @@ describe("DashboardPage", () => {
       {
         request: {
           query: CHANNELS,
-          variables: { projectId: "project-signal" },
+          variables: { organizationId: "org-signal" },
         },
         delay: 150,
         result: { data: { channels: enabledChannels } },
@@ -309,7 +385,7 @@ describe("DashboardPage", () => {
       {
         request: {
           query: CHECKS,
-          variables: { projectId: "project-signal" },
+          variables: { organizationId: "org-signal" },
         },
         result: {
           data: {
@@ -326,14 +402,14 @@ describe("DashboardPage", () => {
       {
         request: {
           query: CHANNELS,
-          variables: { projectId: "project-signal" },
+          variables: { organizationId: "org-signal" },
         },
         error: new Error("network unavailable"),
       },
       {
         request: {
           query: CHANNELS,
-          variables: { projectId: "project-signal" },
+          variables: { organizationId: "org-signal" },
         },
         result: successfulRetry,
       },
@@ -400,7 +476,7 @@ describe("DashboardPage", () => {
       {
         request: {
           query: CHECKS,
-          variables: { projectId: "project-signal" },
+          variables: { organizationId: "org-signal" },
         },
         result: {
           data: {
@@ -422,7 +498,7 @@ describe("DashboardPage", () => {
       {
         request: {
           query: CHANNELS,
-          variables: { projectId: "project-signal" },
+          variables: { organizationId: "org-signal" },
         },
         result: { data: { channels: enabledChannels } },
       },
@@ -482,7 +558,7 @@ describe("DashboardPage", () => {
       {
         request: {
           query: CHECKS,
-          variables: { projectId: "project-signal" },
+          variables: { organizationId: "org-signal" },
         },
         result: {
           data: {
@@ -499,7 +575,7 @@ describe("DashboardPage", () => {
       {
         request: {
           query: CHANNELS,
-          variables: { projectId: "project-signal" },
+          variables: { organizationId: "org-signal" },
         },
         result: { data: { channels: enabledChannels } },
       },
@@ -544,7 +620,7 @@ describe("DashboardPage", () => {
       {
         request: {
           query: CHECKS,
-          variables: { projectId: "project-signal" },
+          variables: { organizationId: "org-signal" },
         },
         result: { data: { checks } },
         maxUsageCount: 3,
@@ -552,7 +628,7 @@ describe("DashboardPage", () => {
       {
         request: {
           query: CHANNELS,
-          variables: { projectId: "project-signal" },
+          variables: { organizationId: "org-signal" },
         },
         result: { data: { channels: [] } },
       },

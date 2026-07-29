@@ -5,6 +5,7 @@ import { buildSchema, validate, parse, print } from "graphql";
 
 import * as publicDocs from "./queries";
 import * as adminDocs from "./admin-queries";
+import * as legacyDocs from "./legacy-queries";
 
 /**
  * Validates every GraphQL document the frontend sends against the schema the
@@ -37,6 +38,7 @@ function documentsOf(mod: Record<string, unknown>): [string, string][] {
 describe.each([
   ["public", SCHEMAS.public, publicDocs] as const,
   ["admin", SCHEMAS.admin, adminDocs] as const,
+  ["legacy public", SCHEMAS.public, legacyDocs] as const,
 ])("%s GraphQL documents match the served schema", (_surface, schemaPath, mod) => {
   const schema = buildSchema(readFileSync(schemaPath, "utf8"));
   const documents = documentsOf(mod as Record<string, unknown>);
@@ -48,5 +50,35 @@ describe.each([
   it.each(documents)("%s validates", (_name, source) => {
     const errors = validate(schema, parse(source));
     expect(errors.map((e) => e.message)).toEqual([]);
+  });
+});
+
+const CANONICAL_WORKSPACE_DOCUMENTS = [
+  "CHECKS",
+  "CREATE_CHECK",
+  "CREATE_ACTIVE_CHECK",
+  "CHANNELS",
+  "CREATE_CHANNEL",
+  "STATUS_PAGES",
+  "CREATE_STATUS_PAGE",
+] as const;
+
+describe("canonical workspace GraphQL documents", () => {
+  it.each(CANONICAL_WORKSPACE_DOCUMENTS)(
+    "%s is organization-scoped without a project selector",
+    (name) => {
+      const source = print(publicDocs[name]);
+      expect(source).toContain("$organizationId: ID!");
+      expect(source).toContain("organizationId: $organizationId");
+      expect(source).not.toContain("projectId");
+    },
+  );
+
+  it("keeps project-slug lookup only in the legacy document module", () => {
+    expect(legacyDocs).toHaveProperty("CHECK_BY_SLUG");
+    expect(print(legacyDocs.CHECK_BY_SLUG)).toContain("projectSlug");
+    expect(print(publicDocs.CHECK_BY_SLUG)).toBe(
+      print(legacyDocs.CHECK_BY_SLUG),
+    );
   });
 });

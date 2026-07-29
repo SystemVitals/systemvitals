@@ -72,10 +72,10 @@ function CopyButton({ text }: CopyButtonProps) {
 }
 
 interface StatusPagesManagerProps {
-  projectId: string;
+  organizationId: string;
 }
 
-function StatusPagesManager({ projectId }: StatusPagesManagerProps) {
+function StatusPagesManager({ organizationId }: StatusPagesManagerProps) {
   const [slug, setSlug] = useState("");
   const [title, setTitle] = useState("");
   const [selectedCheckIds, setSelectedCheckIds] = useState<string[]>([]);
@@ -84,12 +84,12 @@ function StatusPagesManager({ projectId }: StatusPagesManagerProps) {
 
   const { data: pagesData, refetch: refetchPages, loading: pagesLoading, error: pagesError } =
     useQuery<{ statusPages: StatusPage[] }>(STATUS_PAGES, {
-      variables: { projectId },
+      variables: { organizationId },
     });
 
   const { data: checksData, loading: checksLoading, error: checksError } =
     useQuery<{ checks: CheckItem[] }>(CHECKS, {
-      variables: { projectId },
+      variables: { organizationId },
     });
 
   const [createStatusPage, { loading: creating, error: createError }] = useMutation(
@@ -143,7 +143,7 @@ function StatusPagesManager({ projectId }: StatusPagesManagerProps) {
     setErrorMessage(null);
     await createStatusPage({
       variables: {
-        projectId,
+        organizationId,
         slug,
         title,
         checkIds: selectedCheckIds,
@@ -256,7 +256,9 @@ function StatusPagesManager({ projectId }: StatusPagesManagerProps) {
                 <p className="text-xs text-muted-foreground">Loading checks…</p>
               )}
               {!checksLoading && checks.length === 0 && (
-                <p className="text-xs text-muted-foreground">No checks in this project.</p>
+                <p className="text-xs text-muted-foreground">
+                  No checks in this organization.
+                </p>
               )}
               {checks.length > 0 && (
                 <div className="border border-border rounded-lg divide-y max-h-48 overflow-y-auto">
@@ -340,8 +342,6 @@ export default function StatusPagesPage() {
 
   if (!user) return null;
 
-  const firstProject = activeOrg?.projects[0];
-
   return (
     <div className="px-4 py-6 sm:px-6 space-y-6">
       <div className="mb-6">
@@ -351,10 +351,13 @@ export default function StatusPagesPage() {
         </p>
       </div>
 
-      {!firstProject ? (
-        <p className="text-muted-foreground">No projects found.</p>
+      {!activeOrg ? (
+        <p className="text-muted-foreground">No organizations found.</p>
       ) : (
-        <StatusPagesManager projectId={firstProject.id} />
+        <StatusPagesManager
+          key={activeOrg.id}
+          organizationId={activeOrg.id}
+        />
       )}
     </div>
   );

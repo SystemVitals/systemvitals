@@ -1,8 +1,9 @@
 import { gql } from "@apollo/client";
+export { CHECK_BY_SLUG } from "./legacy-queries";
 
 export const CHECKS = gql`
-  query checks($projectId: ID!) {
-    checks(projectId: $projectId) {
+  query checks($organizationId: ID!) {
+    checks(organizationId: $organizationId) {
       id
       name
       slug
@@ -25,7 +26,7 @@ export const CHECK = gql`
   query check($id: ID!) {
     check(id: $id) {
       id
-      projectId
+      organizationId
       notificationChannelIds
       name
       slug
@@ -54,42 +55,9 @@ export const CHECK = gql`
   }
 `;
 
-export const CHECK_BY_SLUG = gql`
-  query CheckBySlug($orgSlug: String!, $projectSlug: String!, $checkSlug: String!) {
-    checkBySlug(orgSlug: $orgSlug, projectSlug: $projectSlug, checkSlug: $checkSlug) {
-      id
-      projectId
-      notificationChannelIds
-      name
-      slug
-      type
-      status
-      pingSlug
-      periodSeconds
-      graceSeconds
-      schedule
-      tz
-      nextExpectedAt
-      target
-      method
-      expectedStatus
-      intervalSeconds
-      timeoutMs
-      events {
-        id
-        status
-        timestamp
-        error
-        responseTimeMs
-        statusCode
-      }
-    }
-  }
-`;
-
 export const CREATE_CHECK = gql`
   mutation createCheck(
-    $projectId: ID!
+    $organizationId: ID!
     $name: String!
     $graceSeconds: Int!
     $periodSeconds: Int
@@ -97,7 +65,7 @@ export const CREATE_CHECK = gql`
     $tz: String
   ) {
     createCheck(
-      projectId: $projectId
+      organizationId: $organizationId
       name: $name
       graceSeconds: $graceSeconds
       periodSeconds: $periodSeconds
@@ -141,9 +109,10 @@ export const MOVE_CHECK = gql`
 `;
 
 export const CHANNELS = gql`
-  query channels($projectId: ID!) {
-    channels(projectId: $projectId) {
+  query channels($organizationId: ID!) {
+    channels(organizationId: $organizationId) {
       id
+      organizationId
       type
       configJson
       enabled
@@ -164,9 +133,10 @@ export const SET_CHECK_CHANNEL_ENABLED = gql`
 `;
 
 export const CREATE_CHANNEL = gql`
-  mutation createChannel($projectId: ID!, $type: String!, $configJson: String!) {
-    createChannel(projectId: $projectId, type: $type, configJson: $configJson) {
+  mutation createChannel($organizationId: ID!, $type: String!, $configJson: String!) {
+    createChannel(organizationId: $organizationId, type: $type, configJson: $configJson) {
       id
+      organizationId
       enabled
       verificationStatus
       verificationDeliveryStatus
@@ -248,9 +218,10 @@ export const CONNECT_TELEGRAM_CHANNEL = gql`
 `;
 
 export const STATUS_PAGES = gql`
-  query statusPages($projectId: ID!) {
-    statusPages(projectId: $projectId) {
+  query statusPages($organizationId: ID!) {
+    statusPages(organizationId: $organizationId) {
       id
+      organizationId
       slug
       title
       checkIds
@@ -260,20 +231,21 @@ export const STATUS_PAGES = gql`
 
 export const CREATE_STATUS_PAGE = gql`
   mutation createStatusPage(
-    $projectId: ID!
+    $organizationId: ID!
     $slug: String!
     $title: String!
     $checkIds: [ID!]!
     $brandingJson: String
   ) {
     createStatusPage(
-      projectId: $projectId
+      organizationId: $organizationId
       slug: $slug
       title: $title
       checkIds: $checkIds
       brandingJson: $brandingJson
     ) {
       id
+      organizationId
       slug
     }
   }
@@ -400,7 +372,7 @@ export const TRANSFER_ORGANIZATION_CREATORSHIP = gql`
 
 export const CREATE_ACTIVE_CHECK = gql`
   mutation createActiveCheck(
-    $projectId: ID!
+    $organizationId: ID!
     $name: String!
     $type: String!
     $target: String!
@@ -410,7 +382,7 @@ export const CREATE_ACTIVE_CHECK = gql`
     $expectedStatus: Int
   ) {
     createActiveCheck(
-      projectId: $projectId
+      organizationId: $organizationId
       name: $name
       type: $type
       target: $target

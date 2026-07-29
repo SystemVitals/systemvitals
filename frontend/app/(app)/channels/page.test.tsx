@@ -11,7 +11,7 @@ import {
   MANAGED_TELEGRAM_BOT,
   RESEND_EMAIL_CHANNEL_VERIFICATION,
 } from "@/lib/queries";
-import ChannelsPage, { resolveChannelsProject } from "./page";
+import ChannelsPage from "./page";
 
 let requestedProjectId: string | null = null;
 let mockUser: { id: string; email: string } | null = {
@@ -20,13 +20,22 @@ let mockUser: { id: string; email: string } | null = {
 };
 let mockActiveOrg: {
   id: string;
-  projects: { id: string; name: string }[];
+  name: string;
+  slug: string;
+  role: string;
+  plan: string;
+  creatorUserId: string;
+  creatorLabel: string;
+  pingKey: string;
 } | null = {
   id: "org-1",
-  projects: [
-    { id: "project-1", name: "Production" },
-    { id: "project-2", name: "Staging" },
-  ],
+  name: "Operations",
+  slug: "operations",
+  role: "OWNER",
+  plan: "SOLO",
+  creatorUserId: "user-1",
+  creatorLabel: "ops@example.com",
+  pingKey: "ping-1",
 };
 
 vi.mock("next/navigation", () => ({
@@ -61,7 +70,7 @@ const managedBotMock = {
 };
 
 function channelsMock(
-  projectId: string,
+  organizationId: string,
   channels: Array<{
     id: string;
     type: string;
@@ -75,10 +84,15 @@ function channelsMock(
   return {
     request: {
       query: CHANNELS,
-      variables: { projectId },
+      variables: { organizationId },
     },
     result: {
-      data: { channels },
+      data: {
+        channels: channels.map((channel) => ({
+          ...channel,
+          organizationId,
+        })),
+      },
     },
     maxUsageCount: 2,
   };
@@ -103,49 +117,26 @@ function listenForUnhandledRejections() {
   };
 }
 
-describe("resolveChannelsProject", () => {
-  const projects = [
-    { id: "project-1", name: "Production" },
-    { id: "project-2", name: "Staging" },
-  ];
-
-  it("accepts an owned requested project", () => {
-    expect(resolveChannelsProject("project-2", projects)).toBe("project-2");
-  });
-
-  it("rejects a hostile or foreign requested project", () => {
-    expect(resolveChannelsProject("../../admin", projects)).toBe("project-1");
-    expect(resolveChannelsProject("foreign-project", projects)).toBe(
-      "project-1"
-    );
-  });
-
-  it("falls back to the first project when no project was requested", () => {
-    expect(resolveChannelsProject(null, projects)).toBe("project-1");
-  });
-
-  it("returns null when the active organization has no projects", () => {
-    expect(resolveChannelsProject("foreign-project", [])).toBeNull();
-  });
-});
-
 describe("ChannelsPage", () => {
   beforeEach(() => {
     requestedProjectId = null;
     mockUser = { id: "user-1", email: "ops@example.com" };
     mockActiveOrg = {
       id: "org-1",
-      projects: [
-        { id: "project-1", name: "Production" },
-        { id: "project-2", name: "Staging" },
-      ],
+      name: "Operations",
+      slug: "operations",
+      role: "OWNER",
+      plan: "SOLO",
+      creatorUserId: "user-1",
+      creatorLabel: "ops@example.com",
+      pingKey: "ping-1",
     };
   });
 
   it("renders managed setup with sanitized Telegram summaries and mode badges", async () => {
     renderPage([
       managedBotMock,
-      channelsMock("project-1", [
+      channelsMock("org-1", [
         {
           id: "legacy-channel",
           type: "TELEGRAM",
@@ -186,7 +177,7 @@ describe("ChannelsPage", () => {
     }));
     renderPage([
       managedBotMock,
-      channelsMock("project-1", [
+      channelsMock("org-1", [
         {
           id: "legacy-channel",
           type: "TELEGRAM",
@@ -218,7 +209,7 @@ describe("ChannelsPage", () => {
   });
 
   it("offers only Email, Slack, and Webhook in the generic add form", async () => {
-    renderPage([managedBotMock, channelsMock("project-1")]);
+    renderPage([managedBotMock, channelsMock("org-1")]);
 
     expect(
       await screen.findByRole("textbox", { name: "Email address" })
@@ -238,7 +229,7 @@ describe("ChannelsPage", () => {
   });
 
   it("does not render Telegram credential or destination ID controls", async () => {
-    renderPage([managedBotMock, channelsMock("project-1")]);
+    renderPage([managedBotMock, channelsMock("org-1")]);
 
     await screen.findByText("@VitalsRelayBot");
 
@@ -253,12 +244,13 @@ describe("ChannelsPage", () => {
     }
   });
 
-  it("uses an owned project from the search params for channel queries and creates", async () => {
-    requestedProjectId = "project-2";
+  it("ignores the legacy projectId search parameter and creates in the active organization", async () => {
+    requestedProjectId = "legacy-project";
     const createResult = vi.fn(() => ({
       data: {
         createChannel: {
           id: "email-channel",
+          organizationId: "org-1",
           enabled: false,
           verificationStatus: "PENDING",
           verificationDeliveryStatus: "SENT",
@@ -268,12 +260,12 @@ describe("ChannelsPage", () => {
     }));
     renderPage([
       managedBotMock,
-      channelsMock("project-2"),
+      channelsMock("org-1"),
       {
         request: {
           query: CREATE_CHANNEL,
           variables: {
-            projectId: "project-2",
+            organizationId: "org-1",
             type: "EMAIL",
             configJson: '{"email":"alerts@example.com"}',
           },
@@ -289,17 +281,20 @@ describe("ChannelsPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add" }));
 
     await waitFor(() => expect(createResult).toHaveBeenCalledOnce());
+    expect(screen.queryByText("Default")).not.toBeInTheDocument();
+    expect(screen.queryByText("Production")).not.toBeInTheDocument();
+    expect(screen.queryByText("Staging")).not.toBeInTheDocument();
   });
 
   it("explains that a newly created email is inactive until verified", async () => {
     renderPage([
       managedBotMock,
-      channelsMock("project-1"),
+      channelsMock("org-1"),
       {
         request: {
           query: CREATE_CHANNEL,
           variables: {
-            projectId: "project-1",
+            organizationId: "org-1",
             type: "EMAIL",
             configJson: '{"email":"alerts@example.com"}',
           },
@@ -308,6 +303,7 @@ describe("ChannelsPage", () => {
           data: {
             createChannel: {
               id: "email-channel",
+              organizationId: "org-1",
               enabled: false,
               verificationStatus: "PENDING",
               verificationDeliveryStatus: "SENT",
@@ -351,14 +347,14 @@ describe("ChannelsPage", () => {
         {
           request: {
             query: CHANNELS,
-            variables: { projectId: "project-1" },
+            variables: { organizationId: "org-1" },
           },
           result: { data: { channels: [] } },
         },
         {
           request: {
             query: CHANNELS,
-            variables: { projectId: "project-1" },
+            variables: { organizationId: "org-1" },
           },
           error: new Error("Channel reconciliation unavailable"),
         },
@@ -366,7 +362,7 @@ describe("ChannelsPage", () => {
           request: {
             query: CREATE_CHANNEL,
             variables: {
-              projectId: "project-1",
+              organizationId: "org-1",
               type: "EMAIL",
               configJson: '{"email":"new@example.com"}',
             },
@@ -375,6 +371,7 @@ describe("ChannelsPage", () => {
             data: {
               createChannel: {
                 id: "new-channel",
+                organizationId: "org-1",
                 enabled: false,
                 verificationStatus: "PENDING",
                 verificationDeliveryStatus: "NOT_SENT",
@@ -449,14 +446,14 @@ describe("ChannelsPage", () => {
       {
         request: {
           query: CHANNELS,
-          variables: { projectId: "project-1" },
+          variables: { organizationId: "org-1" },
         },
         result: { data: { channels: [existingChannel] } },
       },
       {
         request: {
           query: CHANNELS,
-          variables: { projectId: "project-1" },
+          variables: { organizationId: "org-1" },
         },
         result: { data: { channels: [existingChannel, createdChannel] } },
       },
@@ -464,7 +461,7 @@ describe("ChannelsPage", () => {
         request: {
           query: CREATE_CHANNEL,
           variables: {
-            projectId: "project-1",
+            organizationId: "org-1",
             type: "EMAIL",
             configJson: '{"email":"new@example.com"}',
           },
@@ -473,6 +470,7 @@ describe("ChannelsPage", () => {
           data: {
             createChannel: {
               id: "new-channel",
+              organizationId: "org-1",
               enabled: false,
               verificationStatus: "PENDING",
               verificationDeliveryStatus: "NOT_SENT",
@@ -502,7 +500,7 @@ describe("ChannelsPage", () => {
   it("shows pending and verified email rows with the correct actions", async () => {
     renderPage([
       managedBotMock,
-      channelsMock("project-1", [
+      channelsMock("org-1", [
         {
           id: "pending-channel",
           type: "EMAIL",
@@ -558,7 +556,7 @@ describe("ChannelsPage", () => {
     }));
     renderPage([
       managedBotMock,
-      channelsMock("project-1", [
+      channelsMock("org-1", [
         {
           id: "pending-channel",
           type: "EMAIL",
@@ -619,7 +617,7 @@ describe("ChannelsPage", () => {
     };
     renderPage([
       managedBotMock,
-      channelsMock("project-1", [
+      channelsMock("org-1", [
         {
           id: "pending-channel",
           type: "EMAIL",
@@ -661,7 +659,7 @@ describe("ChannelsPage", () => {
     try {
       renderPage([
         managedBotMock,
-        channelsMock("project-1", [
+        channelsMock("org-1", [
           {
             id: "pending-channel",
             type: "EMAIL",
@@ -702,7 +700,7 @@ describe("ChannelsPage", () => {
     try {
       renderPage([
         managedBotMock,
-        channelsMock("project-1", [
+        channelsMock("org-1", [
           {
             id: "pending-channel",
             type: "EMAIL",
@@ -747,7 +745,7 @@ describe("ChannelsPage", () => {
   it("leaves the non-email channel row layout and status unchanged", async () => {
     renderPage([
       managedBotMock,
-      channelsMock("project-1", [
+      channelsMock("org-1", [
         {
           id: "slack-channel",
           type: "SLACK",
@@ -774,11 +772,11 @@ describe("ChannelsPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("falls back to the first owned project for a foreign URL project", async () => {
+  it("ignores a foreign legacy projectId and stays on the active organization", async () => {
     requestedProjectId = "project-from-another-org";
     renderPage([
       managedBotMock,
-      channelsMock("project-1", [
+      channelsMock("org-1", [
         {
           id: "owned-channel",
           type: "EMAIL",
@@ -791,90 +789,100 @@ describe("ChannelsPage", () => {
     expect(await screen.findByText("owned@example.com")).toBeInTheDocument();
   });
 
-  it("reacts to search parameter changes and selects the newly requested owned project", async () => {
+  it("does not refetch when only the legacy projectId search parameter changes", async () => {
+    const organizationResult = vi.fn(() => ({
+      data: {
+        channels: [
+          {
+            id: "operations-channel",
+            type: "EMAIL",
+            configJson: '{"email":"operations@example.com"}',
+            enabled: true,
+          },
+        ],
+      },
+    }));
     const mocks = [
       managedBotMock,
-      channelsMock("project-1", [
-        {
-          id: "production-channel",
-          type: "EMAIL",
-          configJson: '{"email":"production@example.com"}',
-          enabled: true,
-        },
-      ]),
-      channelsMock("project-2", [
-        {
-          id: "staging-channel",
-          type: "EMAIL",
-          configJson: '{"email":"staging@example.com"}',
-          enabled: true,
-        },
-      ]),
+      {
+        ...channelsMock("org-1"),
+        result: organizationResult,
+      },
     ];
     const { rerender } = renderPage(mocks);
 
-    expect(await screen.findByText("production@example.com")).toBeInTheDocument();
+    expect(await screen.findByText("operations@example.com")).toBeInTheDocument();
 
-    requestedProjectId = "project-2";
+    requestedProjectId = "another-legacy-project";
     rerender(
       <MockedProvider mocks={mocks}>
         <ChannelsPage />
       </MockedProvider>
     );
 
-    expect(await screen.findByText("staging@example.com")).toBeInTheDocument();
+    expect(screen.getByText("operations@example.com")).toBeInTheDocument();
+    expect(organizationResult).toHaveBeenCalledTimes(1);
   });
 
-  it("resets project-scoped state when switching to another owned project", async () => {
-    const deleteProjectA = vi.fn(() => ({
+  it("refetches and resets organization-scoped state when the active organization changes", async () => {
+    const deleteOrganizationA = vi.fn(() => ({
       data: { deleteChannel: true },
     }));
     const mocks: MockedResponse[] = [
       managedBotMock,
-      channelsMock("project-1", [
+      channelsMock("org-1", [
         {
-          id: "project-a-channel",
+          id: "org-a-channel",
           type: "EMAIL",
-          configJson: '{"email":"project-a@example.com"}',
+          configJson: '{"email":"org-a@example.com"}',
           enabled: true,
         },
       ]),
-      channelsMock("project-2", [
+      channelsMock("org-2", [
         {
-          id: "project-b-channel",
+          id: "org-b-channel",
           type: "EMAIL",
-          configJson: '{"email":"project-b@example.com"}',
+          configJson: '{"email":"org-b@example.com"}',
           enabled: true,
         },
       ]),
       {
         request: {
           query: DELETE_CHANNEL,
-          variables: { id: "project-a-channel" },
+          variables: { id: "org-a-channel" },
         },
-        result: deleteProjectA,
+        result: deleteOrganizationA,
       },
     ];
     const { rerender } = renderPage(mocks);
 
     fireEvent.click(
       await screen.findByRole("button", {
-        name: /delete email channel project-a@example\.com/i,
+        name: /delete email channel org-a@example\.com/i,
       })
     );
     expect(screen.getByRole("dialog")).toHaveTextContent("Delete channel?");
 
-    requestedProjectId = "project-2";
+    mockActiveOrg = {
+      id: "org-2",
+      name: "Beta",
+      slug: "beta",
+      role: "OWNER",
+      plan: "SOLO",
+      creatorUserId: "user-1",
+      creatorLabel: "ops@example.com",
+      pingKey: "ping-2",
+    };
     rerender(
       <MockedProvider mocks={mocks}>
         <ChannelsPage />
       </MockedProvider>
     );
 
-    expect(await screen.findByText("project-b@example.com")).toBeInTheDocument();
+    expect(await screen.findByText("org-b@example.com")).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(screen.queryByText("project-a@example.com")).not.toBeInTheDocument();
-    expect(deleteProjectA).not.toHaveBeenCalled();
+    expect(screen.queryByText("org-a@example.com")).not.toBeInTheDocument();
+    expect(deleteOrganizationA).not.toHaveBeenCalled();
   });
 
   it("contains GraphQL create rejection and shows its error once", async () => {
@@ -882,12 +890,12 @@ describe("ChannelsPage", () => {
     try {
       renderPage([
         managedBotMock,
-        channelsMock("project-1"),
+        channelsMock("org-1"),
         {
           request: {
             query: CREATE_CHANNEL,
             variables: {
-              projectId: "project-1",
+              organizationId: "org-1",
               type: "EMAIL",
               configJson: '{"email":"alerts@example.com"}',
             },
@@ -920,7 +928,7 @@ describe("ChannelsPage", () => {
     try {
       renderPage([
         managedBotMock,
-        channelsMock("project-1", [
+        channelsMock("org-1", [
           {
             id: "failing-delete-channel",
             type: "EMAIL",
@@ -986,7 +994,7 @@ describe("ChannelsPage", () => {
         request: { query: MANAGED_TELEGRAM_BOT },
         result: managedResult,
       },
-      channelsMock("project-1"),
+      channelsMock("org-1"),
     ];
 
     const firstMount = render(
@@ -1022,7 +1030,7 @@ describe("ChannelsPage", () => {
         request: { query: MANAGED_TELEGRAM_BOT },
         delay: Infinity,
       },
-      channelsMock("project-1"),
+      channelsMock("org-1"),
     ]);
 
     expect(
@@ -1036,7 +1044,7 @@ describe("ChannelsPage", () => {
         request: { query: MANAGED_TELEGRAM_BOT },
         error: new Error("sensitive upstream detail"),
       },
-      channelsMock("project-1"),
+      channelsMock("org-1"),
     ]);
 
     expect(
@@ -1045,12 +1053,12 @@ describe("ChannelsPage", () => {
     expect(screen.queryByText(/sensitive upstream detail/i)).not.toBeInTheDocument();
   });
 
-  it("preserves the no-project state without issuing channel setup queries", () => {
-    mockActiveOrg = { id: "org-1", projects: [] };
+  it("preserves the no-organization state without issuing channel setup queries", () => {
+    mockActiveOrg = null;
 
     renderPage();
 
-    expect(screen.getByText("No projects found.")).toBeInTheDocument();
+    expect(screen.getByText("No organizations found.")).toBeInTheDocument();
   });
 
   it("renders nothing without an authenticated user", () => {
