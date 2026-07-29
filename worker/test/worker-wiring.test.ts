@@ -111,7 +111,6 @@ vi.mock("../src/config.js", () => ({
     redisUrl: "redis://test.invalid:6379",
     queueAlert: "alert",
     queueProbe: "probe",
-    queueEscalation: "escalation",
     queueInvite: "invite",
     queueEmailVerification: "email-verification",
     appUrl: "https://systemvitals.example",

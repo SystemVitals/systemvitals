@@ -33,7 +33,58 @@ assert_not_contains() {
   fi
 }
 
+worker_environment_allowlist_keys() {
+  local source_file=$1
+
+  awk '
+    /^application_environment_allowlist\(\) \{$/ {
+      in_allowlist_function = 1
+      next
+    }
+    in_allowlist_function && /^    worker\)$/ {
+      in_worker_branch = 1
+      next
+    }
+    in_worker_branch && /^      ;;$/ {
+      found_worker_branch_end = 1
+      exit
+    }
+    in_worker_branch {
+      remainder = $0
+      while (match(remainder, /"[A-Z][A-Z0-9_]*"/)) {
+        print substr(remainder, RSTART + 1, RLENGTH - 2)
+        remainder = substr(remainder, RSTART + RLENGTH)
+      }
+    }
+    END {
+      if (!in_allowlist_function || !in_worker_branch ||
+          !found_worker_branch_end) {
+        exit 2
+      }
+    }
+  ' "$source_file"
+}
+
 [[ -f "$helper" ]] || fail "$helper is missing"
+
+worker_allowlist_keys=$(worker_environment_allowlist_keys "$provisioner") ||
+  fail "could not parse the worker environment allowlist contract"
+for required_worker_key in \
+  DATABASE_URL \
+  REDIS_URL \
+  QUEUE_ALERT \
+  QUEUE_PROBE \
+  QUEUE_INVITE \
+  SCHEDULER_LEASE_TTL_MS \
+  WORKER_SHUTDOWN_TIMEOUT_MS \
+  WORKER_READINESS_PATH; do
+  grep -Fxq -- "$required_worker_key" <<<"$worker_allowlist_keys" ||
+    fail "worker environment allowlist omitted $required_worker_key"
+done
+legacy_worker_queue_key=QUEUE_"ESCALATION"
+if grep -Fxq -- "$legacy_worker_queue_key" <<<"$worker_allowlist_keys"; then
+  fail "worker environment allowlist retained a legacy queue key"
+fi
 
 mock_bin="$test_root/bin"
 mkdir -p "$mock_bin"
