@@ -53,8 +53,10 @@ the release explicitly changes the stateful infrastructure.
 
 The worker uses four queues: `probe` for scheduled checks, `alert` for
 transition notifications, `invite` for organization invitations, and
-`email-verification` for email-channel verification. Keep queue names aligned
-between producers and the worker when overriding their environment defaults.
+`email-verification` for email-channel verification. Dokploy provisioning
+allows queue-name overrides only for `probe`, `alert`, and `invite`; it keeps
+the email-verification queue at the shared `email-verification` default.
+Keep any allowlisted override aligned between its producers and the worker.
 
 For the existing production environment, `../nihey/.env` remains the
 authoritative infrastructure environment source. It is intentionally outside
