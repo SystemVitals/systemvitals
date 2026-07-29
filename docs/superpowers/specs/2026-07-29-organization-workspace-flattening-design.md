@@ -26,12 +26,9 @@ a project named `Default`, and the frontend generally selects
 projects, so the visible hierarchy suggests a capability the product does not
 actually support.
 
-The production preflight performed during design found:
-
-- 11 organizations;
-- 11 projects;
-- no organization with zero projects;
-- no organization with multiple projects.
+The production preflight performed during design confirmed that every
+organization has exactly one project: no organization is missing its internal
+workspace, and none has multiple projects.
 
 The production data already satisfies the proposed one-workspace invariant.
 Self-hosted installations must still be validated rather than assumed to match

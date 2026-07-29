@@ -32,7 +32,7 @@ const FEATURES = [
   {
     Icon: PanelTop,
     title: "Public status pages",
-    body: "Branded, per-project status pages with incident history.",
+    body: "A branded status page with incident history for your organization.",
   },
   {
     Icon: TerminalSquare,
