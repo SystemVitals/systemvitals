@@ -181,9 +181,10 @@ type CheckModel {
   name: String!
   nextExpectedAt: DateTime
   notificationChannelIds: [ID!]!
+  organizationId: ID!
   periodSeconds: Int
   pingSlug: String
-  projectId: ID!
+  projectId: ID! @deprecated(reason: "Use organizationId.")
   schedule: String
   slug: String!
   status: String!
@@ -263,12 +264,16 @@ type OrganizationModel {
   creatorUserId: ID!
   id: ID!
   name: String!
+  pingKey: String!
   plan: String!
-  projects: [ProjectModel!]!
+  projects: [ProjectModel!]! @deprecated(reason: "Organizations now contain one implicit workspace.")
   role: String!
   slug: String!
 }
 
+"""
+Deprecated compatibility output. Organizations are the public workspace.
+"""
 type ProjectModel {
   id: ID!
   name: String!

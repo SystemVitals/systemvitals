@@ -452,14 +452,17 @@ export class ChecksService {
     userId: string,
     orgSlug: string,
     checkSlug: string,
+    boundProjectId?: string,
   ) {
     // Organization and check slugs are guessable. Fold membership into this
-    // lookup so an inaccessible check and a missing check perform the same
-    // database work and return the same public error.
+    // lookup, together with any credential project binding, so an inaccessible
+    // check and a missing check perform the same database work and return the
+    // same public error.
     const check = await this.prisma.check.findFirst({
       where: {
         slug: checkSlug,
         project: {
+          ...(boundProjectId ? { id: boundProjectId } : {}),
           organization: {
             slug: orgSlug,
             memberships: { some: { userId } },

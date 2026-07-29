@@ -77,10 +77,15 @@ export class ChecksResolver {
     @Args('orgSlug') orgSlug: string,
     @Args('checkSlug') checkSlug: string,
   ) {
+    const boundProjectId =
+      principal.authKind === 'api-token'
+        ? (principal.apiToken.projectId ?? undefined)
+        : undefined;
     const check = await this.checksService.findByOrganizationSlug(
       principal.userId,
       orgSlug,
       checkSlug,
+      boundProjectId,
     );
     requireCheckAccess(principal, 'checks:read', check.projectId);
     return check;

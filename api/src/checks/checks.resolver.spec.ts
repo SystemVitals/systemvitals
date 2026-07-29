@@ -20,6 +20,10 @@ function harness() {
     list: jest.fn().mockResolvedValue([{ id: 'check-1' }]),
     create: jest.fn().mockResolvedValue({ id: 'check-1' }),
     createActiveCheck: jest.fn().mockResolvedValue({ id: 'check-1' }),
+    findByOrganizationSlug: jest.fn().mockResolvedValue({
+      id: 'check-1',
+      projectId: 'project-source',
+    }),
     move: jest.fn().mockResolvedValue({
       id: 'check-1',
       projectId: 'project-destination',
@@ -242,6 +246,34 @@ describe('ChecksResolver workspace selectors', () => {
       expect(h.service.move).not.toHaveBeenCalled();
     },
   );
+});
+
+describe('ChecksResolver canonical slug privacy', () => {
+  it('passes a project-scoped token binding into the canonical slug lookup', async () => {
+    const h = harness();
+
+    await h.resolver.checkByOrganizationSlug(principal, 'acme', 'api');
+
+    expect(h.service.findByOrganizationSlug).toHaveBeenCalledWith(
+      'owner',
+      'acme',
+      'api',
+      'project-source',
+    );
+  });
+
+  it('keeps account-session canonical slug lookup unbound', async () => {
+    const h = harness();
+
+    await h.resolver.checkByOrganizationSlug(sessionPrincipal, 'acme', 'api');
+
+    expect(h.service.findByOrganizationSlug).toHaveBeenCalledWith(
+      'owner',
+      'acme',
+      'api',
+      undefined,
+    );
+  });
 });
 
 describe('ChecksResolver notificationChannelIds', () => {

@@ -316,6 +316,44 @@ describe('organization workspace checks (e2e)', () => {
     );
   });
 
+  it('does not disclose an out-of-scope canonical slug to a project-bound token', async () => {
+    const outside = await createHeartbeat(
+      { organizationId: destination.id },
+      'Scoped canonical privacy',
+    );
+    const scoped = generateToken();
+    await prisma.apiToken.create({
+      data: {
+        name: 'Canonical slug privacy',
+        prefix: scoped.prefix,
+        tokenHash: scoped.hash,
+        scopes: ['checks:read'],
+        userId: ownerId,
+        projectId: source.projects[0].id,
+      },
+    });
+    const query = `query($orgSlug: String!, $checkSlug: String!) {
+      checkByOrganizationSlug(orgSlug: $orgSlug, checkSlug: $checkSlug) {
+        id
+      }
+    }`;
+
+    const outOfScope = await gql(scoped.plaintext, query, {
+      orgSlug: destination.slug,
+      checkSlug: outside.data!.createCheck.slug,
+    });
+    const nonexistent = await gql(scoped.plaintext, query, {
+      orgSlug: 'missing-organization',
+      checkSlug: 'missing-check',
+    });
+
+    expect(outOfScope.data?.checkByOrganizationSlug).toBeUndefined();
+    expect(nonexistent.data?.checkByOrganizationSlug).toBeUndefined();
+    expect(outOfScope.errors).toEqual(nonexistent.errors);
+    expect(outOfScope.errors?.[0]?.message).toBe('Check not found');
+    expect(outOfScope.errors?.[0]?.extensions?.status).toBe(404);
+  });
+
   it('returns organizationId from resource-ID check paths', async () => {
     const created = await createHeartbeat(
       { organizationId: source.id },

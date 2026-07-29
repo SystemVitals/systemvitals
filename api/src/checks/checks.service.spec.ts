@@ -747,13 +747,39 @@ describe('ChecksService organization slug lookup', () => {
     });
 
     await expect(
-      h.service.findByOrganizationSlug('member', 'acme', 'api'),
+      h.service.findByOrganizationSlug('member', 'acme', 'api', 'project-a'),
     ).resolves.toEqual({
       ...h.checks[0],
       project: { organizationId: h.project.organizationId },
       organizationId: h.project.organizationId,
       notificationChannelIds: ['channel-1', 'channel-2', 'channel-3'],
     });
+
+    expect(h.prisma.check.findFirst).toHaveBeenCalledWith({
+      where: {
+        slug: 'api',
+        project: {
+          id: 'project-a',
+          organization: {
+            slug: 'acme',
+            memberships: { some: { userId: 'member' } },
+          },
+        },
+      },
+      include: {
+        project: { select: { organizationId: true } },
+      },
+    });
+  });
+
+  it('does not add a project constraint for an account session', async () => {
+    const h = readHarness();
+    h.prisma.check.findFirst.mockResolvedValue({
+      ...h.checks[0],
+      project: { organizationId: h.project.organizationId },
+    });
+
+    await h.service.findByOrganizationSlug('member', 'acme', 'api');
 
     expect(h.prisma.check.findFirst).toHaveBeenCalledWith({
       where: {
@@ -778,7 +804,12 @@ describe('ChecksService organization slug lookup', () => {
       h.prisma.check.findFirst.mockResolvedValue(null);
 
       await expect(
-        h.service.findByOrganizationSlug('member', 'private', 'hidden'),
+        h.service.findByOrganizationSlug(
+          'member',
+          'private',
+          'hidden',
+          'project-a',
+        ),
       ).rejects.toEqual(new NotFoundException('Check not found'));
 
       expect(h.prisma.check.findFirst).toHaveBeenCalledTimes(1);
