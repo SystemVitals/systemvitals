@@ -74,8 +74,10 @@ type ApiCredential {
   authKind: String!
   capabilities: [String!]!
   credentialMode: String!
-  projectId: ID
-  projectName: String
+  organizationId: ID
+  organizationName: String
+  projectId: ID @deprecated(reason: "Use organizationId.")
+  projectName: String @deprecated(reason: "Use organizationName.")
 }
 
 type ApiTokenCreateResult {
@@ -84,10 +86,11 @@ type ApiTokenCreateResult {
   id: ID!
   lastUsedAt: DateTime
   name: String!
+  organizationId: ID
   organizationName: String
   plaintext: String!
   prefix: String!
-  projectId: ID
+  projectId: ID @deprecated(reason: "Use organizationId.")
   projectName: String
   revokedAt: DateTime
   scopes: [String!]!
@@ -99,9 +102,10 @@ type ApiTokenModel {
   id: ID!
   lastUsedAt: DateTime
   name: String!
+  organizationId: ID
   organizationName: String
   prefix: String!
-  projectId: ID
+  projectId: ID @deprecated(reason: "Use organizationId.")
   projectName: String
   revokedAt: DateTime
   scopes: [String!]!
@@ -166,7 +170,8 @@ input CreateApiTokenInput {
   capabilities: [String!]!
   expirationDays: Int
   name: String!
-  projectId: ID!
+  organizationId: ID
+  projectId: ID @deprecated(reason: "Use organizationId.")
 }
 
 """

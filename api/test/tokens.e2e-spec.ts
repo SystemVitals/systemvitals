@@ -19,6 +19,7 @@ interface CreateApiTokenResult {
   prefix: string;
   plaintext: string;
   scopes: string[];
+  organizationId: string | null;
   projectId: string | null;
   projectName: string | null;
   organizationName: string | null;
@@ -32,12 +33,14 @@ interface ApiCredentialResult {
   authKind: string;
   credentialMode: 'SESSION' | 'LEGACY_BROAD' | 'PROJECT_SCOPED';
   capabilities: string[];
+  organizationId: string | null;
+  organizationName: string | null;
   projectId: string | null;
   projectName: string | null;
 }
 
 const TOKEN_FIELDS = `
-  id name prefix scopes projectId projectName organizationName
+  id name prefix scopes organizationId projectId projectName organizationName
   expiresAt lastUsedAt revokedAt createdAt
 `;
 
@@ -111,7 +114,8 @@ describe('api tokens (e2e)', () => {
     input: {
       name: string;
       capabilities: string[];
-      projectId: string;
+      organizationId?: string;
+      projectId?: string;
       expirationDays?: number;
     },
   ) {
@@ -162,7 +166,7 @@ describe('api tokens (e2e)', () => {
   });
 
   it('describes session, scoped, and legacy credentials without exposing secrets', async () => {
-    const { jwt, user, project } = await signupWithProject();
+    const { jwt, user, organization, project } = await signupWithProject();
     const scoped = await createTokenRecord(
       user.id,
       ['checks:write', 'checks:read', 'checks:write'],
@@ -176,7 +180,10 @@ describe('api tokens (e2e)', () => {
       null,
     );
     const query = `{
-      apiCredential { authKind credentialMode capabilities projectId projectName }
+      apiCredential {
+        authKind credentialMode capabilities
+        organizationId organizationName projectId projectName
+      }
     }`;
 
     await expect(
@@ -187,6 +194,8 @@ describe('api tokens (e2e)', () => {
           authKind: 'session',
           credentialMode: 'SESSION',
           capabilities: [],
+          organizationId: null,
+          organizationName: null,
           projectId: null,
           projectName: null,
         },
@@ -200,6 +209,8 @@ describe('api tokens (e2e)', () => {
           authKind: 'api-token',
           credentialMode: 'PROJECT_SCOPED',
           capabilities: ['checks:read', 'checks:write'],
+          organizationId: organization.id,
+          organizationName: organization.name,
           projectId: project.id,
           projectName: project.name,
         },
@@ -213,6 +224,8 @@ describe('api tokens (e2e)', () => {
           authKind: 'api-token',
           credentialMode: 'LEGACY_BROAD',
           capabilities: ['checks:read'],
+          organizationId: null,
+          organizationName: null,
           projectId: null,
           projectName: null,
         },
@@ -226,6 +239,8 @@ describe('api tokens (e2e)', () => {
           authKind: 'api-token',
           credentialMode: 'LEGACY_BROAD',
           capabilities: ['checks:read', 'checks:write'],
+          organizationId: null,
+          organizationName: null,
           projectId: null,
           projectName: null,
         },
@@ -889,18 +904,19 @@ describe('api tokens (e2e)', () => {
     expect(sessionMutation.data?.resumeCheck.status).toBe('NEW');
   });
 
-  it('creates a scoped connection with normalized capabilities and no default expiration', async () => {
+  it('creates an organization-scoped connection backed by its internal project', async () => {
     const { jwt, organization, project } = await signupWithProject();
     const response = await createScoped(jwt, {
       name: 'Agent',
       capabilities: ['checks:write', 'checks:read', 'checks:write'],
-      projectId: project.id,
+      organizationId: organization.id,
     });
 
     expect(response.errors).toBeUndefined();
     expect(response.data!.createScopedApiToken).toMatchObject({
       name: 'Agent',
       scopes: ['checks:read', 'checks:write'],
+      organizationId: organization.id,
       projectId: project.id,
       projectName: project.name,
       organizationName: organization.name,
@@ -911,6 +927,66 @@ describe('api tokens (e2e)', () => {
     expect(response.data!.createScopedApiToken.plaintext).toMatch(
       /^svt_[0-9a-f]{40}$/,
     );
+    const stored = await prisma.apiToken.findUniqueOrThrow({
+      where: { id: response.data!.createScopedApiToken.id },
+    });
+    expect(stored.projectId).toBe(project.id);
+    expect(stored.tokenHash).not.toBe(
+      response.data!.createScopedApiToken.plaintext,
+    );
+  });
+
+  it('continues creating scoped connections through deprecated projectId', async () => {
+    const { jwt, organization, project } = await signupWithProject();
+    const response = await createScoped(jwt, {
+      name: 'Legacy agent',
+      capabilities: ['checks:read', 'checks:write'],
+      projectId: project.id,
+    });
+
+    expect(response.errors).toBeUndefined();
+    expect(response.data!.createScopedApiToken).toMatchObject({
+      organizationId: organization.id,
+      projectId: project.id,
+    });
+  });
+
+  it.each([
+    ['both', { organizationId: 'organization-1', projectId: 'project-1' }],
+    ['neither', {}],
+  ])(
+    'rejects %s workspace selectors with the exact XOR error',
+    async (_, selector) => {
+      const { jwt } = await signupWithProject();
+      const response = await createScoped(jwt, {
+        name: 'Invalid selector',
+        capabilities: ['checks:read', 'checks:write'],
+        ...selector,
+      });
+
+      expect(response.data).toBeNull();
+      expect(response.errors?.[0]?.message).toBe(
+        'Provide exactly one of organizationId or projectId',
+      );
+    },
+  );
+
+  it('fails closed when organizationId belongs to another account', async () => {
+    const first = await signupWithProject();
+    const second = await signupWithProject(email2);
+    const response = await createScoped(first.jwt, {
+      name: 'Cross organization',
+      capabilities: ['checks:read', 'checks:write'],
+      organizationId: second.organization.id,
+    });
+
+    expect(response.data).toBeNull();
+    expect(response.errors?.[0]?.message).toBe('Workspace not found');
+    expect(
+      await prisma.apiToken.count({
+        where: { userId: first.user.id, name: 'Cross organization' },
+      }),
+    ).toBe(0);
   });
 
   it('calculates a 30-day expiration from the server timestamp', async () => {
@@ -986,7 +1062,7 @@ describe('api tokens (e2e)', () => {
     });
 
     expect(response.data).toBeNull();
-    expect(response.errors?.[0]?.message).toMatch(/project|member|access/i);
+    expect(response.errors?.[0]?.message).toBe('Workspace not found');
   });
 
   it('lists active, expired, and revoked history newest first without secrets', async () => {
@@ -1046,6 +1122,7 @@ describe('api tokens (e2e)', () => {
     expect(
       response.data!.apiTokens.find(({ id }) => id === expired.id),
     ).toMatchObject({
+      organizationId: project.organizationId,
       expiresAt: expired.expiresAt!.toISOString(),
       revokedAt: null,
     });
@@ -1162,6 +1239,7 @@ describe('api tokens (e2e)', () => {
     expect(listed.data!.apiTokens).toContainEqual(
       expect.objectContaining({
         id: token.id,
+        organizationId: null,
         projectId: null,
         projectName: project.name,
         organizationName: organization.name,

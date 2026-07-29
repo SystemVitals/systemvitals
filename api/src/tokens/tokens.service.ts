@@ -4,6 +4,8 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { assertWorkspaceSelector } from '../workspaces/workspace-selector';
+import { WorkspacesService } from '../workspaces/workspaces.service';
 import { generateToken } from './token.util';
 import type { CreateApiTokenInput } from './create-api-token.input';
 
@@ -24,6 +26,7 @@ const TOKEN_SELECT = {
   project: {
     select: {
       name: true,
+      organizationId: true,
       organization: { select: { name: true } },
     },
   },
@@ -43,13 +46,17 @@ interface TokenWithProject {
   createdAt: Date;
   project: {
     name: string;
+    organizationId: string;
     organization: { name: string };
   } | null;
 }
 
 @Injectable()
 export class TokensService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly workspaces: WorkspacesService,
+  ) {}
 
   async create(userId: string, name: string, scopes: string[]) {
     if (
@@ -84,6 +91,10 @@ export class TokensService {
   }
 
   async createScoped(userId: string, input: CreateApiTokenInput) {
+    const selector = assertWorkspaceSelector({
+      organizationId: input.organizationId,
+      projectId: input.projectId,
+    });
     const scopes = [...new Set(input.capabilities)].sort();
     if (
       scopes.length !== SCOPED_CAPABILITIES.length ||
@@ -94,14 +105,17 @@ export class TokensService {
       );
     }
 
+    const workspace = await this.workspaces.resolveForUser(userId, selector);
     const project = await this.prisma.project.findFirst({
       where: {
-        id: input.projectId,
+        id: workspace.projectId,
+        organizationId: workspace.organizationId,
         organization: { memberships: { some: { userId } } },
       },
       select: {
         id: true,
         name: true,
+        organizationId: true,
         organization: { select: { name: true } },
       },
     });
@@ -163,6 +177,7 @@ export class TokensService {
       lastUsedAt: token.lastUsedAt,
       revokedAt: token.revokedAt,
       createdAt: token.createdAt,
+      organizationId: token.project?.organizationId ?? null,
     };
   }
 }
