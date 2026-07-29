@@ -237,7 +237,8 @@ type Mutation {
   leaveOrganization(organizationId: ID!): Boolean!
   moveCheck(checkId: ID!, destinationProjectId: ID!): CheckModel!
   pauseCheck(id: ID!): CheckModel!
-  regeneratePingKey(projectId: ID!): ProjectModel!
+  regenerateOrganizationPingKey(organizationId: ID!): OrganizationModel!
+  regeneratePingKey(projectId: ID!): ProjectModel! @deprecated(reason: "Use regenerateOrganizationPingKey.")
   removeMember(membershipId: ID!): Boolean!
   resendEmailChannelVerification(channelId: ID!): ChannelModel!
   resumeCheck(id: ID!): CheckModel!
@@ -259,12 +260,14 @@ type OrganizationModel {
   creatorUserId: ID!
   id: ID!
   name: String!
+  pingKey: String!
   plan: String!
-  projects: [ProjectModel!]!
+  projects: [ProjectModel!]! @deprecated(reason: "Organizations now contain one implicit workspace.")
   role: String!
   slug: String!
 }
 
+"""Deprecated compatibility output. Organizations are the public workspace."""
 type ProjectModel {
   id: ID!
   name: String!
@@ -288,7 +291,7 @@ type Query {
   mySubscription: SubscriptionStatus!
   organizationInvites(organizationId: ID!): [InviteModel!]!
   organizationMembers(organizationId: ID!): [MemberModel!]!
-  projects: [ProjectModel!]!
+  projects: [ProjectModel!]! @deprecated(reason: "Organizations now contain one implicit workspace.")
   statusPages(projectId: ID!): [StatusPageModel!]!
   telegramConnectionPreview(token: String!): TelegramConnectionPreviewModel!
 }

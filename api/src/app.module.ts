@@ -23,6 +23,7 @@ import { PublicStatusModule } from './public-status/public-status.module';
 import { BillingModule } from './billing/billing.module';
 import { AdminModule } from './admin/admin.module';
 import { TelegramModule } from './telegram/telegram.module';
+import { WorkspacesModule } from './workspaces/workspaces.module';
 
 const PUBLIC_ONLY_SCHEMA_TYPES = new Set([
   'ApiCredential',
@@ -90,6 +91,7 @@ export function graphqlSchemaDestination(
       transformAutoSchemaFile: true,
     }),
     PrismaModule,
+    WorkspacesModule,
     AuthModule,
     AuthGraphqlModule,
     HealthModule,

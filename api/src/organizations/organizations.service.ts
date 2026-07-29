@@ -14,6 +14,7 @@ export interface OrgRow {
   id: string;
   name: string;
   slug: string;
+  pingKey: string;
   role: string;
   plan: string;
   creatorUserId: string;
@@ -82,6 +83,7 @@ export class OrganizationsService {
             id: org.id,
             name: org.name,
             slug: org.slug,
+            pingKey: project.pingKey,
             role: 'OWNER',
             plan: accountEntitlements.plan,
             creatorUserId: userId,
@@ -158,6 +160,7 @@ export class OrganizationsService {
           id: org.id,
           name: org.name,
           slug: org.slug,
+          pingKey: org.projects[0].pingKey,
           role: membership.role,
           plan: org.creator.subscription?.plan ?? 'SOLO',
           creatorUserId: org.creatorUserId,
@@ -290,6 +293,7 @@ export class OrganizationsService {
         id: updated.id,
         name: updated.name,
         slug: updated.slug,
+        pingKey: updated.projects[0].pingKey,
         role: callerMembership.role,
         plan: updated.creator.subscription?.plan ?? 'SOLO',
         creatorUserId: updated.creatorUserId,
