@@ -26,13 +26,9 @@ a project named `Default`, and the frontend generally selects
 projects, so the visible hierarchy suggests a capability the product does not
 actually support.
 
-The production preflight performed during design confirmed that every
-organization has exactly one project: no organization is missing its internal
-workspace, and none has multiple projects.
-
-The production data already satisfies the proposed one-workspace invariant.
-Self-hosted installations must still be validated rather than assumed to match
-production.
+Every deployment must run and pass the read-only preflight before applying the
+one-workspace constraint. Installations must be validated rather than assumed
+to satisfy the invariant.
 
 ## Goals
 
@@ -142,8 +138,8 @@ actionable error and changes no data. It never:
 - creates a missing project without operator review;
 - deletes projects or project-owned resources.
 
-An operator must reconcile incompatible self-hosted data deliberately and
-rerun the migration. Production currently passes the preflight.
+An operator must deliberately reconcile incompatible data and rerun the
+migration.
 
 ### Schema invariant
 
