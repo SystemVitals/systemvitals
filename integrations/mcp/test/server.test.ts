@@ -19,7 +19,6 @@ const SESSION_TOOL_NAMES = [
   "create_channel",
   "create_heartbeat_check",
   "create_organization",
-  "create_project",
   "delete_channel",
   "delete_check",
   "delete_organization",
@@ -73,7 +72,7 @@ describe("buildServer", () => {
     const { toolNames } = await buildServer(gql);
 
     expect(calls).toBe(1);
-    expect(toolNames).toHaveLength(26);
+    expect(toolNames).toHaveLength(25);
     expect([...toolNames].sort()).toEqual(SESSION_TOOL_NAMES);
     expect(emailVerificationLifecycleToolNames(toolNames)).toEqual(
       EMAIL_VERIFICATION_TOOL_ALLOWLIST,
@@ -91,7 +90,7 @@ describe("buildServer", () => {
       }),
     );
 
-    expect(toolNames).toHaveLength(26);
+    expect(toolNames).toHaveLength(25);
     expect([...toolNames].sort()).toEqual(SESSION_TOOL_NAMES);
     expect(emailVerificationLifecycleToolNames(toolNames)).toEqual(
       EMAIL_VERIFICATION_TOOL_ALLOWLIST,

@@ -227,7 +227,6 @@ type Mutation {
   createChannel(configJson: String!, projectId: ID!, type: String!): ChannelModel!
   createCheck(graceSeconds: Int!, name: String!, periodSeconds: Int, projectId: ID!, schedule: String, tz: String): CheckModel!
   createOrganization(name: String!): OrganizationModel!
-  createProject(name: String!, organizationId: ID!): ProjectModel!
   createScopedApiToken(input: CreateApiTokenInput!): ApiTokenCreateResult!
   createStatusPage(brandingJson: String, checkIds: [ID!]!, projectId: ID!, slug: String!, title: String!): StatusPageModel!
   deleteChannel(id: ID!): Boolean!

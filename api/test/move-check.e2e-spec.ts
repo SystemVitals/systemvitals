@@ -47,7 +47,6 @@ interface Fixture {
   sourceOrganizationId: string;
   destinationOrganizationId: string;
   sourceProjectId: string;
-  sameOrganizationProjectId: string;
   destinationProjectId: string;
   checkId: string;
   pingSlug: string;
@@ -184,13 +183,6 @@ describe('moveCheck (e2e)', () => {
         data: {
           name: 'Source',
           slug: `source-${label}`,
-          organizationId: sourceOrganization.id,
-        },
-      });
-      const sameOrganizationProject = await tx.project.create({
-        data: {
-          name: 'Same organization',
-          slug: `same-org-${label}`,
           organizationId: sourceOrganization.id,
         },
       });
@@ -333,7 +325,6 @@ describe('moveCheck (e2e)', () => {
         sourceOrganizationId: sourceOrganization.id,
         destinationOrganizationId: destinationOrganization.id,
         sourceProjectId: sourceProject.id,
-        sameOrganizationProjectId: sameOrganizationProject.id,
         destinationProjectId: destinationProject.id,
         checkId: check.id,
         pingSlug,
@@ -465,18 +456,13 @@ describe('moveCheck (e2e)', () => {
 
   it.each([
     ['the same project', 'same'],
-    ['a project in the same organization', 'same-org'],
     ['a missing destination project', 'missing'],
   ])(
     'rejects %s without changing source state',
     async (_label, destination) => {
       const fixture = await createFixture();
       const destinationProjectId =
-        destination === 'same'
-          ? fixture.sourceProjectId
-          : destination === 'same-org'
-            ? fixture.sameOrganizationProjectId
-            : `missing-${runId}`;
+        destination === 'same' ? fixture.sourceProjectId : `missing-${runId}`;
       const response = await gql(fixture.actorToken, {
         checkId: fixture.checkId,
         destinationProjectId,
@@ -484,9 +470,7 @@ describe('moveCheck (e2e)', () => {
       expect(response.errors?.[0]?.message).toMatch(
         destination === 'same'
           ? /already in the destination/
-          : destination === 'same-org'
-            ? /another organization/
-            : /Destination project not found/,
+          : /Destination project not found/,
       );
       await expectUnchanged(fixture);
     },

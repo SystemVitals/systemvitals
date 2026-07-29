@@ -839,23 +839,11 @@ describe("delete_channel", () => {
 });
 
 // ---------------------------------------------------------------------------
-// create_project
+// project creation
 // ---------------------------------------------------------------------------
-describe("create_project", () => {
-  it("calls gql with createProject mutation and returns new project id", async () => {
-    const fakeData = { createProject: { id: "proj_new1" } };
-    const { gql, calls } = makeFakeGql(fakeData);
-    const tool = findTool("create_project");
-    const result = await tool.handler(
-      { organizationId: "org1", name: "My Project" },
-      gql,
-    );
-
-    expect(calls).toHaveLength(1);
-    expect(calls[0].query).toContain("createProject");
-    expect(calls[0].variables).toEqual({ organizationId: "org1", name: "My Project" });
-    expect(result.content[0].type).toBe("text");
-    expect(result.content[0].text).toContain("proj_new1");
+describe("project creation", () => {
+  it("does not expose create_project", () => {
+    expect(tools.map(({ name }) => name)).not.toContain("create_project");
   });
 });
 

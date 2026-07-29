@@ -153,6 +153,24 @@ describe('OrganizationsService.create', () => {
       data: { name: 'Default', slug: 'default', organizationId: 'org-new' },
     });
     expect(prisma.subscription.create).not.toHaveBeenCalled();
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects the whole creation operation when the Default project cannot be created', async () => {
+    const prisma = makePrisma();
+    const { service: svc } = serviceWithTx(prisma);
+    prisma.tx.project.create.mockRejectedValue(
+      new Error('project invariant rejected'),
+    );
+
+    await expect(svc.create('u1', 'Acme Inc')).rejects.toThrow(
+      'project invariant rejected',
+    );
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.tx.organization.create).toHaveBeenCalledTimes(1);
+    expect(prisma.tx.membership.create).toHaveBeenCalledTimes(1);
+    expect(prisma.tx.project.create).toHaveBeenCalledTimes(1);
   });
 
   it('rejects a blank name', async () => {

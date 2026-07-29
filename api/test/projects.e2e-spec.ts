@@ -2,7 +2,6 @@ import { buildApp } from '../src/main';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { cleanupTestUsers } from './cleanup-test-users';
-import { isValidSlug } from '../src/common/slug';
 
 async function signup(app: NestFastifyApplication, email: string) {
   const r = await app.inject({
@@ -70,11 +69,6 @@ interface GqlCreateTokenResponse {
       plaintext: string;
     };
   };
-}
-
-interface GqlCreateProjectResponse {
-  data?: { createProject: { id: string; name: string; slug: string } };
-  errors?: Array<{ message: string }>;
 }
 
 describe('projects (e2e)', () => {
@@ -198,7 +192,7 @@ describe('projects (e2e)', () => {
     expect(revokedRes.errors).toBeDefined();
   });
 
-  it('projects query returns the signed-up user default project', async () => {
+  it('keeps the deprecated projects query for compatibility', async () => {
     const emailP = a.replace('@', '+p@');
     const token = await signup(app, emailP);
     const res = (await gql(
@@ -236,47 +230,20 @@ describe('projects (e2e)', () => {
     expect(intersection).toHaveLength(0);
   });
 
-  it('N concurrent createProject mutations with the identical name ALL succeed with distinct, valid slugs (Fix 4)', async () => {
+  it('does not expose createProject in the GraphQL schema', async () => {
     const emailQ = a.replace('@', '+q@');
     await cleanupTestUsers(prisma, emailQ);
     const token = await signup(app, emailQ);
-    const me = (await gql(
+    const response = (await gql(
       app,
       token,
-      `{ me { organizations { id } } }`,
-    )) as GqlMeResponse;
-    const organizationId = me.data.me.organizations[0].id;
+      `{ __schema { mutationType { fields { name } } } }`,
+    )) as {
+      data: { __schema: { mutationType: { fields: Array<{ name: string }> } } };
+    };
 
-    const CONCURRENCY = 10;
-    const results = await Promise.all(
-      Array.from({ length: CONCURRENCY }, () =>
-        gql(
-          app,
-          token,
-          `mutation($organizationId: ID!, $name: String!) {
-            createProject(organizationId: $organizationId, name: $name) {
-              id name slug
-            }
-          }`,
-          { organizationId, name: 'Concurrent Same-Name Project' },
-        ),
-      ),
-    );
-    const typed = results as GqlCreateProjectResponse[];
-
-    for (const res of typed) {
-      expect(res.errors).toBeUndefined();
-      expect(res.data?.createProject).toBeTruthy();
-    }
-
-    const slugs = typed.map((res) => res.data!.createProject.slug);
-    const ids = typed.map((res) => res.data!.createProject.id);
-    expect(new Set(slugs).size).toBe(CONCURRENCY);
-    expect(new Set(ids).size).toBe(CONCURRENCY);
-    for (const slug of slugs) {
-      expect(isValidSlug(slug)).toBe(true);
-    }
-
-    await cleanupTestUsers(prisma, emailQ);
+    expect(
+      response.data.__schema.mutationType.fields.map(({ name }) => name),
+    ).not.toContain('createProject');
   });
 });

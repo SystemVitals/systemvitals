@@ -64,10 +64,6 @@ interface ResendEmailChannelVerificationResponse {
   resendEmailChannelVerification: Channel;
 }
 
-interface CreateProjectResponse {
-  createProject: CreatedId;
-}
-
 interface RegeneratePingKeyResponse {
   regeneratePingKey: { id: string; pingKey: string };
 }
@@ -776,31 +772,6 @@ const deleteChannel: ToolDef = {
   },
 };
 
-const createProject: ToolDef = {
-  name: "create_project",
-  description: "Create a new project inside an organization.",
-  inputSchema: {
-    organizationId: z.string().min(1).describe("The organization ID to create the project in"),
-    name: z.string().describe("Human-readable name for the project"),
-  },
-  handler: async (args, gql) => {
-    const organizationId = args["organizationId"] as string;
-    const name = args["name"] as string;
-
-    const data = await gql(
-      `mutation createProject($organizationId: ID!, $name: String!) {
-        createProject(organizationId: $organizationId, name: $name) {
-          id
-        }
-      }`,
-      { organizationId, name },
-    );
-
-    const { createProject: result } = cast<CreateProjectResponse>(data);
-    return text(`Project created. id: ${result.id}`);
-  },
-};
-
 const regeneratePingKey: ToolDef = {
   name: "regenerate_ping_key",
   description:
@@ -1232,7 +1203,6 @@ const toolDefinitions: ToolDef[] = [
   createChannel,
   resendEmailChannelVerification,
   deleteChannel,
-  createProject,
   regeneratePingKey,
   updateCheck,
   listMembers,

@@ -1,8 +1,6 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { randomBytes } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
-import { slugify } from '../common/slug';
-import { createWithUniqueSlug } from '../common/create-with-unique-slug';
 
 @Injectable()
 export class ProjectsService {
@@ -22,23 +20,6 @@ export class ProjectsService {
     if (!project) throw new ForbiddenException('Project not found');
     await this.assertMember(userId, project.organizationId);
     return project;
-  }
-
-  async create(userId: string, organizationId: string, name: string) {
-    await this.assertMember(userId, organizationId);
-    return createWithUniqueSlug({
-      base: slugify(name),
-      loadTakenSlugs: async () => {
-        const existing = await this.prisma.project.findMany({
-          where: { organizationId },
-          select: { slug: true },
-        });
-        return existing.map((p) => p.slug);
-      },
-      entityLabel: 'project',
-      create: (slug) =>
-        this.prisma.project.create({ data: { name, slug, organizationId } }),
-    });
   }
 
   async regeneratePingKey(userId: string, projectId: string) {

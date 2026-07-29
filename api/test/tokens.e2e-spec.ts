@@ -326,12 +326,22 @@ describe('api tokens (e2e)', () => {
   });
 
   it('enforces a scoped token project on every check read and mutation path', async () => {
-    const { user, organization, project: projectA } = await signupWithProject();
+    const { user, project: projectA } = await signupWithProject();
+    const organizationB = await prisma.organization.create({
+      data: {
+        name: 'Project B organization',
+        slug: `project-b-org-${Date.now()}`,
+        creatorUserId: user.id,
+        memberships: {
+          create: { userId: user.id, role: 'OWNER' },
+        },
+      },
+    });
     const projectB = await prisma.project.create({
       data: {
         name: 'Project B',
         slug: `project-b-${Date.now()}`,
-        organizationId: organization.id,
+        organizationId: organizationB.id,
       },
     });
     const checkB = await prisma.check.create({
@@ -374,7 +384,7 @@ describe('api tokens (e2e)', () => {
           }
         }`,
         {
-          org: organization.slug,
+          org: organizationB.slug,
           project: projectB.slug,
           check: checkB.slug,
         },

@@ -47,7 +47,6 @@ const ALL_TOOL_NAMES = [
   "create_channel",
   "resend_email_channel_verification",
   "delete_channel",
-  "create_project",
   "regenerate_ping_key",
   "update_check",
   "list_members",
@@ -141,7 +140,7 @@ describe("toolsForCredential", () => {
     });
 
     expect(tools.map((tool) => tool.name)).toEqual(ALL_TOOL_NAMES);
-    expect(selected).toHaveLength(26);
+    expect(selected).toHaveLength(25);
     expect(selected.map((tool) => tool.name)).toEqual(ALL_TOOL_NAMES);
     expect(
       emailVerificationLifecycleToolNames(selected.map((tool) => tool.name)),
@@ -160,7 +159,7 @@ describe("toolsForCredential", () => {
       projectName: null,
     });
 
-    expect(selected).toHaveLength(26);
+    expect(selected).toHaveLength(25);
     expect(selected.map((tool) => tool.name)).toEqual(ALL_TOOL_NAMES);
     expect(
       emailVerificationLifecycleToolNames(selected.map((tool) => tool.name)),

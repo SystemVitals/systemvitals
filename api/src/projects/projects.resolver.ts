@@ -17,15 +17,6 @@ export class ProjectsResolver {
   }
 
   @Mutation(() => ProjectModel)
-  createProject(
-    @CurrentUser() user: JwtUser,
-    @Args('organizationId', { type: () => ID }) organizationId: string,
-    @Args('name') name: string,
-  ) {
-    return this.projectsService.create(user.userId, organizationId, name);
-  }
-
-  @Mutation(() => ProjectModel)
   regeneratePingKey(
     @CurrentUser() user: JwtUser,
     @Args('projectId', { type: () => ID }) projectId: string,
