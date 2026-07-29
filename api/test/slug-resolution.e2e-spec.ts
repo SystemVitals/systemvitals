@@ -46,7 +46,63 @@ interface MeResult {
 
 const CHECK_FIELDS = `id name slug type status pingSlug`;
 
+async function cleanupUsersByEmailPrefix(
+  prisma: PrismaService,
+  emailPrefix: string,
+): Promise<void> {
+  const errors: unknown[] = [];
+  const users = await prisma.user.findMany({
+    where: { email: { startsWith: emailPrefix } },
+    select: { id: true },
+  });
+  const userIds = users.map(({ id }) => id);
+
+  if (userIds.length > 0) {
+    try {
+      await prisma.organization.deleteMany({
+        where: { creatorUserId: { in: userIds } },
+      });
+    } catch (error) {
+      errors.push(error);
+    }
+    try {
+      await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+
+  try {
+    const [survivingOrganizations, survivingUsers] = await Promise.all([
+      prisma.organization.count({
+        where: { creatorUserId: { in: userIds } },
+      }),
+      prisma.user.count({
+        where: {
+          OR: [{ id: { in: userIds } }, { email: { startsWith: emailPrefix } }],
+        },
+      }),
+    ]);
+    if (survivingOrganizations > 0 || survivingUsers > 0) {
+      errors.push(
+        new Error(
+          `Cleanup survivors: organizations=${survivingOrganizations}; users=${survivingUsers}`,
+        ),
+      );
+    }
+  } catch (error) {
+    errors.push(error);
+  }
+
+  if (errors.length > 0) {
+    throw new AggregateError(errors, 'Slug-resolution e2e cleanup failed');
+  }
+}
+
 describe('slug resolution and editing (e2e)', () => {
+  const testEmailPrefix = `slug-res-${process.pid}-${Date.now()}-`;
+  const testEmail = (label: string) => `${testEmailPrefix}${label}@example.com`;
+
   let app: NestFastifyApplication;
   let prisma: PrismaService;
 
@@ -61,7 +117,7 @@ describe('slug resolution and editing (e2e)', () => {
     await app.getHttpAdapter().getInstance().ready();
     prisma = app.get(PrismaService);
 
-    tokenA = await signup(app, `slug-res-a+${Date.now()}@example.com`);
+    tokenA = await signup(app, testEmail('a'));
     const meA = await gql(
       app,
       tokenA,
@@ -74,8 +130,22 @@ describe('slug resolution and editing (e2e)', () => {
   });
 
   afterAll(async () => {
-    await prisma.$disconnect();
-    await app.close();
+    try {
+      await cleanupUsersByEmailPrefix(prisma, testEmailPrefix);
+      const [leakedUserCount, leakedOrganizationCount] = await Promise.all([
+        prisma.user.count({
+          where: { email: { startsWith: testEmailPrefix } },
+        }),
+        prisma.organization.count({
+          where: { creator: { email: { startsWith: testEmailPrefix } } },
+        }),
+      ]);
+      expect(leakedUserCount).toBe(0);
+      expect(leakedOrganizationCount).toBe(0);
+    } finally {
+      await prisma.$disconnect();
+      await app.close();
+    }
   });
 
   async function newHeartbeat(
@@ -161,7 +231,7 @@ describe('slug resolution and editing (e2e)', () => {
     // enumerating other tenants' organizations and checks. So this asserts
     // full structural equality of the two error payloads, not just that
     // neither one happens to say "forbidden".
-    const tokenB = await signup(app, `slug-res-b+${Date.now()}@example.com`);
+    const tokenB = await signup(app, testEmail('b'));
     const meB = await gql(
       app,
       tokenB,
@@ -284,7 +354,7 @@ describe('slug resolution and editing (e2e)', () => {
   });
 
   it('updateOrganizationSlug changes the org slug', async () => {
-    const token = await signup(app, `slug-res-org+${Date.now()}@example.com`);
+    const token = await signup(app, testEmail('org'));
     const me = await gql(app, token, `{ me { organizations { id } } }`);
     const orgId = (me.data as { me: { organizations: Array<{ id: string }> } })
       .me.organizations[0].id;
@@ -304,10 +374,7 @@ describe('slug resolution and editing (e2e)', () => {
   });
 
   it('updateOrganizationSlug("admin") is rejected as reserved', async () => {
-    const token = await signup(
-      app,
-      `slug-res-reserved+${Date.now()}@example.com`,
-    );
+    const token = await signup(app, testEmail('reserved'));
     const me = await gql(app, token, `{ me { organizations { id } } }`);
     const orgId = (me.data as { me: { organizations: Array<{ id: string }> } })
       .me.organizations[0].id;
@@ -324,10 +391,7 @@ describe('slug resolution and editing (e2e)', () => {
   });
 
   it('updateOrganizationSlug returns a model where `projects` can be selected', async () => {
-    const token = await signup(
-      app,
-      `slug-res-projects+${Date.now()}@example.com`,
-    );
+    const token = await signup(app, testEmail('projects'));
     const me = await gql(app, token, `{ me { organizations { id } } }`);
     const orgId = (me.data as { me: { organizations: Array<{ id: string }> } })
       .me.organizations[0].id;
@@ -357,10 +421,7 @@ describe('slug resolution and editing (e2e)', () => {
   });
 
   it('updateOrganizationSlug renames the org the caller specifies even when they belong to more than one organization (no longer ambiguous)', async () => {
-    const token = await signup(
-      app,
-      `slug-res-multiorg+${Date.now()}@example.com`,
-    );
+    const token = await signup(app, testEmail('multiorg'));
     const me = await gql(
       app,
       token,
@@ -386,6 +447,12 @@ describe('slug resolution and editing (e2e)', () => {
         creatorUserId: userId,
         memberships: {
           create: { userId, role: 'OWNER' },
+        },
+        projects: {
+          create: {
+            name: 'Default',
+            slug: 'default',
+          },
         },
       },
     });
@@ -413,7 +480,10 @@ describe('slug resolution and editing (e2e)', () => {
 
     const rereadSecond = await prisma.organization.findUniqueOrThrow({
       where: { id: secondOrg.id },
+      include: { projects: true },
     });
     expect(rereadSecond.slug).toBe(secondOrg.slug);
+    expect(rereadSecond.projects).toHaveLength(1);
+    expect(rereadSecond.projects[0].name).toBe('Default');
   });
 });
