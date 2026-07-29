@@ -20,6 +20,7 @@ import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogFooter,
@@ -31,7 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Pause, Play } from "lucide-react";
+import { CircleGauge, Plus, Pause, Play } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import { formatDuration } from "@/lib/format";
 import { usePollWhenVisible } from "@/lib/use-poll-when-visible";
@@ -65,6 +66,69 @@ interface CheckItem {
   tz: string | null;
   lastEventAt: string | null;
   notificationChannelIds: string[];
+}
+
+interface CheckAllowance {
+  used: number;
+  limit: number;
+  remaining: number;
+}
+
+function checkCountLabel(count: number) {
+  return `${count} ${count === 1 ? "check" : "checks"}`;
+}
+
+function CheckAllowanceMeter({ allowance }: { allowance: CheckAllowance }) {
+  const used = Math.max(0, allowance.used);
+  const limit = Math.max(0, allowance.limit);
+  const remaining = Math.max(0, allowance.remaining);
+  const exhausted = remaining === 0;
+  const usedPercentage =
+    limit === 0 ? 100 : Math.min(100, Math.round((used / limit) * 100));
+
+  return (
+    <div
+      role="status"
+      aria-label="Check allowance"
+      className={`min-w-44 rounded-lg border px-3 py-2 ${
+        exhausted
+          ? "border-destructive/30 bg-destructive/5"
+          : "border-border/70 bg-muted/25"
+      }`}
+    >
+      <div className="flex items-center gap-2">
+        <CircleGauge
+          aria-hidden="true"
+          className={`size-4 shrink-0 ${
+            exhausted ? "text-destructive" : "text-primary"
+          }`}
+        />
+        <div className="min-w-0 flex-1">
+          <p
+            className={`text-sm font-semibold leading-none ${
+              exhausted ? "text-destructive" : "text-foreground"
+            }`}
+          >
+            {checkCountLabel(remaining)} left
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {exhausted ? "Limit reached" : `${used} of ${limit} used`}
+          </p>
+        </div>
+      </div>
+      <div
+        aria-hidden="true"
+        className="mt-2 h-1 overflow-hidden rounded-full bg-foreground/10"
+      >
+        <div
+          className={`h-full rounded-full transition-[width] ${
+            exhausted ? "bg-destructive" : "bg-primary"
+          }`}
+          style={{ width: `${usedPercentage}%` }}
+        />
+      </div>
+    </div>
+  );
 }
 
 function TypeBadge({ type }: { type: string }) {
@@ -113,6 +177,7 @@ interface CreateCheckDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   organizationId: string;
+  allowance?: CheckAllowance;
   onCreated: () => void;
 }
 
@@ -120,6 +185,7 @@ function CreateCheckDialog({
   open,
   onOpenChange,
   organizationId,
+  allowance,
   onCreated,
 }: CreateCheckDialogProps) {
   const { orgs } = useOrg();
@@ -236,6 +302,12 @@ function CreateCheckDialog({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>New check</DialogTitle>
+            {allowance && (
+              <DialogDescription>
+                {checkCountLabel(Math.max(0, allowance.remaining))} left on this
+                plan.
+              </DialogDescription>
+            )}
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Type toggle */}
@@ -425,7 +497,13 @@ function CreateCheckDialog({
             <DialogFooter>
               <Button
                 type="submit"
-                disabled={loading || (checkType === "HEARTBEAT" && scheduleType === "cron" && !cronValid)}
+                disabled={
+                  loading ||
+                  (allowance?.remaining ?? 1) <= 0 ||
+                  (checkType === "HEARTBEAT" &&
+                    scheduleType === "cron" &&
+                    !cronValid)
+                }
               >
                 {loading ? "Creating…" : "Create"}
               </Button>
@@ -455,7 +533,10 @@ function ChecksList({
     message: string;
   } | null>(null);
 
-  const query = useQuery<{ checks: CheckItem[] }>(CHECKS, {
+  const query = useQuery<{
+    checks: CheckItem[];
+    organizationCheckAllowance: CheckAllowance;
+  }>(CHECKS, {
     variables: { organizationId },
     // Apollo 4 defaults this to true, which would flip `loading` on every poll,
     // flashing the skeleton and the empty state over good content every 15s.
@@ -517,17 +598,26 @@ function ChecksList({
   }, [channelData, channelError, organizationId]);
 
   const checks = data?.checks ?? [];
+  const allowance = data?.organizationCheckAllowance;
+  const limitReached = allowance ? allowance.remaining <= 0 : false;
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-lg font-medium">Checks</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="text-lg font-medium">Checks</h2>
+          {allowance && <CheckAllowanceMeter allowance={allowance} />}
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <ConnectAgentDialog
             organizationId={organizationId}
             organizationName={organizationName}
           />
-          <Button size="sm" onClick={() => setShowCreate(true)}>
+          <Button
+            size="sm"
+            disabled={limitReached}
+            onClick={() => setShowCreate(true)}
+          >
             <Plus className="h-4 w-4 mr-1" />
             New check
           </Button>
@@ -555,7 +645,11 @@ function ChecksList({
           <CardContent className="flex flex-col items-center gap-4 text-center">
             <p className="text-sm text-muted-foreground">No checks yet. Start monitoring your first service.</p>
             <div className="flex flex-wrap items-center justify-center gap-2">
-              <Button size="sm" onClick={() => setShowCreate(true)}>
+              <Button
+                size="sm"
+                disabled={limitReached}
+                onClick={() => setShowCreate(true)}
+              >
                 <Plus className="h-4 w-4 mr-1" />
                 New check
               </Button>
@@ -657,6 +751,7 @@ function ChecksList({
         open={showCreate}
         onOpenChange={setShowCreate}
         organizationId={organizationId}
+        allowance={allowance}
         onCreated={() => refetch()}
       />
 

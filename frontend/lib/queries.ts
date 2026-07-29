@@ -2,6 +2,11 @@ import { gql } from "@apollo/client";
 
 export const CHECKS = gql`
   query checks($organizationId: ID!) {
+    organizationCheckAllowance(organizationId: $organizationId) {
+      used
+      limit
+      remaining
+    }
     checks(organizationId: $organizationId) {
       id
       name

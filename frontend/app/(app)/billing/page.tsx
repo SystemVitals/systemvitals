@@ -71,6 +71,7 @@ export default function BillingPage() {
   const planInfo = currentPlan ? PLAN_LIMITS[currentPlan] : undefined;
   const checkCount = subscription?.checkCount ?? 0;
   const maxChecks = subscription?.maxChecks ?? 0;
+  const remainingChecks = Math.max(0, maxChecks - checkCount);
   const organizationCount = subscription?.organizationCount ?? 0;
   const usageLabel = planUsageLabel(checkCount, maxChecks);
   const actionsDisabled = !subscription || loadingAction !== null;
@@ -159,6 +160,9 @@ export default function BillingPage() {
                   <span className="font-medium text-foreground">Check usage:</span>{" "}
                   {usageLabel} across {organizationCount}{" "}
                   {organizationCount === 1 ? "organization" : "organizations"}
+                </p>
+                <p className="font-medium text-foreground">
+                  {remainingChecks} {remainingChecks === 1 ? "check" : "checks"} left
                 </p>
                 <p>
                   <span className="font-medium text-foreground">Min interval:</span>{" "}

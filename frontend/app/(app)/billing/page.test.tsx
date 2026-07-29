@@ -191,6 +191,7 @@ describe("BillingPage", () => {
     expect(
       await screen.findByText("42 / 137 checks across 4 organizations")
     ).toBeInTheDocument();
+    expect(screen.getByText("95 checks left")).toBeInTheDocument();
   });
 
   it.each(["SIGNAL", "FLEET"])(
