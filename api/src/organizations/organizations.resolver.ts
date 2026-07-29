@@ -1,4 +1,13 @@
-import { Args, ID, Mutation, Query, Resolver } from '@nestjs/graphql';
+import {
+  Args,
+  Field,
+  ID,
+  Int,
+  Mutation,
+  ObjectType,
+  Query,
+  Resolver,
+} from '@nestjs/graphql';
 import { UseGuards } from '@nestjs/common';
 import { ApiAuthGuard } from '../tokens/api-auth.guard';
 import { CurrentUser } from '../common/current-user.decorator';
@@ -6,6 +15,18 @@ import type { JwtUser } from '../auth/jwt.strategy';
 import { PrismaService } from '../prisma/prisma.service';
 import { UserModel, OrganizationModel } from '../common/models';
 import { OrganizationsService } from './organizations.service';
+
+@ObjectType()
+export class OrganizationCheckAllowance {
+  @Field(() => Int)
+  used!: number;
+
+  @Field(() => Int)
+  limit!: number;
+
+  @Field(() => Int)
+  remaining!: number;
+}
 
 @Resolver(() => UserModel)
 @UseGuards(ApiAuthGuard)
@@ -56,6 +77,17 @@ export class OrganizationsResolver {
         })),
       })),
     };
+  }
+
+  @Query(() => OrganizationCheckAllowance)
+  organizationCheckAllowance(
+    @CurrentUser() user: JwtUser,
+    @Args('organizationId', { type: () => ID }) organizationId: string,
+  ): Promise<OrganizationCheckAllowance> {
+    return this.organizationsService.organizationCheckAllowance(
+      user.userId,
+      organizationId,
+    );
   }
 
   @Mutation(() => OrganizationModel)

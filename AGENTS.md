@@ -21,6 +21,11 @@ organization creation provisions the workspace. The next cleanup release
 removes the deprecated public project surface, but physical removal of the
 internal project table requires a separate approved design.
 
+Authenticated account-session organization members can query
+`organizationCheckAllowance` for the creator account's aggregate check usage,
+limit, and remaining allowance; the response never exposes creator identity
+data.
+
 Never commit credentials, production data, generated keys, or local `.env` files. Keep `.env.example` files limited to safe placeholders. The `docker-compose.infrastructure.yml` file is a generic stateful infrastructure template and must never contain production values, identifiers, hosts, or credentials.
 
 Keep pull requests focused, add tests for behavior changes, and update public documentation when a user-visible workflow, deployment contract, or API changes.

@@ -57,7 +57,17 @@ const checksMock = {
     query: CHECKS,
     variables: { organizationId: "org-signal" },
   },
-  result: { data: { checks: [] } },
+  result: {
+    data: {
+      checks: [],
+      organizationCheckAllowance: {
+        __typename: "OrganizationCheckAllowance",
+        used: 2,
+        limit: 5,
+        remaining: 3,
+      },
+    },
+  },
 };
 
 const channelsMock = {
@@ -180,6 +190,69 @@ describe("DashboardPage", () => {
 
   it("requests notification channel selections with checks", () => {
     expect(print(CHECKS)).toContain("notificationChannelIds");
+  });
+
+  it("requests and prominently shows the active organization's check allowance", async () => {
+    expect(print(CHECKS)).toContain(
+      "organizationCheckAllowance(organizationId: $organizationId)",
+    );
+    expect(print(CHECKS)).toContain("remaining");
+
+    renderDashboard("SIGNAL");
+
+    const allowance = await screen.findByRole("status", {
+      name: "Check allowance",
+    });
+    expect(allowance).toHaveTextContent("3 checks left");
+    expect(allowance).toHaveTextContent("2 of 5 used");
+
+    fireEvent.click(
+      (await screen.findAllByRole("button", { name: /new check/i }))[0],
+    );
+    expect(
+      await screen.findByText("3 checks left on this plan."),
+    ).toBeInTheDocument();
+  });
+
+  it("makes an exhausted check allowance explicit and prevents opening creation", async () => {
+    renderDashboard("SOLO", [
+      {
+        request: {
+          query: CHECKS,
+          variables: { organizationId: "org-signal" },
+        },
+        result: {
+          data: {
+            checks: [],
+            organizationCheckAllowance: {
+              __typename: "OrganizationCheckAllowance",
+              used: 5,
+              limit: 5,
+              remaining: 0,
+            },
+          },
+        },
+      },
+      channelsMock,
+      subscriptionMock("SOLO"),
+    ]);
+
+    const allowance = await screen.findByRole("status", {
+      name: "Check allowance",
+    });
+    expect(allowance).toHaveTextContent("0 checks left");
+    expect(allowance).toHaveTextContent("Limit reached");
+
+    const creationButtons = screen.getAllByRole("button", {
+      name: /new check/i,
+    });
+    expect(creationButtons).toHaveLength(2);
+    for (const button of creationButtons) {
+      expect(button).toBeDisabled();
+    }
+    expect(
+      screen.queryByRole("dialog", { name: "New check" }),
+    ).not.toBeInTheDocument();
   });
 
   it("restores Connect agent entry points for the active organization", async () => {

@@ -264,6 +264,12 @@ type Mutation {
   adminUnsuspendUser(id: ID!): AdminUserModel!
 }
 
+type OrganizationCheckAllowance {
+  limit: Int!
+  remaining: Int!
+  used: Int!
+}
+
 type OrganizationModel {
   creatorLabel: String!
   creatorUserId: ID!

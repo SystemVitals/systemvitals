@@ -80,6 +80,97 @@ function makeService(prisma: ReturnType<typeof makePrisma>) {
   );
 }
 
+describe('OrganizationsService.organizationCheckAllowance', () => {
+  function setupAllowance(options?: {
+    creatorUserId?: string;
+    member?: boolean;
+    checkCount?: number;
+    maxChecks?: number;
+  }) {
+    const prisma = makePrisma();
+    prisma.tx.membership.findUnique.mockResolvedValue(
+      options?.member === false
+        ? null
+        : {
+            organization: {
+              creatorUserId: options?.creatorUserId ?? 'creator-1',
+            },
+          },
+    );
+    const entitlements = {
+      lockUsers: jest.fn(),
+      forUser: jest.fn().mockResolvedValue({
+        plan: 'SIGNAL',
+        limits: {
+          maxChecks: options?.maxChecks ?? 12,
+          minIntervalSeconds: 10,
+        },
+        checkCount: options?.checkCount ?? 8,
+        organizationCount: 2,
+      }),
+      assertCanAddOrganization: jest.fn(),
+    };
+    const service = new OrganizationsService(
+      prisma as unknown as PrismaService,
+      entitlements as unknown as AccountEntitlementsService,
+    );
+    return { prisma, entitlements, service };
+  }
+
+  it('returns the organization creator account allowance to a member', async () => {
+    const h = setupAllowance();
+
+    await expect(
+      h.service.organizationCheckAllowance('member-1', 'org-1'),
+    ).resolves.toEqual({
+      used: 8,
+      limit: 12,
+      remaining: 4,
+    });
+
+    expect(h.prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(h.prisma.tx.membership.findUnique).toHaveBeenCalledWith({
+      where: {
+        userId_organizationId: {
+          userId: 'member-1',
+          organizationId: 'org-1',
+        },
+      },
+      select: {
+        organization: {
+          select: { creatorUserId: true },
+        },
+      },
+    });
+    expect(h.entitlements.forUser).toHaveBeenCalledWith(
+      h.prisma.tx,
+      'creator-1',
+    );
+  });
+
+  it('clamps the remaining allowance at zero when usage exceeds the limit', async () => {
+    const h = setupAllowance({ checkCount: 15, maxChecks: 10 });
+
+    await expect(
+      h.service.organizationCheckAllowance('member-1', 'org-1'),
+    ).resolves.toEqual({
+      used: 15,
+      limit: 10,
+      remaining: 0,
+    });
+  });
+
+  it('rejects a non-member before resolving creator entitlements', async () => {
+    const h = setupAllowance({ member: false });
+
+    await expect(
+      h.service.organizationCheckAllowance('outsider', 'org-1'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(h.entitlements.forUser).not.toHaveBeenCalled();
+  });
+});
+
 describe('OrganizationsService.create', () => {
   function serviceWithTx(
     prisma: ReturnType<typeof makePrisma>,
