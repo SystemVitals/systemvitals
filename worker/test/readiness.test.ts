@@ -401,7 +401,7 @@ describe("worker readiness", () => {
 
     marker.startHeartbeat(checkReadiness, 1_000);
     await vi.advanceTimersByTimeAsync(1_000);
-    await expectMissing(path);
+    await vi.waitFor(() => expectMissing(path));
 
     await Promise.resolve();
     await Promise.resolve();
