@@ -99,12 +99,17 @@ function makeCanonicalLink(
   checkRef: { current: CheckRecord },
   queryCount: { current: number },
   variables: { current?: Record<string, unknown> },
+  options?: { rejectCanonicalLookup?: boolean },
 ) {
   return new ApolloLink((operation) =>
     new Observable((observer) => {
       if (operation.operationName === "CheckByOrganizationSlug") {
         queryCount.current += 1;
         variables.current = operation.variables;
+        if (options?.rejectCanonicalLookup) {
+          observer.error(new Error("Check not found"));
+          return;
+        }
         observer.next({
           data: { checkByOrganizationSlug: { ...checkRef.current } },
         });
@@ -145,17 +150,35 @@ function makeCanonicalLink(
   );
 }
 
-async function renderCanonicalPage() {
+const OLD_CANONICAL_VARIABLES = {
+  orgSlug: "source",
+  checkSlug: "old-slug",
+};
+
+async function renderCanonicalPage(options?: {
+  seedCanonicalCache?: boolean;
+  rejectCanonicalLookup?: boolean;
+}) {
   const checkRef = { current: { ...INITIAL_CHECK } };
   const queryCount = { current: 0 };
   const variables: { current?: Record<string, unknown> } = {};
+  const cache = new InMemoryCache();
+  if (options?.seedCanonicalCache) {
+    cache.writeQuery({
+      query: CHECK_BY_ORGANIZATION_SLUG,
+      variables: OLD_CANONICAL_VARIABLES,
+      data: { checkByOrganizationSlug: { ...checkRef.current } },
+    });
+  }
   const client = new ApolloClient({
-    link: makeCanonicalLink(checkRef, queryCount, variables),
-    cache: new InMemoryCache(),
+    link: makeCanonicalLink(checkRef, queryCount, variables, options),
+    cache,
   });
+  vi.spyOn(client, "refetchQueries").mockResolvedValue([]);
 
+  let view!: ReturnType<typeof render>;
   await act(async () => {
-    render(
+    view = render(
       <ApolloProvider client={client}>
         <Suspense fallback={null}>
           <CanonicalCheckPage
@@ -166,7 +189,41 @@ async function renderCanonicalPage() {
     );
   });
 
-  return { checkRef, queryCount, variables };
+  return { checkRef, client, queryCount, variables, unmount: view.unmount };
+}
+
+function readOldCanonicalRoute(client: ApolloClient) {
+  return client.cache.readQuery<{ checkByOrganizationSlug: CheckRecord }>({
+    query: CHECK_BY_ORGANIZATION_SLUG,
+    variables: OLD_CANONICAL_VARIABLES,
+  });
+}
+
+function hasOldCanonicalRootEntry(client: ApolloClient) {
+  const extracted = client.cache.extract() as Record<string, unknown>;
+  const rootQuery = extracted.ROOT_QUERY as
+    | Record<string, unknown>
+    | undefined;
+  return Object.keys(rootQuery ?? {}).some(
+    (field) =>
+      field.startsWith("checkByOrganizationSlug(") &&
+      field.includes('"source"') &&
+      field.includes('"old-slug"'),
+  );
+}
+
+async function expectOldCanonicalRouteRequiresNetwork(
+  client: ApolloClient,
+  queryCount: { current: number },
+) {
+  const beforeRevisit = queryCount.current;
+  await expect(
+    client.query({
+      query: CHECK_BY_ORGANIZATION_SLUG,
+      variables: OLD_CANONICAL_VARIABLES,
+    }),
+  ).rejects.toThrow("Check not found");
+  expect(queryCount.current).toBe(beforeRevisit + 1);
 }
 
 function submitEditForm() {
@@ -212,9 +269,24 @@ describe("canonical organization/check route", () => {
     });
   });
 
-  it("replaces a renamed check with the canonical two-segment route", async () => {
-    await renderCanonicalPage();
+  it("evicts a renamed check's old canonical route before replacing it", async () => {
+    const { client, queryCount, unmount } = await renderCanonicalPage({
+      seedCanonicalCache: true,
+      rejectCanonicalLookup: true,
+    });
     await screen.findByText("Nightly job");
+    expect(readOldCanonicalRoute(client)?.checkByOrganizationSlug.slug).toBe(
+      "old-slug",
+    );
+    expect(hasOldCanonicalRootEntry(client)).toBe(true);
+    let cachedRouteAtNavigation:
+      | ReturnType<typeof readOldCanonicalRoute>
+      | undefined;
+    let rootEntryAtNavigation: boolean | undefined;
+    navigation.replace.mockImplementationOnce(() => {
+      cachedRouteAtNavigation = readOldCanonicalRoute(client);
+      rootEntryAtNavigation = hasOldCanonicalRootEntry(client);
+    });
 
     fireEvent.click(screen.getByRole("button", { name: /edit/i }));
     fireEvent.change(screen.getByLabelText(/url slug/i), {
@@ -225,6 +297,10 @@ describe("canonical organization/check route", () => {
     await waitFor(() =>
       expect(navigation.replace).toHaveBeenCalledWith("/source/new-slug"),
     );
+    expect(cachedRouteAtNavigation).toBeNull();
+    expect(rootEntryAtNavigation).toBe(false);
+    unmount();
+    await expectOldCanonicalRouteRequiresNetwork(client, queryCount);
   });
 
   it("refetches a non-slug edit in place", async () => {
@@ -241,20 +317,38 @@ describe("canonical organization/check route", () => {
     expect(navigation.replace).not.toHaveBeenCalled();
   });
 
-  it("moves to the destination organization before replacing the route", async () => {
-    const { queryCount } = await renderCanonicalPage();
+  it("evicts a moved check's old canonical route before replacing it", async () => {
+    const { client, queryCount, unmount } = await renderCanonicalPage({
+      seedCanonicalCache: true,
+      rejectCanonicalLookup: true,
+    });
     await screen.findByText("Nightly job");
+    expect(readOldCanonicalRoute(client)?.checkByOrganizationSlug.slug).toBe(
+      "old-slug",
+    );
+    expect(hasOldCanonicalRootEntry(client)).toBe(true);
+    let cachedRouteAtNavigation:
+      | ReturnType<typeof readOldCanonicalRoute>
+      | undefined;
+    let rootEntryAtNavigation: boolean | undefined;
+    navigation.replace.mockImplementationOnce(() => {
+      cachedRouteAtNavigation = readOldCanonicalRoute(client);
+      rootEntryAtNavigation = hasOldCanonicalRootEntry(client);
+    });
 
     await moveToDestination();
 
     await waitFor(() =>
       expect(navigation.replace).toHaveBeenCalledWith("/destination/old-slug"),
     );
+    expect(cachedRouteAtNavigation).toBeNull();
+    expect(rootEntryAtNavigation).toBe(false);
     expect(setActiveOrgId).toHaveBeenCalledWith("org-destination");
     expect(setActiveOrgId.mock.invocationCallOrder[0]).toBeLessThan(
       navigation.replace.mock.invocationCallOrder[0],
     );
-    expect(queryCount.current).toBe(1);
+    unmount();
+    await expectOldCanonicalRouteRequiresNetwork(client, queryCount);
   });
 });
 

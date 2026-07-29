@@ -170,6 +170,14 @@ describe("MoveCheckDialog", () => {
     );
     expect(evict).toHaveBeenCalledWith({ id: "ROOT_QUERY", fieldName: "checks" });
     expect(evict).toHaveBeenCalledWith({ id: "ROOT_QUERY", fieldName: "statusPages" });
+    expect(evict).toHaveBeenCalledWith({
+      id: "ROOT_QUERY",
+      fieldName: "checkByOrganizationSlug",
+      args: {
+        orgSlug: "source",
+        checkSlug: "nightly-backup",
+      },
+    });
     expect(gc).toHaveBeenCalled();
     expect(refetchQueries).toHaveBeenCalledWith({ include: ["checks", "statusPages"] });
     expect(onMoved).toHaveBeenCalledWith({

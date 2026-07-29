@@ -82,7 +82,7 @@ export function MoveCheckDialog({
   }
 
   async function handleMove() {
-    if (!selectedOrg) return;
+    if (!selectedOrg || !sourceOrg) return;
 
     setErrorMessage(null);
     let movedCheck: { id: string; organizationId: string; slug: string };
@@ -102,6 +102,19 @@ export function MoveCheckDialog({
         error instanceof Error ? error.message : "Unable to move check.",
       );
       return;
+    }
+
+    try {
+      client.cache.evict({
+        id: "ROOT_QUERY",
+        fieldName: "checkByOrganizationSlug",
+        args: {
+          orgSlug: sourceOrg.slug,
+          checkSlug,
+        },
+      });
+    } catch {
+      // The server mutation is already committed; cache cleanup is best-effort.
     }
 
     try {

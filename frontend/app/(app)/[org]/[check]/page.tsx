@@ -2,7 +2,7 @@
 
 import { use } from "react";
 import { useRouter } from "next/navigation";
-import { useQuery } from "@apollo/client/react";
+import { useApolloClient, useQuery } from "@apollo/client/react";
 import { CheckDetail, type CheckDetailData } from "@/components/app/check-detail";
 import { useOrg } from "@/lib/org-context";
 import { CHECK_POLL_INTERVAL_MS } from "@/lib/polling";
@@ -16,6 +16,7 @@ export default function CheckDetailByOrganizationSlugPage({
 }) {
   const { org, check } = use(params);
   const router = useRouter();
+  const client = useApolloClient();
   const { setActiveOrgId } = useOrg();
   const query = useQuery<{ checkByOrganizationSlug: CheckDetailData }>(
     CHECK_BY_ORGANIZATION_SLUG,
@@ -41,6 +42,16 @@ export default function CheckDetailByOrganizationSlugPage({
       }}
       onRefetch={(updatedCheck) => {
         if (updatedCheck && updatedCheck.slug !== check) {
+          try {
+            client.cache.evict({
+              id: "ROOT_QUERY",
+              fieldName: "checkByOrganizationSlug",
+              args: { orgSlug: org, checkSlug: check },
+            });
+            client.cache.gc();
+          } catch {
+            // The rename is committed; cache cleanup must not block navigation.
+          }
           router.replace(`/${org}/${updatedCheck.slug}`);
           return;
         }
