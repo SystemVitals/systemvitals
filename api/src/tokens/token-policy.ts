@@ -7,6 +7,7 @@ const SCOPED_TOKEN_OPERATIONS = new Set([
   'checks',
   'check',
   'checkBySlug',
+  'checkByOrganizationSlug',
   'events',
   'nextExpectedAt',
   'notificationChannelIds',

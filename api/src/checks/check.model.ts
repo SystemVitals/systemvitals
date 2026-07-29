@@ -25,7 +25,9 @@ export class CheckModel {
   @Field({ nullable: true }) tz?: string;
   @Field({ nullable: true }) nextExpectedAt?: Date;
   @Field({ nullable: true }) lastEventAt?: Date;
-  @Field(() => ID) projectId!: string;
+  @Field(() => ID) organizationId!: string;
+  @Field(() => ID, { deprecationReason: 'Use organizationId.' })
+  projectId!: string;
   @Field({ nullable: true }) target?: string;
   @Field({ nullable: true }) method?: string;
   @Field(() => Int, { nullable: true }) expectedStatus?: number;

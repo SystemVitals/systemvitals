@@ -9,9 +9,18 @@ import { cleanupTestUsers } from './cleanup-test-users';
 jest.setTimeout(60_000);
 
 const MOVE_CHECK = `
-  mutation MoveCheck($checkId: ID!, $destinationProjectId: ID!) {
-    moveCheck(checkId: $checkId, destinationProjectId: $destinationProjectId) {
+  mutation MoveCheck(
+    $checkId: ID!
+    $destinationOrganizationId: ID
+    $destinationProjectId: ID
+  ) {
+    moveCheck(
+      checkId: $checkId
+      destinationOrganizationId: $destinationOrganizationId
+      destinationProjectId: $destinationProjectId
+    ) {
       id
+      organizationId
       projectId
       slug
       pingSlug
@@ -30,6 +39,7 @@ interface GraphQlResponse {
 
 interface MoveResult {
   id: string;
+  organizationId: string;
   projectId: string;
   slug: string;
   pingSlug: string;
@@ -367,6 +377,7 @@ describe('moveCheck (e2e)', () => {
     expect(response.errors).toBeUndefined();
     expect(response.data?.moveCheck).toEqual({
       id: fixture.checkId,
+      organizationId: fixture.destinationOrganizationId,
       projectId: fixture.destinationProjectId,
       slug: 'nightly-backup',
       pingSlug: fixture.pingSlug,
@@ -436,6 +447,21 @@ describe('moveCheck (e2e)', () => {
     );
   });
 
+  it('moves to a canonical destination organization', async () => {
+    const fixture = await createFixture();
+    const response = await gql(fixture.actorToken, {
+      checkId: fixture.checkId,
+      destinationOrganizationId: fixture.destinationOrganizationId,
+    });
+
+    expect(response.errors).toBeUndefined();
+    expect(response.data?.moveCheck).toMatchObject({
+      id: fixture.checkId,
+      organizationId: fixture.destinationOrganizationId,
+      projectId: fixture.destinationProjectId,
+    });
+  });
+
   it.each([
     ['ADMIN in the source organization', { sourceRole: 'ADMIN' as const }],
     [
@@ -456,7 +482,7 @@ describe('moveCheck (e2e)', () => {
 
   it.each([
     ['the same project', 'same'],
-    ['a missing destination project', 'missing'],
+    ['a missing destination organization', 'missing'],
   ])(
     'rejects %s without changing source state',
     async (_label, destination) => {
@@ -470,7 +496,7 @@ describe('moveCheck (e2e)', () => {
       expect(response.errors?.[0]?.message).toMatch(
         destination === 'same'
           ? /already in the destination/
-          : /Destination project not found/,
+          : /Workspace not found/,
       );
       await expectUnchanged(fixture);
     },
@@ -483,7 +509,7 @@ describe('moveCheck (e2e)', () => {
       destinationProjectId: fixture.destinationProjectId,
     });
     expect(response.errors?.[0]?.message).toContain(
-      'already exists in the destination project',
+      'already exists in the destination organization',
     );
     await expectUnchanged(fixture);
   });
@@ -580,7 +606,7 @@ describe('moveCheck (e2e)', () => {
     const second = await gql(fixture.actorToken, variables);
     expect(first.errors).toBeUndefined();
     expect(second.errors?.[0]?.message).toContain(
-      'already in the destination project',
+      'already in the destination organization',
     );
     expect(await prisma.check.count({ where: { id: fixture.checkId } })).toBe(
       1,

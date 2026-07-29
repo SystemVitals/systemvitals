@@ -400,7 +400,11 @@ export class ChecksService {
       check.id,
       check.projectId,
     );
-    return { ...check, notificationChannelIds };
+    return {
+      ...check,
+      organizationId: check.project.organizationId,
+      notificationChannelIds,
+    };
   }
 
   async projectIdForCheck(userId: string, checkId: string): Promise<string> {
@@ -442,6 +446,42 @@ export class ChecksService {
       check.projectId,
     );
     return { ...check, notificationChannelIds };
+  }
+
+  async findByOrganizationSlug(
+    userId: string,
+    orgSlug: string,
+    checkSlug: string,
+  ) {
+    // Organization and check slugs are guessable. Fold membership into this
+    // lookup so an inaccessible check and a missing check perform the same
+    // database work and return the same public error.
+    const check = await this.prisma.check.findFirst({
+      where: {
+        slug: checkSlug,
+        project: {
+          organization: {
+            slug: orgSlug,
+            memberships: { some: { userId } },
+          },
+        },
+      },
+      include: {
+        project: { select: { organizationId: true } },
+      },
+    });
+
+    if (!check) throw new NotFoundException('Check not found');
+
+    const notificationChannelIds = await this.effectiveNotificationChannelIds(
+      check.id,
+      check.projectId,
+    );
+    return {
+      ...check,
+      organizationId: check.project.organizationId,
+      notificationChannelIds,
+    };
   }
 
   async effectiveNotificationChannelIds(
@@ -510,7 +550,11 @@ export class ChecksService {
             check.projectId,
             tx,
           );
-        return { ...check, notificationChannelIds } as CheckModel;
+        return {
+          ...check,
+          organizationId: check.project.organizationId,
+          notificationChannelIds,
+        } as CheckModel;
       },
     );
   }
@@ -583,11 +627,11 @@ export class ChecksService {
           },
         });
         if (!initialDestination) {
-          throw new NotFoundException('Destination project not found');
+          throw new NotFoundException('Destination organization not found');
         }
         if (initialCheck.projectId === destinationProjectId) {
           throw new BadRequestException(
-            'Check is already in the destination project',
+            'Check is already in the destination organization',
           );
         }
         if (
@@ -595,7 +639,7 @@ export class ChecksService {
           initialDestination.organizationId
         ) {
           throw new BadRequestException(
-            'Destination project must be in another organization',
+            'Check is already in the destination organization',
           );
         }
 
@@ -628,7 +672,7 @@ export class ChecksService {
         });
         if (!check) throw new NotFoundException('Check not found');
         if (!destination) {
-          throw new NotFoundException('Destination project not found');
+          throw new NotFoundException('Destination organization not found');
         }
         if (
           check.project.organization.creatorUserId !== sourceCreatorId ||
@@ -638,12 +682,12 @@ export class ChecksService {
         }
         if (check.projectId === destinationProjectId) {
           throw new BadRequestException(
-            'Check is already in the destination project',
+            'Check is already in the destination organization',
           );
         }
         if (check.project.organizationId === destination.organizationId) {
           throw new BadRequestException(
-            'Destination project must be in another organization',
+            'Check is already in the destination organization',
           );
         }
 
@@ -660,7 +704,7 @@ export class ChecksService {
         });
         if (collision) {
           throw new ConflictException(
-            `A check with slug "${check.slug}" already exists in the destination project`,
+            `A check with slug "${check.slug}" already exists in the destination organization`,
           );
         }
 
@@ -692,7 +736,7 @@ export class ChecksService {
         error.code === 'P2002'
       ) {
         throw new ConflictException(
-          'A check with this slug already exists in the destination project',
+          'A check with this slug already exists in the destination organization',
         );
       }
       throw error;

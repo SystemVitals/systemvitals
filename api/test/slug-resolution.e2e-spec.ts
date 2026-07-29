@@ -119,6 +119,40 @@ describe('slug resolution and editing (e2e)', () => {
     expect(bySlug.data?.checkBySlug).toEqual(byId.data?.check);
   });
 
+  it('checkByOrganizationSlug returns the same check without a project slug', async () => {
+    const check = await newHeartbeat('Organization Owned Check');
+
+    const byId = await gql(
+      app,
+      tokenA,
+      `query ($id: ID!) { check(id: $id) { ${CHECK_FIELDS} } }`,
+      { id: check.id },
+    );
+    const byOrganizationSlug = await gql(
+      app,
+      tokenA,
+      `query ($o: String!, $c: String!) {
+        checkByOrganizationSlug(orgSlug: $o, checkSlug: $c) {
+          ${CHECK_FIELDS}
+        }
+      }`,
+      { o: orgASlug, c: check.slug },
+    );
+
+    expect(byOrganizationSlug.errors).toBeUndefined();
+    expect(byOrganizationSlug.data?.checkByOrganizationSlug).toEqual(
+      byId.data?.check,
+    );
+
+    const deleted = await gql(
+      app,
+      tokenA,
+      `mutation ($id: ID!) { deleteCheck(id: $id) }`,
+      { id: check.id },
+    );
+    expect(deleted.errors).toBeUndefined();
+  });
+
   it('a triple belonging to another organization is indistinguishable from a nonexistent one', async () => {
     // A slug triple is guessable in a way a cuid is not. If "exists but I'm
     // not a member" produced a response an attacker could tell apart from
