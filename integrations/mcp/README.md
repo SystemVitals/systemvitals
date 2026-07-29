@@ -91,10 +91,12 @@ The server introspects the credential before registering tools:
   `get_check`.
 
 For scoped credentials, the server injects the bound organization and no tool
-schema exposes a workspace selector. When connected to an older API that
-returns only a bound project, the server injects that legacy project instead.
-Startup fails when neither workspace ID is present instead of silently widening
-access.
+schema exposes a workspace selector. If an older API rejects either new
+organization metadata field during credential discovery, the server retries
+exactly once with the public legacy project metadata fields, then injects that
+bound legacy project. Authentication, authorization, transport, and unrelated
+GraphQL errors are never retried. Startup fails when neither workspace ID is
+present instead of silently widening access.
 
 For session and legacy broad credentials, workspace-scoped tools take exactly
 one selector. Use `organizationId`; the deprecated `projectId` selector remains

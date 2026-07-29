@@ -15,6 +15,10 @@ interface ApiCredentialResponse {
   apiCredential: Credential;
 }
 
+interface LegacyApiCredentialResponse {
+  apiCredential: Omit<Credential, "organizationId" | "organizationName">;
+}
+
 const READ_TOOLS = ["list_checks", "get_check"] as const;
 const WRITE_TOOLS = [
   "create_heartbeat_check",
@@ -26,19 +30,55 @@ const WRITE_TOOLS = [
   "set_check_channel_enabled",
 ] as const;
 
+const CANONICAL_CREDENTIAL_QUERY = `query ApiCredential {
+  apiCredential {
+    authKind
+    credentialMode
+    capabilities
+    organizationId
+    organizationName
+    projectId
+    projectName
+  }
+}`;
+
+const LEGACY_CREDENTIAL_QUERY = `query LegacyApiCredential {
+  apiCredential {
+    authKind
+    credentialMode
+    capabilities
+    projectId
+    projectName
+  }
+}`;
+
+function isUnknownOrganizationCredentialField(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+
+  return ["organizationId", "organizationName"].some((field) =>
+    error.message.startsWith(
+      `Cannot query field "${field}" on type "ApiCredential"`,
+    ),
+  );
+}
+
 export async function fetchCredential(gql: Gql): Promise<Credential> {
-  const data = await gql(`query ApiCredential {
-    apiCredential {
-      authKind
-      credentialMode
-      capabilities
-      organizationId
-      organizationName
-      projectId
-      projectName
+  try {
+    const data = await gql(CANONICAL_CREDENTIAL_QUERY);
+    return (data as unknown as ApiCredentialResponse).apiCredential;
+  } catch (error) {
+    if (!isUnknownOrganizationCredentialField(error)) {
+      throw error;
     }
-  }`);
-  return (data as unknown as ApiCredentialResponse).apiCredential;
+    const data = await gql(LEGACY_CREDENTIAL_QUERY);
+    const legacyCredential = (data as unknown as LegacyApiCredentialResponse)
+      .apiCredential;
+    return {
+      ...legacyCredential,
+      organizationId: null,
+      organizationName: null,
+    };
+  }
 }
 
 export function toolsForCredential(
