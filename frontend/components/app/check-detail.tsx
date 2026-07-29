@@ -19,7 +19,10 @@ import { CopyField } from "@/components/app/copy-field";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EventTimeline, type TimelineEvent } from "@/components/app/event-timeline";
 import { EditCheckDialog, type UpdatedCheck } from "@/components/app/edit-check-dialog";
-import type { MoveDestination } from "@/components/app/move-check-dialog";
+import {
+  MoveCheckDialog,
+  type MoveDestination,
+} from "@/components/app/move-check-dialog";
 import {
   CheckNotificationChannels,
   type NotificationChannelOption,
@@ -165,6 +168,7 @@ export function CheckDetail({
   loading,
   error,
   onRefetch,
+  onMoved,
 }: {
   check: CheckDetailData | undefined;
   loading: boolean;
@@ -231,6 +235,12 @@ export function CheckDetail({
               <Pencil className="h-4 w-4 mr-1" />
               Edit
             </Button>
+            <MoveCheckDialog
+              checkId={check.id}
+              sourceOrganizationId={check.organizationId}
+              checkSlug={check.slug}
+              onMoved={onMoved}
+            />
           </div>
 
           {pingUrl && (

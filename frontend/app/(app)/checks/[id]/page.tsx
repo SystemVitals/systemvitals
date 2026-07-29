@@ -1,45 +1,56 @@
 "use client";
-import { use } from "react";
+
+import { use, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@apollo/client/react";
-import { CHECK } from "@/lib/queries";
 import { CheckDetail, type CheckDetailData } from "@/components/app/check-detail";
-import { usePollWhenVisible } from "@/lib/use-poll-when-visible";
-import { CHECK_POLL_INTERVAL_MS } from "@/lib/polling";
 import { useOrg } from "@/lib/org-context";
+import { CHECK } from "@/lib/queries";
 
-export default function CheckDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default function CheckDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
   const { id } = use(params);
   const router = useRouter();
-  const { setActiveOrgId } = useOrg();
-
-  const query = useQuery<{ check: CheckDetailData }>(CHECK, {
+  const { orgs, setActiveOrgId } = useOrg();
+  const { data, loading, error } = useQuery<{
+    check: CheckDetailData | null;
+  }>(CHECK, {
     variables: { id },
-    // Apollo 4 defaults this to true, which would flip `loading` on every poll
-    // and flash the skeleton over already-good content every 15s.
     notifyOnNetworkStatusChange: false,
   });
-  const { data, loading, error, refetch } = query;
+  const check = data?.check;
+  const organization = check
+    ? orgs.find((org) => org.id === check.organizationId)
+    : undefined;
+  const canRedirect = !loading && !error && Boolean(check && organization);
 
-  usePollWhenVisible(query, CHECK_POLL_INTERVAL_MS);
+  useEffect(() => {
+    if (canRedirect && check && organization) {
+      setActiveOrgId(organization.id);
+      router.replace(`/${organization.slug}/${check.slug}`);
+    }
+  }, [canRedirect, check, organization, router, setActiveOrgId]);
+
+  if (canRedirect) return null;
+
+  const lookupError =
+    error ??
+    (!loading && data && !check
+      ? new Error("Check not found")
+      : !loading && check && !organization
+        ? new Error("Check organization not found")
+        : undefined);
 
   return (
     <CheckDetail
-      check={data?.check}
+      check={undefined}
       loading={loading}
-      error={error}
-      onMoved={(destination) => {
-        setActiveOrgId(destination.organizationId);
-        router.replace(
-          `/${destination.organizationSlug}/${destination.projectSlug}/${destination.checkSlug}`,
-        );
-      }}
-      onRefetch={() => {
-        // This route's query is keyed on `id`, which a slug rename never
-        // changes, so a plain refetch (ignoring any updated check passed in)
-        // is always correct here.
-        refetch();
-      }}
+      error={lookupError}
+      onMoved={() => undefined}
+      onRefetch={() => undefined}
     />
   );
 }

@@ -1,5 +1,4 @@
 import { gql } from "@apollo/client";
-export { CHECK_BY_SLUG } from "./legacy-queries";
 
 export const CHECKS = gql`
   query checks($organizationId: ID!) {
@@ -55,6 +54,39 @@ export const CHECK = gql`
   }
 `;
 
+export const CHECK_BY_ORGANIZATION_SLUG = gql`
+  query CheckByOrganizationSlug($orgSlug: String!, $checkSlug: String!) {
+    checkByOrganizationSlug(orgSlug: $orgSlug, checkSlug: $checkSlug) {
+      id
+      organizationId
+      notificationChannelIds
+      name
+      slug
+      type
+      status
+      pingSlug
+      periodSeconds
+      graceSeconds
+      schedule
+      tz
+      nextExpectedAt
+      target
+      method
+      expectedStatus
+      intervalSeconds
+      timeoutMs
+      events {
+        id
+        status
+        timestamp
+        error
+        responseTimeMs
+        statusCode
+      }
+    }
+  }
+`;
+
 export const CREATE_CHECK = gql`
   mutation createCheck(
     $organizationId: ID!
@@ -96,13 +128,13 @@ export const RESUME_CHECK = gql`
 `;
 
 export const MOVE_CHECK = gql`
-  mutation MoveCheck($checkId: ID!, $destinationProjectId: ID!) {
+  mutation MoveCheck($checkId: ID!, $destinationOrganizationId: ID!) {
     moveCheck(
       checkId: $checkId
-      destinationProjectId: $destinationProjectId
+      destinationOrganizationId: $destinationOrganizationId
     ) {
       id
-      projectId
+      organizationId
       slug
     }
   }

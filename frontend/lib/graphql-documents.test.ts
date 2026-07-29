@@ -77,8 +77,6 @@ describe("canonical workspace GraphQL documents", () => {
   it("keeps project-slug lookup only in the legacy document module", () => {
     expect(legacyDocs).toHaveProperty("CHECK_BY_SLUG");
     expect(print(legacyDocs.CHECK_BY_SLUG)).toContain("projectSlug");
-    expect(print(publicDocs.CHECK_BY_SLUG)).toBe(
-      print(legacyDocs.CHECK_BY_SLUG),
-    );
+    expect(publicDocs).not.toHaveProperty("CHECK_BY_SLUG");
   });
 });

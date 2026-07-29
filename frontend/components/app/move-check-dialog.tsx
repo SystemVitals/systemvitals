@@ -26,20 +26,19 @@ import { MOVE_CHECK } from "@/lib/queries";
 export interface MoveDestination {
   organizationId: string;
   organizationSlug: string;
-  projectSlug: string;
   checkSlug: string;
 }
 
 interface MoveCheckDialogProps {
   checkId: string;
-  sourceProjectId: string;
+  sourceOrganizationId: string;
   checkSlug: string;
   onMoved: (destination: MoveDestination) => void;
 }
 
 export function MoveCheckDialog({
   checkId,
-  sourceProjectId,
+  sourceOrganizationId,
   checkSlug,
   onMoved,
 }: MoveCheckDialogProps) {
@@ -47,26 +46,19 @@ export function MoveCheckDialog({
   const { orgs } = useOrg();
   const [open, setOpen] = useState(false);
   const [selectedOrgId, setSelectedOrgId] = useState("");
-  const [selectedProjectId, setSelectedProjectId] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [moveCheck, { loading }] = useMutation<
-    { moveCheck: { id: string; projectId: string; slug: string } },
-    { checkId: string; destinationProjectId: string }
+    { moveCheck: { id: string; organizationId: string; slug: string } },
+    { checkId: string; destinationOrganizationId: string }
   >(MOVE_CHECK);
 
-  const sourceOrg = orgs.find((org) =>
-    org.projects.some((project) => project.id === sourceProjectId),
-  );
+  const sourceOrg = orgs.find((org) => org.id === sourceOrganizationId);
   const destinationOrgs = orgs.filter(
     (org) =>
       org.role === "OWNER" &&
-      org.id !== sourceOrg?.id &&
-      org.projects.length > 0,
+      org.id !== sourceOrganizationId,
   );
   const selectedOrg = destinationOrgs.find((org) => org.id === selectedOrgId);
-  const selectedProject = selectedOrg?.projects.find(
-    (project) => project.id === selectedProjectId,
-  );
 
   if (
     !sourceOrg ||
@@ -79,7 +71,6 @@ export function MoveCheckDialog({
   function handleOpenChange(nextOpen: boolean) {
     if (nextOpen) {
       setSelectedOrgId("");
-      setSelectedProjectId("");
       setErrorMessage(null);
     }
     setOpen(nextOpen);
@@ -87,20 +78,19 @@ export function MoveCheckDialog({
 
   function handleOrganizationChange(organizationId: string | null) {
     setSelectedOrgId(organizationId ?? "");
-    setSelectedProjectId("");
     setErrorMessage(null);
   }
 
   async function handleMove() {
-    if (!selectedOrg || !selectedProject) return;
+    if (!selectedOrg) return;
 
     setErrorMessage(null);
-    let movedCheck: { id: string; projectId: string; slug: string };
+    let movedCheck: { id: string; organizationId: string; slug: string };
     try {
       const result = await moveCheck({
         variables: {
           checkId,
-          destinationProjectId: selectedProject.id,
+          destinationOrganizationId: selectedOrg.id,
         },
       });
       if (!result.data?.moveCheck) {
@@ -127,7 +117,6 @@ export function MoveCheckDialog({
       onMoved({
         organizationId: selectedOrg.id,
         organizationSlug: selectedOrg.slug,
-        projectSlug: selectedProject.slug,
         checkSlug: movedCheck.slug,
       });
     } catch {
@@ -148,7 +137,7 @@ export function MoveCheckDialog({
         <DialogHeader>
           <DialogTitle>Move check</DialogTitle>
           <DialogDescription>
-            Choose an organization and one of its existing projects.
+            Choose the organization that should own this check.
           </DialogDescription>
         </DialogHeader>
 
@@ -168,31 +157,9 @@ export function MoveCheckDialog({
             </SelectContent>
           </Select>
 
-          <Select
-            value={selectedProjectId}
-            onValueChange={(projectId) => {
-              setSelectedProjectId(projectId ?? "");
-              setErrorMessage(null);
-            }}
-            disabled={!selectedOrg}
-          >
-            <SelectTrigger className="w-full" aria-label="Destination project">
-              <SelectValue placeholder="Select project">
-                {selectedProject?.name}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {selectedOrg?.projects.map((project) => (
-                <SelectItem key={project.id} value={project.id}>
-                  {project.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          {selectedOrg && selectedProject && (
+          {selectedOrg && (
             <p className="font-mono text-sm text-muted-foreground">
-              /{selectedOrg.slug}/{selectedProject.slug}/{checkSlug}
+              /{selectedOrg.slug}/{checkSlug}
             </p>
           )}
 
@@ -207,7 +174,7 @@ export function MoveCheckDialog({
           <Button
             type="button"
             onClick={handleMove}
-            disabled={!selectedProject || loading}
+            disabled={!selectedOrg || loading}
           >
             {loading ? "Moving…" : "Move check"}
           </Button>

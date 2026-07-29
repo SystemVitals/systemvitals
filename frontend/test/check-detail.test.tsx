@@ -6,9 +6,9 @@ import { CheckDetail, type CheckDetailData } from "@/components/app/check-detail
 import {
   CHANNELS,
   CHECK,
-  CHECK_BY_SLUG,
   SET_CHECK_CHANNEL_ENABLED,
 } from "@/lib/queries";
+import { CHECK_BY_SLUG } from "@/lib/legacy-queries";
 import type { Org } from "@/lib/org-context";
 
 const orgContext = vi.hoisted(() => ({
