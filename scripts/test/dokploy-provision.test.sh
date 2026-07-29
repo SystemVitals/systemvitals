@@ -33,7 +33,58 @@ assert_not_contains() {
   fi
 }
 
+worker_environment_allowlist_keys() {
+  local source_file=$1
+
+  awk '
+    /^application_environment_allowlist\(\) \{$/ {
+      in_allowlist_function = 1
+      next
+    }
+    in_allowlist_function && /^    worker\)$/ {
+      in_worker_branch = 1
+      next
+    }
+    in_worker_branch && /^      ;;$/ {
+      found_worker_branch_end = 1
+      exit
+    }
+    in_worker_branch {
+      remainder = $0
+      while (match(remainder, /"[A-Z][A-Z0-9_]*"/)) {
+        print substr(remainder, RSTART + 1, RLENGTH - 2)
+        remainder = substr(remainder, RSTART + RLENGTH)
+      }
+    }
+    END {
+      if (!in_allowlist_function || !in_worker_branch ||
+          !found_worker_branch_end) {
+        exit 2
+      }
+    }
+  ' "$source_file"
+}
+
 [[ -f "$helper" ]] || fail "$helper is missing"
+
+worker_allowlist_keys=$(worker_environment_allowlist_keys "$provisioner") ||
+  fail "could not parse the worker environment allowlist contract"
+for required_worker_key in \
+  DATABASE_URL \
+  REDIS_URL \
+  QUEUE_ALERT \
+  QUEUE_PROBE \
+  QUEUE_INVITE \
+  SCHEDULER_LEASE_TTL_MS \
+  WORKER_SHUTDOWN_TIMEOUT_MS \
+  WORKER_READINESS_PATH; do
+  grep -Fxq -- "$required_worker_key" <<<"$worker_allowlist_keys" ||
+    fail "worker environment allowlist omitted $required_worker_key"
+done
+legacy_worker_queue_key=QUEUE_"ESCALATION"
+if grep -Fxq -- "$legacy_worker_queue_key" <<<"$worker_allowlist_keys"; then
+  fail "worker environment allowlist retained a legacy queue key"
+fi
 
 mock_bin="$test_root/bin"
 mkdir -p "$mock_bin"
@@ -1206,7 +1257,7 @@ cat >"$compose_state_file" <<'EOF'
   "composeStatus": "done",
   "serverId": null,
   "githubId": "github-provider-id",
-  "env": "DATABASE_URL=PLAN_DATABASE_SECRET\nREDIS_URL=PLAN_REDIS_SECRET\nJWT_SECRET=PLAN_JWT_SECRET\nAPP_URL=https://systemvitals.nihey.org\nMIGRATION_RETRY_WINDOW_SECONDS=1800\nMIGRATION_RETRY_BASE_SECONDS=2\nMIGRATION_RETRY_MAX_SECONDS=30\nHTTP_DRAIN_DELAY_MS=5000\nHTTP_SHUTDOWN_TIMEOUT_MS=25000\nQUEUE_ALERT=alert\nQUEUE_PROBE=probe\nQUEUE_ESCALATION=escalation\nQUEUE_INVITE=invite\nWATCHDOG_INTERVAL_MS=30000\nPROBE_SCHEDULER_INTERVAL_MS=15000\nSCHEDULER_LEASE_TTL_MS=90000\nWORKER_SHUTDOWN_TIMEOUT_MS=45000\nWORKER_READINESS_PATH=/tmp/systemvitals-worker-ready\nWORKER_READINESS_HEARTBEAT_INTERVAL_MS=5000\nWORKER_READINESS_MAX_AGE_SECONDS=30\nSTRIPE_SECRET_KEY=STRIPE_SECRET_VALUE\nSTRIPE_WEBHOOK_SECRET=STRIPE_WEBHOOK_VALUE\nSTRIPE_PRICE_SIGNAL=price_signal\nSTRIPE_PRICE_FLEET=price_fleet\nSMTP_HOST=smtp.test\nSMTP_PORT=587\nSMTP_USER=smtp-user\nSMTP_PASS=SMTP_SECRET_VALUE\nMAIL_FROM=alerts@systemvitals.test\nADMIN_EMAILS=admin@systemvitals.test\nGOOGLE_CLIENT_ID=google-client\nGOOGLE_CLIENT_SECRET=GOOGLE_SECRET_VALUE\nGOOGLE_CALLBACK_URL=https://api.systemvitals.nihey.org/auth/google/callback\nTELEGRAM_BOT_TOKEN=TEST_TELEGRAM_TOKEN\nTELEGRAM_WEBHOOK_SECRET=TEST_TELEGRAM_WEBHOOK_SECRET\nTELEGRAM_WEBHOOK_URL=https://api.systemvitals.nihey.org/integrations/telegram/webhook\nNEXT_PUBLIC_API_URL=https://api.systemvitals.nihey.org\nNEXT_PUBLIC_APP_URL=https://systemvitals.nihey.org\nNEXT_PUBLIC_GOOGLE_AUTH_ENABLED=true\nPOSTGRES_PASSWORD=POSTGRES_SECRET_VALUE\nUNEXPECTED_SECRET=DO_NOT_COPY",
+  "env": "DATABASE_URL=PLAN_DATABASE_SECRET\nREDIS_URL=PLAN_REDIS_SECRET\nJWT_SECRET=PLAN_JWT_SECRET\nAPP_URL=https://systemvitals.nihey.org\nMIGRATION_RETRY_WINDOW_SECONDS=1800\nMIGRATION_RETRY_BASE_SECONDS=2\nMIGRATION_RETRY_MAX_SECONDS=30\nHTTP_DRAIN_DELAY_MS=5000\nHTTP_SHUTDOWN_TIMEOUT_MS=25000\nQUEUE_ALERT=alert\nQUEUE_PROBE=probe\nQUEUE_INVITE=invite\nWATCHDOG_INTERVAL_MS=30000\nPROBE_SCHEDULER_INTERVAL_MS=15000\nSCHEDULER_LEASE_TTL_MS=90000\nWORKER_SHUTDOWN_TIMEOUT_MS=45000\nWORKER_READINESS_PATH=/tmp/systemvitals-worker-ready\nWORKER_READINESS_HEARTBEAT_INTERVAL_MS=5000\nWORKER_READINESS_MAX_AGE_SECONDS=30\nSTRIPE_SECRET_KEY=STRIPE_SECRET_VALUE\nSTRIPE_WEBHOOK_SECRET=STRIPE_WEBHOOK_VALUE\nSTRIPE_PRICE_SIGNAL=price_signal\nSTRIPE_PRICE_FLEET=price_fleet\nSMTP_HOST=smtp.test\nSMTP_PORT=587\nSMTP_USER=smtp-user\nSMTP_PASS=SMTP_SECRET_VALUE\nMAIL_FROM=alerts@systemvitals.test\nADMIN_EMAILS=admin@systemvitals.test\nGOOGLE_CLIENT_ID=google-client\nGOOGLE_CLIENT_SECRET=GOOGLE_SECRET_VALUE\nGOOGLE_CALLBACK_URL=https://api.systemvitals.nihey.org/auth/google/callback\nTELEGRAM_BOT_TOKEN=TEST_TELEGRAM_TOKEN\nTELEGRAM_WEBHOOK_SECRET=TEST_TELEGRAM_WEBHOOK_SECRET\nTELEGRAM_WEBHOOK_URL=https://api.systemvitals.nihey.org/integrations/telegram/webhook\nNEXT_PUBLIC_API_URL=https://api.systemvitals.nihey.org\nNEXT_PUBLIC_APP_URL=https://systemvitals.nihey.org\nNEXT_PUBLIC_GOOGLE_AUTH_ENABLED=true\nPOSTGRES_PASSWORD=POSTGRES_SECRET_VALUE\nUNEXPECTED_SECRET=DO_NOT_COPY",
   "domains": [
     {
       "domainId": "frontend-domain-old",
@@ -1683,6 +1734,7 @@ jq -e '
 jq -e '
   (.env | contains("DATABASE_URL=PLAN_DATABASE_SECRET")) and
   (.env | contains("QUEUE_PROBE=probe")) and
+  (.env | contains("QUEUE_" + "ESCALATION") | not) and
   (.env | contains("SCHEDULER_LEASE_TTL_MS=90000")) and
   (.env | contains("TELEGRAM_BOT_TOKEN=TEST_TELEGRAM_TOKEN")) and
   ([.env | split("\n")[] | select(startswith("TELEGRAM_"))]) == [

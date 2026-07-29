@@ -15,9 +15,7 @@ check was created.
 
 Alert consumption uses that snapshot instead of re-reading check exclusions,
 so later routing toggles affect only future transitions. A channel that was
-deleted or globally disabled after the transition is safely skipped. During a
-rolling upgrade, legacy queued jobs without a snapshot temporarily resolve
-recipients from the current exclusions.
+deleted or globally disabled after the transition is safely skipped.
 
 DOWN transitions send an immediate alert to every selected channel. Recovery
 notifications use the same selection rule and are sent only for an actual
@@ -27,6 +25,12 @@ channel.
 
 The worker emits exactly two notification events: an immediate alert on a DOWN
 transition and a recovery notification on the following DOWN-to-UP transition.
+
+## Queues
+
+The active queues are `probe` for scheduled checks, `alert` for transition
+notifications, `invite` for organization invitations, and `email-verification`
+for email-channel verification.
 
 ## Validation
 

@@ -34,7 +34,7 @@ auto-deploy when `main` changes. Repository provisioning enables each
 application's `autoDeploy` flag independently; it does not define cross-app
 dependencies or readiness ordering.
 
-For the Release 2 cutover, the required and verified application order is:
+Use this application release order:
 
 1. API
 2. Frontend
@@ -42,15 +42,21 @@ For the Release 2 cutover, the required and verified application order is:
 
 Merging to `main` still triggers all three applications automatically. Observe
 the Dokploy deployment queue and application status during every release.
-Release 1 was observed to run in the required order, but that observation is
-not an orchestration guarantee. Verify that each predecessor reaches its
-readiness gate before allowing the next application rollout to continue. If
-the order differs, deployments overlap, or a readiness gate fails, intervene
-manually to stop the later rollout and roll back the failed application before
-continuing.
+Verify that each predecessor reaches its readiness gate before allowing the
+next application rollout to continue. If the order differs, deployments
+overlap, or a readiness gate fails, intervene manually to stop the later
+rollout and roll back the failed application before continuing. Application
+releases do not require deploying the infrastructure Compose project unless
+the release explicitly changes the stateful infrastructure.
 
-Release 2 is application-only: do not modify, restart, or deploy the
-infrastructure Compose project.
+### Active worker queues
+
+The worker uses four queues: `probe` for scheduled checks, `alert` for
+transition notifications, `invite` for organization invitations, and
+`email-verification` for email-channel verification. Dokploy provisioning
+allows queue-name overrides only for `probe`, `alert`, and `invite`; it keeps
+the email-verification queue at the shared `email-verification` default.
+Keep any allowlisted override aligned between its producers and the worker.
 
 For the existing production environment, `../nihey/.env` remains the
 authoritative infrastructure environment source. It is intentionally outside

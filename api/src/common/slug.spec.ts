@@ -113,27 +113,37 @@ describe('isValidSlug', () => {
 });
 
 describe('isReservedOrgSlug', () => {
-  it('reserves every current top-level route', () => {
-    for (const s of [
-      'account',
-      'admin',
-      'auth',
-      'billing',
-      'channels',
-      'checks',
-      'dashboard',
-      'escalation',
-      'login',
-      'signup',
-      'status',
-      'status-pages',
-    ]) {
-      expect(isReservedOrgSlug(s)).toBe(true);
-    }
+  it.each([
+    'account',
+    'admin',
+    'api',
+    'auth',
+    'billing',
+    'channels',
+    'checks',
+    'dashboard',
+    'invite',
+    'login',
+    'opengraph-image',
+    'organizations',
+    'privacy',
+    'signup',
+    'status',
+    'status-pages',
+    'team',
+    'terms',
+    'twitter-image',
+    'verify-email',
+  ])('reserves current top-level route %s', (slug) => {
+    expect(isReservedOrgSlug(slug)).toBe(true);
+  });
+
+  it('allows escalation to be reused as an organization slug after its route removal', () => {
+    expect(isReservedOrgSlug('escalation')).toBe(false);
   });
 
   it('reserves framework and future paths', () => {
-    for (const s of ['api', 'ping', 'settings', '_next', 'favicon.ico']) {
+    for (const s of ['ping', 'settings', '_next', 'favicon.ico']) {
       expect(isReservedOrgSlug(s)).toBe(true);
     }
   });

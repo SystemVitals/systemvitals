@@ -75,7 +75,6 @@ export const config = {
   redisUrl: optionalEnv("REDIS_URL", "redis://localhost:6379"),
   queueAlert: optionalEnv("QUEUE_ALERT", "alert"),
   queueProbe: optionalEnv("QUEUE_PROBE", "probe"),
-  queueEscalation: optionalEnv("QUEUE_ESCALATION", "escalation"),
   queueInvite: optionalEnv("QUEUE_INVITE", "invite"),
   queueEmailVerification: emailVerificationQueueEnv(),
   appUrl: appUrlEnv(),

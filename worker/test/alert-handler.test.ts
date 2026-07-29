@@ -22,13 +22,13 @@ let checkWithChannelId: string;
 let checkNoChannelId: string;
 let emailChannelId: string;
 let slackChannelId: string;
-// Project with escalation policy
-let projectWithPolicyId: string;
-let checkWithPolicyId: string;
-let policyChannelId: string;
-// Project without escalation policy
-let projectNoPolicyId: string;
-let checkNoPolicyId: string;
+// Project used to verify explicit selected-channel delivery
+let selectedProjectId: string;
+let selectedCheckId: string;
+let selectedChannelId: string;
+// Project used to verify channel changes after check creation
+let dynamicProjectId: string;
+let dynamicCheckId: string;
 // Project with a managed Telegram channel
 let telegramProjectId: string;
 let telegramCheckId: string;
@@ -130,64 +130,55 @@ beforeAll(async () => {
   });
   checkNoChannelId = checkNo.id;
 
-  // Project WITH escalation policy
-  const projectWithPolicy = await prisma.project.create({
+  const selectedProject = await prisma.project.create({
     data: {
-      name: `AlertHandler Policy Project ${Date.now()}`,
-      slug: `alert-handler-policy-project-${Date.now()}`,
+      name: `AlertHandler Selected Channel Project ${Date.now()}`,
+      slug: `alert-handler-selected-channel-project-${Date.now()}`,
       organizationId: orgId,
     },
   });
-  projectWithPolicyId = projectWithPolicy.id;
+  selectedProjectId = selectedProject.id;
 
-  const policyChannel = await prisma.notificationChannel.create({
+  const selectedChannel = await prisma.notificationChannel.create({
     data: {
-      projectId: projectWithPolicyId,
+      projectId: selectedProjectId,
       type: ChannelType.EMAIL,
-      config: { email: "policy@example.com" },
+      config: { email: "selected@example.com" },
       enabled: true,
     },
   });
-  policyChannelId = policyChannel.id;
+  selectedChannelId = selectedChannel.id;
 
-  await prisma.escalationPolicy.create({
+  const selectedCheck = await prisma.check.create({
     data: {
-      projectId: projectWithPolicyId,
-      steps: [{ channelId: policyChannelId, delaySeconds: 300 }],
-    },
-  });
-
-  const checkWithPolicy = await prisma.check.create({
-    data: {
-      name: "Policy Check",
-      slug: "policy-check",
+      name: "Selected Channel Check",
+      slug: "selected-channel-check",
       type: "HEARTBEAT",
       status: "DOWN",
-      projectId: projectWithPolicyId,
+      projectId: selectedProjectId,
     },
   });
-  checkWithPolicyId = checkWithPolicy.id;
+  selectedCheckId = selectedCheck.id;
 
-  // Project WITHOUT escalation policy
-  const projectNoPolicy = await prisma.project.create({
+  const dynamicProject = await prisma.project.create({
     data: {
-      name: `AlertHandler No-Policy Project ${Date.now()}`,
-      slug: `alert-handler-no-policy-project-${Date.now()}`,
+      name: `AlertHandler Dynamic Routing Project ${Date.now()}`,
+      slug: `alert-handler-dynamic-routing-project-${Date.now()}`,
       organizationId: orgId,
     },
   });
-  projectNoPolicyId = projectNoPolicy.id;
+  dynamicProjectId = dynamicProject.id;
 
-  const checkNoPolicy = await prisma.check.create({
+  const dynamicCheck = await prisma.check.create({
     data: {
-      name: "No-Policy Check",
-      slug: "no-policy-check",
+      name: "Dynamic Routing Check",
+      slug: "dynamic-routing-check",
       type: "HEARTBEAT",
       status: "DOWN",
-      projectId: projectNoPolicyId,
+      projectId: dynamicProjectId,
     },
   });
-  checkNoPolicyId = checkNoPolicy.id;
+  dynamicCheckId = dynamicCheck.id;
 
   const telegramProject = await prisma.project.create({
     data: {
@@ -225,14 +216,14 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await prisma.checkChannelExclusion.deleteMany({
-    where: { checkId: { in: [checkWithChannelId, checkWithPolicyId] } },
+    where: { checkId: { in: [checkWithChannelId, selectedCheckId] } },
   });
   await prisma.notificationChannel.updateMany({
     where: { id: { in: [emailChannelId, slackChannelId] } },
     data: { enabled: true },
   });
   await prisma.alertLog.deleteMany({
-    where: { checkId: { in: [checkWithChannelId, checkWithPolicyId] } },
+    where: { checkId: { in: [checkWithChannelId, selectedCheckId] } },
   });
 });
 
@@ -244,8 +235,8 @@ afterAll(async () => {
         in: [
           checkWithChannelId,
           checkNoChannelId,
-          checkWithPolicyId,
-          checkNoPolicyId,
+          selectedCheckId,
+          dynamicCheckId,
           telegramCheckId,
         ],
       },
@@ -257,21 +248,20 @@ afterAll(async () => {
         in: [
           checkWithChannelId,
           checkNoChannelId,
-          checkWithPolicyId,
-          checkNoPolicyId,
+          selectedCheckId,
+          dynamicCheckId,
           telegramCheckId,
         ],
       },
     },
   });
-  await prisma.escalationPolicy.deleteMany({ where: { projectId: projectWithPolicyId } });
   await prisma.notificationChannel.deleteMany({
     where: {
       id: {
         in: [
           emailChannelId,
           slackChannelId,
-          policyChannelId,
+          selectedChannelId,
           telegramChannelId,
         ],
       },
@@ -530,7 +520,7 @@ describe("handleAlert", () => {
   it("skips a snapshotted channel that is deleted before consumption", async () => {
     const deletedChannel = await prisma.notificationChannel.create({
       data: {
-        projectId: projectNoPolicyId,
+        projectId: dynamicProjectId,
         type: ChannelType.EMAIL,
         config: { email: "deleted-before-alert@example.com" },
         enabled: true,
@@ -543,7 +533,7 @@ describe("handleAlert", () => {
     const deps = makeDeps(httpPost);
 
     const sent = await handleAlert(prisma, deps, {
-      checkId: checkNoPolicyId,
+      checkId: dynamicCheckId,
       kind: "down",
       channelIds: [deletedChannel.id],
     });
@@ -552,14 +542,14 @@ describe("handleAlert", () => {
     expect((deps.mailer as CollectingMailer).sent).toHaveLength(0);
     expect(httpPost).not.toHaveBeenCalled();
     expect(
-      await prisma.alertLog.count({ where: { checkId: checkNoPolicyId } }),
+      await prisma.alertLog.count({ where: { checkId: dynamicCheckId } }),
     ).toBe(0);
   });
 
   it("selects an enabled channel created after the check when it has no exclusion", async () => {
     const lateChannel = await prisma.notificationChannel.create({
       data: {
-        projectId: projectNoPolicyId,
+        projectId: dynamicProjectId,
         type: ChannelType.EMAIL,
         config: { email: "late-channel@example.com" },
         enabled: true,
@@ -571,19 +561,19 @@ describe("handleAlert", () => {
 
     try {
       const sent = await handleAlert(prisma, deps, {
-        checkId: checkNoPolicyId,
+        checkId: dynamicCheckId,
         kind: "down",
       });
 
       expect(sent).toBe(1);
       expect((deps.mailer as CollectingMailer).sent).toHaveLength(1);
       const logs = await prisma.alertLog.findMany({
-        where: { checkId: checkNoPolicyId },
+        where: { checkId: dynamicCheckId },
       });
       expect(logs).toHaveLength(1);
       expect(logs[0]?.channelId).toBe(lateChannel.id);
     } finally {
-      await prisma.alertLog.deleteMany({ where: { checkId: checkNoPolicyId } });
+      await prisma.alertLog.deleteMany({ where: { checkId: dynamicCheckId } });
       await prisma.notificationChannel.delete({ where: { id: lateChannel.id } });
     }
   });
@@ -690,8 +680,8 @@ describe("handleAlert", () => {
     await prisma.alertLog.deleteMany({ where: { checkId: checkWithChannelId } });
   });
 
-  it("dispatches a selected channel on DOWN without consulting escalation policies", async () => {
-    await prisma.alertLog.deleteMany({ where: { checkId: checkWithPolicyId } });
+  it("dispatches a selected channel on DOWN", async () => {
+    await prisma.alertLog.deleteMany({ where: { checkId: selectedCheckId } });
 
     const httpPost = vi.fn().mockResolvedValue({ ok: true, status: 200 });
     const mailer = new CollectingMailer();
@@ -705,49 +695,38 @@ describe("handleAlert", () => {
       }),
       telegramBotToken: "managed-test-token",
     };
-    const escalationLookup = vi.spyOn(
-      prisma.escalationPolicy,
-      "findMany",
-    );
-
     const sent = await handleAlert(prisma, deps, {
-      checkId: checkWithPolicyId,
+      checkId: selectedCheckId,
       kind: "down",
-      channelIds: [policyChannelId],
+      channelIds: [selectedChannelId],
     });
 
     expect(sent).toBe(1);
     expect(mailer.sent).toHaveLength(1);
-    expect(mailer.sent[0]?.to).toBe("policy@example.com");
-    expect(escalationLookup).not.toHaveBeenCalled();
+    expect(mailer.sent[0]?.to).toBe("selected@example.com");
 
-    await prisma.alertLog.deleteMany({ where: { checkId: checkWithPolicyId } });
+    await prisma.alertLog.deleteMany({ where: { checkId: selectedCheckId } });
   });
 
-  it("dispatches the same selected channel on recovery without consulting escalation policies", async () => {
+  it("dispatches the same selected channel on recovery", async () => {
     const httpPost = vi.fn().mockResolvedValue({ ok: true, status: 200 });
     const deps = makeDeps(httpPost);
-    const escalationLookup = vi.spyOn(
-      prisma.escalationPolicy,
-      "findMany",
-    );
 
     const sent = await handleAlert(prisma, deps, {
-      checkId: checkWithPolicyId,
+      checkId: selectedCheckId,
       kind: "recovery",
-      channelIds: [policyChannelId],
+      channelIds: [selectedChannelId],
     });
 
     expect(sent).toBe(1);
     expect((deps.mailer as CollectingMailer).sent).toHaveLength(1);
     expect((deps.mailer as CollectingMailer).sent[0]?.to).toBe(
-      "policy@example.com",
+      "selected@example.com",
     );
     expect(httpPost).not.toHaveBeenCalled();
     expect(deps.telegramPost).not.toHaveBeenCalled();
-    expect(escalationLookup).not.toHaveBeenCalled();
 
-    await prisma.alertLog.deleteMany({ where: { checkId: checkWithPolicyId } });
+    await prisma.alertLog.deleteMany({ where: { checkId: selectedCheckId } });
   });
 
   it("delivers a managed Telegram row with the environment token and records success", async () => {

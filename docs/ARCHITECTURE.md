@@ -74,33 +74,19 @@ after the transition. Only legacy jobs without `channelIds` resolve current
 exclusions at consumption time, which keeps rolling deployments compatible
 with older producers.
 
-## Release 2 compatibility window and Release 3 exit criteria
+## Release 3 cleanup
 
-Release 2 retired the acknowledgement and delayed-escalation API, UI, worker
-scheduling, and worker consumption paths. The legacy Prisma
-`EscalationPolicy` and `Acknowledgement` models and tables remain dormant for
-one rollback and observation window, as do the unused `QUEUE_ESCALATION`
-configuration and Dokploy provisioning entry. No live product path reads or
-writes those tables, and no current worker produces or consumes that queue.
-Release 2 remains an application-only rollout; it does not change or deploy
-the infrastructure Compose project.
+Release 3 cleanup is complete. Its operational gates passed, the retired
+escalation queue was confirmed empty, and its remaining BullMQ metadata was
+purged. The dormant legacy incident-state persistence, worker queue
+configuration, environment example, and Dokploy provisioning entry have been
+removed. Per-check notification routing through `CheckChannelExclusion`
+remains the active model.
 
-Do not begin the irreversible Release 3 cleanup until all of these conditions
-are met:
-
-- the Release 2 API, frontend, and worker are healthy and serving the intended
-  current commit;
-- no Release 1 application containers remain;
-- the legacy queue has no active, delayed, or retry escalation jobs, or those
-  jobs have been deliberately drained or purged;
-- a verified `DOWN` followed by `DOWN` to `UP` recovery cycle creates no
-  escalation work;
-- a current database backup is verified restorable;
-- the operator explicitly decides that rollback to Release 1 is no longer
-  required.
-
-After those gates pass, Release 3 can remove the dormant database models,
-tables, queue configuration, and provisioning entry.
+The current database is no longer compatible with application releases that
+depend on those retired database tables. Recovering that data requires
+restoring a pre-Release 3 database backup together with a matching application
+release.
 
 ## Deployment boundaries
 
