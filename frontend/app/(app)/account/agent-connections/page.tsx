@@ -132,6 +132,7 @@ export function AgentConnectionsPage({ now = systemNow }: { now?: () => Date }) 
   const [revoking, setRevoking] = useState(false);
   const [currentTime, setCurrentTime] = useState(now);
   const revokingRef = useRef(false);
+  const mountedRef = useRef(true);
   const connections = useMemo(
     () =>
       (data?.apiTokens ?? noConnections).filter(
@@ -141,6 +142,13 @@ export function AgentConnectionsPage({ now = systemNow }: { now?: () => Date }) 
       ),
     [activeOrg?.id, data?.apiTokens],
   );
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     const currentTimestamp = currentTime.getTime();
@@ -186,18 +194,26 @@ export function AgentConnectionsPage({ now = systemNow }: { now?: () => Date }) 
       try {
         await refetch();
       } catch {
-        setRefreshError(
-          "The connection was revoked, but the latest history couldn't be refreshed. Reload the page to try again.",
+        if (mountedRef.current) {
+          setRefreshError(
+            "The connection was revoked, but the latest history couldn't be refreshed. Reload the page to try again.",
+          );
+        }
+      }
+      if (mountedRef.current) {
+        setSelected(null);
+      }
+    } catch {
+      if (mountedRef.current) {
+        setRevokeError(
+          "We couldn't revoke this connection. Its status has not changed. Try again.",
         );
       }
-      setSelected(null);
-    } catch {
-      setRevokeError(
-        "We couldn't revoke this connection. Its status has not changed. Try again.",
-      );
     } finally {
       revokingRef.current = false;
-      setRevoking(false);
+      if (mountedRef.current) {
+        setRevoking(false);
+      }
     }
   }
 

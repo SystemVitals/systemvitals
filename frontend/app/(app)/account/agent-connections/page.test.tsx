@@ -396,6 +396,66 @@ describe("AgentConnectionsPage", () => {
     expect(within(row).getByText("Active")).toBeInTheDocument();
   });
 
+  it("does not update revoke state after the page unmounts", async () => {
+    let completeMutation: (() => void) | undefined;
+    const link = new ApolloLink(
+      (operation) =>
+        new Observable((observer) => {
+          if (operation.operationName === "ApiTokens") {
+            observer.next({ data: { apiTokens: [active] } });
+            observer.complete();
+            return;
+          }
+          completeMutation = () => {
+            observer.next({ data: { revokeApiToken: true } });
+            observer.complete();
+          };
+        }),
+    );
+    const view = render(
+      <MockedProvider link={link}>
+        <AgentConnectionsPage now={() => now} />
+      </MockedProvider>,
+    );
+    const row = await screen.findByRole("listitem", {
+      name: /codex — production/i,
+    });
+    fireEvent.click(
+      within(row).getByRole("button", { name: /revoke codex — production/i }),
+    );
+    fireEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", {
+        name: /^revoke connection$/i,
+      }),
+    );
+    await waitFor(() => expect(completeMutation).toBeTypeOf("function"));
+
+    view.unmount();
+    await new Promise((resolve) => setImmediate(resolve));
+    const windowDescriptor = Object.getOwnPropertyDescriptor(globalThis, "window");
+    const unhandledReasons: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandledReasons.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      try {
+        Reflect.deleteProperty(globalThis, "window");
+        completeMutation?.();
+        for (let step = 0; step < 10; step += 1) {
+          await Promise.resolve();
+        }
+      } finally {
+        if (windowDescriptor) {
+          Object.defineProperty(globalThis, "window", windowDescriptor);
+        }
+      }
+      await new Promise((resolve) => setImmediate(resolve));
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+
+    expect(unhandledReasons).toEqual([]);
+  });
+
   it("guards the revoke mutation against duplicate confirmation clicks", async () => {
     let calls = 0;
     const link = new ApolloLink(
