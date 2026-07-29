@@ -819,6 +819,69 @@ describe('ChecksService organization slug lookup', () => {
   );
 });
 
+describe('ChecksService legacy slug lookup', () => {
+  it('folds a token project binding into the membership-aware check query', async () => {
+    const h = readHarness();
+
+    await h.service.findBySlug('member', 'acme', 'default', 'api', 'project-a');
+
+    expect(h.prisma.check.findFirst).toHaveBeenCalledWith({
+      where: {
+        slug: 'api',
+        project: {
+          id: 'project-a',
+          slug: 'default',
+          organization: {
+            slug: 'acme',
+            memberships: { some: { userId: 'member' } },
+          },
+        },
+      },
+    });
+  });
+
+  it('does not add a project constraint for an account session', async () => {
+    const h = readHarness();
+
+    await h.service.findBySlug('member', 'acme', 'default', 'api');
+
+    expect(h.prisma.check.findFirst).toHaveBeenCalledWith({
+      where: {
+        slug: 'api',
+        project: {
+          slug: 'default',
+          organization: {
+            slug: 'acme',
+            memberships: { some: { userId: 'member' } },
+          },
+        },
+      },
+    });
+  });
+
+  it.each(['out-of-scope', 'missing'])(
+    'returns the same one-query not-found result for an %s triple',
+    async () => {
+      const h = readHarness();
+      h.prisma.check.findFirst.mockResolvedValue(null);
+
+      await expect(
+        h.service.findBySlug(
+          'member',
+          'private',
+          'default',
+          'hidden',
+          'project-a',
+        ),
+      ).rejects.toEqual(new NotFoundException('Check not found'));
+
+      expect(h.prisma.check.findFirst).toHaveBeenCalledTimes(1);
+      expect(h.prisma.membership.findUnique).not.toHaveBeenCalled();
+      expect(h.prisma.notificationChannel.findMany).not.toHaveBeenCalled();
+    },
+  );
+});
+
 describe('ChecksService setCheckChannelEnabled', () => {
   it.each([
     [false, 'exclusion:upsert'],

@@ -35,6 +35,12 @@ export class ChecksResolver {
     return { ...value, organizationId };
   }
 
+  private boundProjectId(principal: ApiPrincipal): string | undefined {
+    return principal.authKind === 'api-token'
+      ? (principal.apiToken.projectId ?? undefined)
+      : undefined;
+  }
+
   @Query(() => [CheckModel])
   async checks(
     @CurrentUser() principal: ApiPrincipal,
@@ -77,15 +83,11 @@ export class ChecksResolver {
     @Args('orgSlug') orgSlug: string,
     @Args('checkSlug') checkSlug: string,
   ) {
-    const boundProjectId =
-      principal.authKind === 'api-token'
-        ? (principal.apiToken.projectId ?? undefined)
-        : undefined;
     const check = await this.checksService.findByOrganizationSlug(
       principal.userId,
       orgSlug,
       checkSlug,
-      boundProjectId,
+      this.boundProjectId(principal),
     );
     requireCheckAccess(principal, 'checks:read', check.projectId);
     return check;
@@ -103,6 +105,7 @@ export class ChecksResolver {
       orgSlug,
       projectSlug,
       checkSlug,
+      this.boundProjectId(principal),
     );
     requireCheckAccess(principal, 'checks:read', check.projectId);
     const organizationId =

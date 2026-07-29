@@ -417,19 +417,21 @@ export class ChecksService {
     orgSlug: string,
     projectSlug: string,
     checkSlug: string,
+    boundProjectId?: string,
   ) {
     // A slug triple is guessable in a way a cuid is not. Answering "forbidden"
     // for another tenant's check would confirm it exists, so a check the
     // caller cannot see must be reported exactly as one that does not exist
-    // — including in timing. The membership requirement is folded into this
-    // single query (rather than a findFirst-then-membership.findUnique pair)
-    // so that "exists but not mine" and "does not exist" do identical
-    // database work and are indistinguishable by response latency. Do NOT
-    // split this back into two queries.
+    // — including in timing. Membership and any credential project binding
+    // are folded into this single query (rather than a findFirst-then-
+    // membership.findUnique pair) so that "exists but not mine" and "does not
+    // exist" do identical database work and are indistinguishable by response
+    // latency. Do NOT split this back into two queries.
     const check = await this.prisma.check.findFirst({
       where: {
         slug: checkSlug,
         project: {
+          ...(boundProjectId ? { id: boundProjectId } : {}),
           slug: projectSlug,
           organization: {
             slug: orgSlug,

@@ -24,6 +24,10 @@ function harness() {
       id: 'check-1',
       projectId: 'project-source',
     }),
+    findBySlug: jest.fn().mockResolvedValue({
+      id: 'check-1',
+      projectId: 'project-source',
+    }),
     move: jest.fn().mockResolvedValue({
       id: 'check-1',
       projectId: 'project-destination',
@@ -270,6 +274,36 @@ describe('ChecksResolver canonical slug privacy', () => {
     expect(h.service.findByOrganizationSlug).toHaveBeenCalledWith(
       'owner',
       'acme',
+      'api',
+      undefined,
+    );
+  });
+});
+
+describe('ChecksResolver legacy slug privacy', () => {
+  it('passes a project-scoped token binding into the legacy slug lookup', async () => {
+    const h = harness();
+
+    await h.resolver.checkBySlug(principal, 'acme', 'default', 'api');
+
+    expect(h.service.findBySlug).toHaveBeenCalledWith(
+      'owner',
+      'acme',
+      'default',
+      'api',
+      'project-source',
+    );
+  });
+
+  it('keeps account-session legacy slug lookup unbound', async () => {
+    const h = harness();
+
+    await h.resolver.checkBySlug(sessionPrincipal, 'acme', 'default', 'api');
+
+    expect(h.service.findBySlug).toHaveBeenCalledWith(
+      'owner',
+      'acme',
+      'default',
       'api',
       undefined,
     );

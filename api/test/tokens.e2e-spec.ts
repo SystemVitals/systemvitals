@@ -6,7 +6,11 @@ import { generateToken, hashToken } from '../src/tokens/token.util';
 
 interface GqlResponse<T> {
   data?: T;
-  errors?: Array<{ message: string; path?: Array<string | number> }>;
+  errors?: Array<{
+    message: string;
+    path?: Array<string | number>;
+    extensions?: { status?: number; [key: string]: unknown };
+  }>;
 }
 
 interface CreateApiTokenResult {
@@ -377,19 +381,6 @@ describe('api tokens (e2e)', () => {
         { id: checkB.id },
       ],
       [
-        'read slug',
-        `query($org:String!,$project:String!,$check:String!){
-          checkBySlug(orgSlug:$org,projectSlug:$project,checkSlug:$check){
-            id events { id }
-          }
-        }`,
-        {
-          org: organizationB.slug,
-          project: projectB.slug,
-          check: checkB.slug,
-        },
-      ],
-      [
         'update',
         `mutation($id:ID!){ updateCheck(id:$id,input:{name:"Denied"}){ id } }`,
         { id: checkB.id },
@@ -446,6 +437,38 @@ describe('api tokens (e2e)', () => {
         { projectId: projectB.id },
       ],
     ];
+
+    const slugQuery = `query($org:String!,$project:String!,$check:String!){
+      checkBySlug(orgSlug:$org,projectSlug:$project,checkSlug:$check){
+        id events { id }
+      }
+    }`;
+    const outOfScopeSlug = await gql<{ checkBySlug?: { id: string } }>(
+      app,
+      token,
+      slugQuery,
+      {
+        org: organizationB.slug,
+        project: projectB.slug,
+        check: checkB.slug,
+      },
+    );
+    const missingSlug = await gql<{ checkBySlug?: { id: string } }>(
+      app,
+      token,
+      slugQuery,
+      {
+        org: 'missing-organization',
+        project: 'missing-project',
+        check: 'missing-check',
+      },
+    );
+
+    expect(outOfScopeSlug.data?.checkBySlug).toBeUndefined();
+    expect(missingSlug.data?.checkBySlug).toBeUndefined();
+    expect(outOfScopeSlug.errors).toEqual(missingSlug.errors);
+    expect(outOfScopeSlug.errors?.[0]?.message).toBe('Check not found');
+    expect(outOfScopeSlug.errors?.[0]?.extensions?.status).toBe(404);
 
     for (const [label, query, variables] of operations) {
       const response = await gql(app, token, query, variables);
