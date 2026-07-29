@@ -154,7 +154,8 @@ type ChannelModel {
   configJson: String!
   enabled: Boolean!
   id: ID!
-  projectId: ID!
+  organizationId: ID!
+  projectId: ID! @deprecated(reason: "Use organizationId.")
   type: String!
   verificationDeliveryStatus: String!
   verificationExpiresAt: DateTime
@@ -206,14 +207,16 @@ type DayCount {
 
 type EmailVerificationConfirmationModel {
   maskedEmail: String
-  projectName: String
+  organizationName: String
+  projectName: String @deprecated(reason: "Use organizationName.")
   status: String!
 }
 
 type EmailVerificationPreviewModel {
   expiresAt: DateTime
   maskedEmail: String
-  projectName: String
+  organizationName: String
+  projectName: String @deprecated(reason: "Use organizationName.")
   status: String!
 }
 
@@ -304,7 +307,8 @@ type StatusPageModel {
   branding: String
   checkIds: [String!]!
   id: ID!
-  projectId: ID!
+  organizationId: ID!
+  projectId: ID! @deprecated(reason: "Use organizationId.")
   slug: String!
   title: String!
 }

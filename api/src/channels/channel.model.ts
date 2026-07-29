@@ -6,7 +6,9 @@ export class ChannelModel {
   @Field() type!: string;
   @Field() configJson!: string;
   @Field() enabled!: boolean;
-  @Field(() => ID) projectId!: string;
+  @Field(() => ID) organizationId!: string;
+  @Field(() => ID, { deprecationReason: 'Use organizationId.' })
+  projectId!: string;
   @Field()
   verificationStatus!: string;
   @Field(() => Date, { nullable: true })

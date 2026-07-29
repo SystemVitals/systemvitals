@@ -121,7 +121,8 @@ type ChannelModel {
   configJson: String!
   enabled: Boolean!
   id: ID!
-  projectId: ID!
+  organizationId: ID!
+  projectId: ID! @deprecated(reason: "Use organizationId.")
   type: String!
   verificationDeliveryStatus: String!
   verificationExpiresAt: DateTime
@@ -180,14 +181,16 @@ type DayCount {
 
 type EmailVerificationConfirmationModel {
   maskedEmail: String
-  projectName: String
+  organizationName: String
+  projectName: String @deprecated(reason: "Use organizationName.")
   status: String!
 }
 
 type EmailVerificationPreviewModel {
   expiresAt: DateTime
   maskedEmail: String
-  projectName: String
+  organizationName: String
+  projectName: String @deprecated(reason: "Use organizationName.")
   status: String!
 }
 
@@ -222,14 +225,14 @@ type MemberModel {
 
 type Mutation {
   acceptInvite(token: String!): MemberModel!
-  connectTelegramChannel(projectId: ID!, token: String!): ChannelModel!
+  connectTelegramChannel(organizationId: ID, projectId: ID @deprecated(reason: "Use organizationId."), token: String!): ChannelModel!
   createActiveCheck(expectedStatus: Int, intervalSeconds: Int!, method: String, name: String!, organizationId: ID, projectId: ID @deprecated(reason: "Use organizationId."), target: String!, timeoutMs: Int!, type: String!): CheckModel!
   createApiToken(name: String!, scopes: [String!]!): ApiTokenCreateResult!
-  createChannel(configJson: String!, projectId: ID!, type: String!): ChannelModel!
+  createChannel(configJson: String!, organizationId: ID, projectId: ID @deprecated(reason: "Use organizationId."), type: String!): ChannelModel!
   createCheck(graceSeconds: Int!, name: String!, organizationId: ID, periodSeconds: Int, projectId: ID @deprecated(reason: "Use organizationId."), schedule: String, tz: String): CheckModel!
   createOrganization(name: String!): OrganizationModel!
   createScopedApiToken(input: CreateApiTokenInput!): ApiTokenCreateResult!
-  createStatusPage(brandingJson: String, checkIds: [ID!]!, projectId: ID!, slug: String!, title: String!): StatusPageModel!
+  createStatusPage(brandingJson: String, checkIds: [ID!]!, organizationId: ID, projectId: ID @deprecated(reason: "Use organizationId."), slug: String!, title: String!): StatusPageModel!
   deleteChannel(id: ID!): Boolean!
   deleteCheck(id: ID!): Boolean!
   deleteOrganization(organizationId: ID!): Boolean!
@@ -282,7 +285,7 @@ type ProjectModel {
 type Query {
   apiCredential: ApiCredential!
   apiTokens: [ApiTokenModel!]!
-  channels(projectId: ID!): [ChannelModel!]!
+  channels(organizationId: ID, projectId: ID @deprecated(reason: "Use organizationId.")): [ChannelModel!]!
   check(id: ID!): CheckModel!
   checkByOrganizationSlug(checkSlug: String!, orgSlug: String!): CheckModel!
   checkBySlug(checkSlug: String!, orgSlug: String!, projectSlug: String!): CheckModel!
@@ -296,7 +299,7 @@ type Query {
   organizationInvites(organizationId: ID!): [InviteModel!]!
   organizationMembers(organizationId: ID!): [MemberModel!]!
   projects: [ProjectModel!]! @deprecated(reason: "Organizations now contain one implicit workspace.")
-  statusPages(projectId: ID!): [StatusPageModel!]!
+  statusPages(organizationId: ID, projectId: ID @deprecated(reason: "Use organizationId.")): [StatusPageModel!]!
   telegramConnectionPreview(token: String!): TelegramConnectionPreviewModel!
 }
 
@@ -309,7 +312,8 @@ type StatusPageModel {
   branding: String
   checkIds: [String!]!
   id: ID!
-  projectId: ID!
+  organizationId: ID!
+  projectId: ID! @deprecated(reason: "Use organizationId.")
   slug: String!
   title: String!
 }

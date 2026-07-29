@@ -11,6 +11,7 @@ import {
   ManagedTelegramBotModel,
   TelegramConnectionPreviewModel,
 } from './telegram.model';
+import { WorkspacesService } from '../workspaces/workspaces.service';
 
 @Resolver()
 @UseGuards(ApiAuthGuard)
@@ -18,6 +19,7 @@ export class TelegramResolver {
   constructor(
     private readonly telegramBot: TelegramBotClient,
     private readonly telegramConnections: TelegramConnectionsService,
+    private readonly workspacesService: WorkspacesService,
   ) {}
 
   @Query(() => ManagedTelegramBotModel)
@@ -34,11 +36,26 @@ export class TelegramResolver {
 
   @Mutation(() => ChannelModel)
   @AccountSessionOnly()
-  connectTelegramChannel(
+  async connectTelegramChannel(
     @CurrentUser() user: JwtUser,
     @Args('token') token: string,
-    @Args('projectId', { type: () => ID }) projectId: string,
+    @Args('organizationId', { type: () => ID, nullable: true })
+    organizationId?: string,
+    @Args('projectId', {
+      type: () => ID,
+      nullable: true,
+      deprecationReason: 'Use organizationId.',
+    })
+    projectId?: string,
   ) {
-    return this.telegramConnections.connect(user.userId, token, projectId);
+    const workspace = await this.workspacesService.resolveForUser(user.userId, {
+      organizationId,
+      projectId,
+    });
+    return this.telegramConnections.connect(
+      user.userId,
+      token,
+      workspace.projectId,
+    );
   }
 }

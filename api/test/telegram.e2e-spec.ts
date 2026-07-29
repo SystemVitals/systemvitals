@@ -322,6 +322,7 @@ interface ChannelResult {
   type: string;
   configJson: string;
   enabled: boolean;
+  organizationId: string;
   projectId: string;
 }
 
@@ -360,9 +361,13 @@ const PREVIEW = `
   }
 `;
 const CONNECT = `
-  mutation($token: String!, $projectId: ID!) {
-    connectTelegramChannel(token: $token, projectId: $projectId) {
-      id type configJson enabled projectId
+  mutation($token: String!, $organizationId: ID, $projectId: ID) {
+    connectTelegramChannel(
+      token: $token
+      organizationId: $organizationId
+      projectId: $projectId
+    ) {
+      id type configJson enabled organizationId projectId
     }
   }
 `;
@@ -519,13 +524,14 @@ describe('managed Telegram connection GraphQL (e2e)', () => {
       connectTelegramChannel: ChannelResult;
     }>(app, ownerToken, CONNECT, {
       token: rawToken,
-      projectId: ownerProjectId,
+      organizationId: ownerOrganizationId,
     });
     expect(connected.errors).toBeUndefined();
     const channel = connected.data!.connectTelegramChannel;
     expect(channel).toMatchObject({
       type: 'TELEGRAM',
       enabled: true,
+      organizationId: ownerOrganizationId,
       projectId: ownerProjectId,
     });
     expect(JSON.parse(channel.configJson)).toEqual({
@@ -549,11 +555,36 @@ describe('managed Telegram connection GraphQL (e2e)', () => {
 
     const replay = await gql(app, ownerToken, CONNECT, {
       token: rawToken,
-      projectId: ownerProjectId,
+      organizationId: ownerOrganizationId,
     });
     expect(replay.errors?.[0]?.message).toBe(
       'This Telegram connection link has already been used',
     );
+  });
+
+  it('rejects both/neither selectors without consuming the challenge', async () => {
+    const { rawToken, row } = await insertChallenge();
+
+    for (const variables of [
+      {
+        token: rawToken,
+        organizationId: ownerOrganizationId,
+        projectId: ownerProjectId,
+      },
+      { token: rawToken },
+    ]) {
+      const response = await gql(app, ownerToken, CONNECT, variables);
+      expect(response.errors?.[0]?.message).toBe(
+        'Provide exactly one of organizationId or projectId',
+      );
+    }
+
+    await expect(
+      prisma.telegramConnectionChallenge.findUniqueOrThrow({
+        where: { id: row.id },
+        select: { consumedAt: true },
+      }),
+    ).resolves.toEqual({ consumedAt: null });
   });
 
   it('connects a topic destination with its exact key and secret-free config', async () => {
@@ -635,17 +666,15 @@ describe('managed Telegram connection GraphQL (e2e)', () => {
     }
   });
 
-  it('does not let another user connect a delivered challenge into the owner project', async () => {
+  it('does not disclose another user organization or consume its challenge', async () => {
     const { rawToken, row } = await insertChallenge();
 
     const response = await gql(app, otherToken, CONNECT, {
       token: rawToken,
-      projectId: ownerProjectId,
+      organizationId: ownerOrganizationId,
     });
 
-    expect(response.errors?.[0]?.message).toBe(
-      'Not a member of this organization',
-    );
+    expect(response.errors?.[0]?.message).toBe('Workspace not found');
     await expect(
       prisma.telegramConnectionChallenge.findUniqueOrThrow({
         where: { id: row.id },

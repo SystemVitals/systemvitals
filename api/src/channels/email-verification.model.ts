@@ -9,6 +9,12 @@ export class EmailVerificationPreviewModel {
   maskedEmail?: string;
 
   @Field({ nullable: true })
+  organizationName?: string;
+
+  @Field({
+    nullable: true,
+    deprecationReason: 'Use organizationName.',
+  })
   projectName?: string;
 
   @Field(() => Date, { nullable: true })
@@ -24,5 +30,11 @@ export class EmailVerificationConfirmationModel {
   maskedEmail?: string;
 
   @Field({ nullable: true })
+  organizationName?: string;
+
+  @Field({
+    nullable: true,
+    deprecationReason: 'Use organizationName.',
+  })
   projectName?: string;
 }

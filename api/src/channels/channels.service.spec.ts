@@ -93,6 +93,7 @@ describe('ChannelsService email verification creation', () => {
     expect(result).toEqual(
       expect.objectContaining({
         id: 'channel-1',
+        organizationId: 'organization-1',
         enabled: false,
         configJson: JSON.stringify({ email: 'Alerts+Ops@example.com' }),
         verificationStatus: 'PENDING',
@@ -239,11 +240,13 @@ describe('ChannelsService email verification creation', () => {
     expect(result).toEqual([
       expect.objectContaining({
         id: 'pending',
+        organizationId: 'organization-1',
         verificationStatus: 'PENDING',
         verificationDeliveryStatus: 'NOT_SENT',
       }),
       expect.objectContaining({
         id: 'verified',
+        organizationId: 'organization-1',
         verificationStatus: 'VERIFIED',
         verificationExpiresAt: null,
         verificationDeliveryStatus: 'SENT',

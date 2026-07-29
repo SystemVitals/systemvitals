@@ -1080,6 +1080,7 @@ describe('TelegramConnectionsService', () => {
         connect(service, 'user-1', RAW_TOKEN, 'project-1'),
       ).resolves.toEqual({
         id: 'channel-1',
+        organizationId: 'organization-1',
         projectId: 'project-1',
         type: 'TELEGRAM',
         configJson: JSON.stringify({

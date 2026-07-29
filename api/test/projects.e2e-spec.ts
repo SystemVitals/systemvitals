@@ -33,6 +33,7 @@ interface GqlMeResponse {
       organizations: Array<{
         id: string;
         name: string;
+        pingKey: string;
         projects: Array<{
           id: string;
           name: string;
@@ -91,6 +92,7 @@ describe('projects (e2e)', () => {
       a.replace('@', '+p@'),
       b.replace('@', '+p@'),
       a.replace('@', '+q@'),
+      a.replace('@', '+legacy-ping@'),
     ];
     await cleanupTestUsers(prisma, allEmails);
   });
@@ -104,6 +106,7 @@ describe('projects (e2e)', () => {
       a.replace('@', '+p@'),
       b.replace('@', '+p@'),
       a.replace('@', '+q@'),
+      a.replace('@', '+legacy-ping@'),
     ];
     try {
       await cleanupTestUsers(prisma, allEmails);
@@ -123,21 +126,82 @@ describe('projects (e2e)', () => {
     expect(res.data.me.organizations[0].projects[0].pingKey).toBeTruthy();
   });
 
-  it('regeneratePingKey changes the key', async () => {
+  it('regenerateOrganizationPingKey changes the implicit workspace key', async () => {
     const token = await signup(app, b);
     const me = (await gql(
       app,
       token,
-      `{ me { organizations { projects { id pingKey } } } }`,
+      `{ me { organizations { id pingKey projects { id pingKey } } } }`,
     )) as GqlMeResponse;
-    const proj = me.data.me.organizations[0].projects[0];
+    const organization = me.data.me.organizations[0];
+    const proj = organization.projects[0];
     const res = (await gql(
+      app,
+      token,
+      `mutation($id:ID!){
+        regenerateOrganizationPingKey(organizationId:$id) {
+          id pingKey projects { id pingKey }
+        }
+      }`,
+      { id: organization.id },
+    )) as {
+      data: {
+        regenerateOrganizationPingKey: {
+          id: string;
+          pingKey: string;
+          projects: Array<{ id: string; pingKey: string }>;
+        };
+      };
+    };
+    const rotated = res.data.regenerateOrganizationPingKey;
+    expect(rotated.pingKey).not.toBe(proj.pingKey);
+    expect(rotated.projects).toEqual([
+      { id: proj.id, pingKey: rotated.pingKey },
+    ]);
+
+    const legacy = (await gql(
       app,
       token,
       `mutation($id:ID!){ regeneratePingKey(projectId:$id){ id pingKey } }`,
       { id: proj.id },
     )) as GqlRegenerateResponse;
-    expect(res.data.regeneratePingKey.pingKey).not.toBe(proj.pingKey);
+    expect(legacy.data.regeneratePingKey.id).toBe(proj.id);
+    expect(legacy.data.regeneratePingKey.pingKey).not.toBe(rotated.pingKey);
+
+    const refreshed = (await gql(
+      app,
+      token,
+      `{ me { organizations { id pingKey projects { id pingKey } } } }`,
+    )) as GqlMeResponse;
+    expect(refreshed.data.me.organizations[0]).toEqual(
+      expect.objectContaining({
+        id: organization.id,
+        pingKey: legacy.data.regeneratePingKey.pingKey,
+        projects: [
+          {
+            id: proj.id,
+            pingKey: legacy.data.regeneratePingKey.pingKey,
+          },
+        ],
+      }),
+    );
+  });
+
+  it('retains regeneratePingKey for legacy clients', async () => {
+    const token = await signup(app, a.replace('@', '+legacy-ping@'));
+    const me = (await gql(
+      app,
+      token,
+      `{ me { organizations { projects { id pingKey } } } }`,
+    )) as GqlMeResponse;
+    const project = me.data.me.organizations[0].projects[0];
+    const res = (await gql(
+      app,
+      token,
+      `mutation($id:ID!){ regeneratePingKey(projectId:$id){ id pingKey } }`,
+      { id: project.id },
+    )) as GqlRegenerateResponse;
+    expect(res.data.regeneratePingKey.pingKey).not.toBe(project.pingKey);
   });
 
   it("a user cannot regenerate another org's project key", async () => {
