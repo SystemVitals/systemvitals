@@ -3,8 +3,10 @@ import { ChannelsService } from './channels.service';
 import { ChannelsResolver } from './channels.resolver';
 import { EmailVerificationService } from './email-verification.service';
 import { EmailVerificationResolver } from './email-verification.resolver';
+import { WorkspacesModule } from '../workspaces/workspaces.module';
 
 @Module({
+  imports: [WorkspacesModule],
   providers: [
     ChannelsService,
     ChannelsResolver,

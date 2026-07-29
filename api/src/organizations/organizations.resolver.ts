@@ -42,6 +42,7 @@ export class OrganizationsResolver {
         id: m.organization.id,
         name: m.organization.name,
         slug: m.organization.slug,
+        pingKey: m.organization.projects[0].pingKey,
         role: m.role,
         plan: m.organization.creator.subscription?.plan ?? 'SOLO',
         creatorUserId: m.organization.creatorUserId,

@@ -395,6 +395,12 @@ async function createScenario(seed: string): Promise<Scenario> {
           name: 'Organization A',
           slug: `task4-a-${seed}`,
           creatorUserId: first.id,
+          projects: {
+            create: {
+              name: 'Default',
+              slug: 'default',
+            },
+          },
         },
       });
       const organizationB = await tx.organization.create({
@@ -402,6 +408,12 @@ async function createScenario(seed: string): Promise<Scenario> {
           name: 'Organization B',
           slug: `task4-b-${seed}`,
           creatorUserId: second.id,
+          projects: {
+            create: {
+              name: 'Default',
+              slug: 'default',
+            },
+          },
         },
       });
       const firstInA = await tx.membership.create({

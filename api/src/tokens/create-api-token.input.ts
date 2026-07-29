@@ -19,9 +19,18 @@ export class CreateApiTokenInput {
   @IsString({ each: true })
   capabilities!: string[];
 
-  @Field(() => ID)
+  @Field(() => ID, { nullable: true })
+  @IsOptional()
   @IsString()
-  projectId!: string;
+  organizationId?: string;
+
+  @Field(() => ID, {
+    nullable: true,
+    deprecationReason: 'Use organizationId.',
+  })
+  @IsOptional()
+  @IsString()
+  projectId?: string;
 
   @Field(() => Int, { nullable: true })
   @IsOptional()

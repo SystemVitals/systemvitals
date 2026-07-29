@@ -726,6 +726,7 @@ describe('ChecksService effective notification channels', () => {
     await expect(h.service.findOne('member', 'check-1')).resolves.toEqual({
       ...h.checks[0],
       project: h.project,
+      organizationId: h.project.organizationId,
       notificationChannelIds: ['channel-1', 'channel-3'],
     });
     await expect(
@@ -735,6 +736,150 @@ describe('ChecksService effective notification channels', () => {
       notificationChannelIds: ['channel-1', 'channel-3'],
     });
   });
+});
+
+describe('ChecksService organization slug lookup', () => {
+  it('folds organization membership into one check query', async () => {
+    const h = readHarness();
+    h.prisma.check.findFirst.mockResolvedValue({
+      ...h.checks[0],
+      project: { organizationId: h.project.organizationId },
+    });
+
+    await expect(
+      h.service.findByOrganizationSlug('member', 'acme', 'api', 'project-a'),
+    ).resolves.toEqual({
+      ...h.checks[0],
+      project: { organizationId: h.project.organizationId },
+      organizationId: h.project.organizationId,
+      notificationChannelIds: ['channel-1', 'channel-2', 'channel-3'],
+    });
+
+    expect(h.prisma.check.findFirst).toHaveBeenCalledWith({
+      where: {
+        slug: 'api',
+        project: {
+          id: 'project-a',
+          organization: {
+            slug: 'acme',
+            memberships: { some: { userId: 'member' } },
+          },
+        },
+      },
+      include: {
+        project: { select: { organizationId: true } },
+      },
+    });
+  });
+
+  it('does not add a project constraint for an account session', async () => {
+    const h = readHarness();
+    h.prisma.check.findFirst.mockResolvedValue({
+      ...h.checks[0],
+      project: { organizationId: h.project.organizationId },
+    });
+
+    await h.service.findByOrganizationSlug('member', 'acme', 'api');
+
+    expect(h.prisma.check.findFirst).toHaveBeenCalledWith({
+      where: {
+        slug: 'api',
+        project: {
+          organization: {
+            slug: 'acme',
+            memberships: { some: { userId: 'member' } },
+          },
+        },
+      },
+      include: {
+        project: { select: { organizationId: true } },
+      },
+    });
+  });
+
+  it.each(['inaccessible', 'missing'])(
+    'returns the same not-found result for an %s organization check',
+    async () => {
+      const h = readHarness();
+      h.prisma.check.findFirst.mockResolvedValue(null);
+
+      await expect(
+        h.service.findByOrganizationSlug(
+          'member',
+          'private',
+          'hidden',
+          'project-a',
+        ),
+      ).rejects.toEqual(new NotFoundException('Check not found'));
+
+      expect(h.prisma.check.findFirst).toHaveBeenCalledTimes(1);
+      expect(h.prisma.membership.findUnique).not.toHaveBeenCalled();
+      expect(h.prisma.notificationChannel.findMany).not.toHaveBeenCalled();
+    },
+  );
+});
+
+describe('ChecksService legacy slug lookup', () => {
+  it('folds a token project binding into the membership-aware check query', async () => {
+    const h = readHarness();
+
+    await h.service.findBySlug('member', 'acme', 'default', 'api', 'project-a');
+
+    expect(h.prisma.check.findFirst).toHaveBeenCalledWith({
+      where: {
+        slug: 'api',
+        project: {
+          id: 'project-a',
+          slug: 'default',
+          organization: {
+            slug: 'acme',
+            memberships: { some: { userId: 'member' } },
+          },
+        },
+      },
+    });
+  });
+
+  it('does not add a project constraint for an account session', async () => {
+    const h = readHarness();
+
+    await h.service.findBySlug('member', 'acme', 'default', 'api');
+
+    expect(h.prisma.check.findFirst).toHaveBeenCalledWith({
+      where: {
+        slug: 'api',
+        project: {
+          slug: 'default',
+          organization: {
+            slug: 'acme',
+            memberships: { some: { userId: 'member' } },
+          },
+        },
+      },
+    });
+  });
+
+  it.each(['out-of-scope', 'missing'])(
+    'returns the same one-query not-found result for an %s triple',
+    async () => {
+      const h = readHarness();
+      h.prisma.check.findFirst.mockResolvedValue(null);
+
+      await expect(
+        h.service.findBySlug(
+          'member',
+          'private',
+          'default',
+          'hidden',
+          'project-a',
+        ),
+      ).rejects.toEqual(new NotFoundException('Check not found'));
+
+      expect(h.prisma.check.findFirst).toHaveBeenCalledTimes(1);
+      expect(h.prisma.membership.findUnique).not.toHaveBeenCalled();
+      expect(h.prisma.notificationChannel.findMany).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe('ChecksService setCheckChannelEnabled', () => {
@@ -964,6 +1109,7 @@ describe('ChecksService setCheckChannelEnabled', () => {
       ),
     ).resolves.toEqual({
       ...h.check,
+      organizationId: sourceProject.organizationId,
       notificationChannelIds: ['channel-later', 'channel-earlier-a'],
     });
 
@@ -1439,7 +1585,7 @@ describe('ChecksService move', () => {
 
     await expect(
       h.service.move('acting-owner', movingCheck.id, sourceProject.id),
-    ).rejects.toThrow('already in the destination project');
+    ).rejects.toThrow('already in the destination organization');
 
     expect(h.entitlements.lockUsers).not.toHaveBeenCalled();
     expect(h.tx.statusPage.update).not.toHaveBeenCalled();
@@ -1451,7 +1597,7 @@ describe('ChecksService move', () => {
 
     await expect(
       h.service.move('acting-owner', movingCheck.id, 'project-same-org'),
-    ).rejects.toThrow('another organization');
+    ).rejects.toThrow('already in the destination organization');
 
     expect(h.entitlements.lockUsers).not.toHaveBeenCalled();
     expect(h.tx.statusPage.update).not.toHaveBeenCalled();
@@ -1583,7 +1729,7 @@ describe('ChecksService move', () => {
     await expect(
       h.service.move('acting-owner', movingCheck.id, destinationProject.id),
     ).rejects.toThrow(
-      'A check with this slug already exists in the destination project',
+      'A check with this slug already exists in the destination organization',
     );
   });
 
@@ -1603,7 +1749,7 @@ describe('ChecksService move', () => {
 
     await expect(
       h.service.move('acting-owner', movingCheck.id, 'missing-project'),
-    ).rejects.toThrow('Destination project not found');
+    ).rejects.toThrow('Destination organization not found');
     expect(h.tx.check.update).not.toHaveBeenCalled();
   });
 
@@ -1642,7 +1788,7 @@ describe('ChecksService move', () => {
     await h.service.move('acting-owner', movingCheck.id, destinationProject.id);
     await expect(
       h.service.move('acting-owner', movingCheck.id, destinationProject.id),
-    ).rejects.toThrow('already in the destination project');
+    ).rejects.toThrow('already in the destination organization');
 
     expect(h.prisma.$transaction).toHaveBeenCalledTimes(2);
     expect(h.tx.check.update).toHaveBeenCalledTimes(1);

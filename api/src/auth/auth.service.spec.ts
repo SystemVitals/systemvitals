@@ -124,6 +124,28 @@ describe('AuthService.signup', () => {
       plan: 'SOLO',
     });
     expect(prisma.created.subscription[0]).not.toHaveProperty('organizationId');
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.tx.organization.create).toHaveBeenCalledTimes(1);
+    expect(prisma.tx.membership.create).toHaveBeenCalledTimes(1);
+    expect(prisma.tx.project.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects the whole provisioning operation when the Default project cannot be created', async () => {
+    const prisma = makePrismaMock();
+    prisma.tx.project.create.mockRejectedValue(
+      new Error('project invariant rejected'),
+    );
+    const service = makeService(prisma);
+
+    await expect(
+      service.signup('ada@example.com', 'hunter2hunter2'),
+    ).rejects.toThrow('project invariant rejected');
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.tx.organization.create).toHaveBeenCalledTimes(1);
+    expect(prisma.tx.membership.create).toHaveBeenCalledTimes(1);
+    expect(prisma.tx.project.create).toHaveBeenCalledTimes(1);
+    expect(prisma.tx.subscription.create).not.toHaveBeenCalled();
   });
 
   it('normalizes a mixed-case email before storing it', async () => {

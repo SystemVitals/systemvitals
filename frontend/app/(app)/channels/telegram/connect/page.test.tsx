@@ -20,27 +20,21 @@ import { metadata } from "./layout";
 import TelegramConnectPage from "./page";
 
 const push = vi.fn();
-const setActiveOrgId = vi.fn();
 let searchParams = new URLSearchParams();
 let searchParamsSuspends = false;
 let challengeToken = "challenge-secret";
 const pendingSearchParams = new Promise<never>(() => undefined);
 
-const organizations = [
-  {
-    id: "org-1",
-    name: "Northstar",
-    projects: [
-      { id: "project-1", name: "Production" },
-      { id: "project-2", name: "Staging" },
-    ],
-  },
-  {
-    id: "org-2",
-    name: "Workshop",
-    projects: [{ id: "project-3", name: "Telemetry Lab" }],
-  },
-];
+const activeOrg = {
+  id: "org-1",
+  name: "Northstar",
+  slug: "northstar",
+  role: "OWNER",
+  plan: "SIGNAL",
+  creatorUserId: "user-1",
+  creatorLabel: "ops@example.com",
+  pingKey: "ping-key",
+};
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push }),
@@ -55,13 +49,13 @@ vi.mock("@/lib/auth-context", () => ({
     user: {
       id: "user-1",
       email: "ops@example.com",
-      organizations,
+      organizations: [activeOrg],
     },
   }),
 }));
 
 vi.mock("@/lib/org-context", () => ({
-  useOrg: () => ({ setActiveOrgId }),
+  useOrg: () => ({ activeOrg }),
 }));
 
 const previewData = {
@@ -97,25 +91,12 @@ function renderPage(
   );
 }
 
-async function chooseProject(name: string) {
-  const select = await screen.findByRole("combobox", {
-    name: "Destination project",
-  });
-  fireEvent.click(select);
-  const option = await screen.findByRole("option", { name });
-  fireEvent.pointerDown(option);
-  fireEvent.pointerUp(option);
-  fireEvent.click(option);
-  await waitFor(() => expect(select).toHaveTextContent(name));
-}
-
 describe("TelegramConnectPage", () => {
   beforeEach(() => {
     challengeToken = "challenge-secret";
     searchParams = new URLSearchParams({ token: challengeToken });
     searchParamsSuspends = false;
     push.mockReset();
-    setActiveOrgId.mockClear();
     localStorage.clear();
     window.history.replaceState(
       {},
@@ -256,25 +237,16 @@ describe("TelegramConnectPage", () => {
     expect(time?.parentElement).toHaveTextContent(/connection link expires/i);
   });
 
-  it("groups selectable projects from every accessible organization", async () => {
+  it("uses the active organization without a project picker", async () => {
     renderPage([previewMock()]);
 
-    fireEvent.click(
-      await screen.findByRole("combobox", { name: "Destination project" }),
-    );
-
-    expect(screen.getByText("Northstar")).toBeInTheDocument();
-    expect(screen.getByText("Workshop")).toBeInTheDocument();
-    expect(
-      screen.getByRole("option", { name: "Production" }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Staging" })).toBeInTheDocument();
-    expect(
-      screen.getByRole("option", { name: "Telemetry Lab" }),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("Northstar")).toBeInTheDocument();
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    expect(screen.queryByText("Production")).not.toBeInTheDocument();
+    expect(screen.queryByText("Default")).not.toBeInTheDocument();
   });
 
-  it("connects the selected project, activates its organization, and opens its channels", async () => {
+  it("connects the active organization and opens channels without a query parameter", async () => {
     const connectResult = vi.fn(() => ({
       data: {
         connectTelegramChannel: {
@@ -282,7 +254,7 @@ describe("TelegramConnectPage", () => {
           type: "TELEGRAM",
           configJson: "{}",
           enabled: true,
-          projectId: "project-3",
+          organizationId: "org-1",
         },
       },
     }));
@@ -294,26 +266,25 @@ describe("TelegramConnectPage", () => {
           query: CONNECT_TELEGRAM_CHANNEL,
           variables: {
             token: "challenge-secret",
-            projectId: "project-3",
+            organizationId: "org-1",
           },
         },
         result: connectResult,
       },
     ]);
 
-    await chooseProject("Telemetry Lab");
+    await screen.findByText("Northstar");
     fireEvent.click(
       screen.getByRole("button", { name: "Connect Telegram" }),
     );
 
     await waitFor(() => expect(connectResult).toHaveBeenCalledOnce());
-    expect(setActiveOrgId).toHaveBeenCalledWith("org-2");
-    expect(push).toHaveBeenCalledWith("/channels?projectId=project-3");
+    expect(push).toHaveBeenCalledWith("/channels");
   });
 
   it("evicts the exact stale channels list before navigating after success", async () => {
     const cache = new InMemoryCache();
-    const channelsVariables = { projectId: "project-1" };
+    const channelsVariables = { organizationId: "org-1" };
     cache.writeQuery({
       query: CHANNELS,
       variables: channelsVariables,
@@ -321,6 +292,7 @@ describe("TelegramConnectPage", () => {
         channels: [
           {
             id: "stale-channel",
+            organizationId: "org-1",
             type: "EMAIL",
             configJson: '{"email":"stale@example.com"}',
             enabled: true,
@@ -351,7 +323,7 @@ describe("TelegramConnectPage", () => {
             query: CONNECT_TELEGRAM_CHANNEL,
             variables: {
               token: challengeToken,
-              projectId: "project-1",
+              organizationId: "org-1",
             },
           },
           result: {
@@ -361,7 +333,7 @@ describe("TelegramConnectPage", () => {
                 type: "TELEGRAM",
                 configJson: "{}",
                 enabled: true,
-                projectId: "project-1",
+                organizationId: "org-1",
               },
             },
           },
@@ -376,7 +348,7 @@ describe("TelegramConnectPage", () => {
     );
 
     await waitFor(() => {
-      expect(push).toHaveBeenCalledWith("/channels?projectId=project-1");
+      expect(push).toHaveBeenCalledWith("/channels");
     });
     expect(channelsAtNavigation).toBeNull();
   });
@@ -422,7 +394,7 @@ describe("TelegramConnectPage", () => {
           query: CONNECT_TELEGRAM_CHANNEL,
           variables: {
             token: "challenge-secret",
-            projectId: "project-1",
+            organizationId: "org-1",
           },
         },
         result: {
@@ -445,7 +417,7 @@ describe("TelegramConnectPage", () => {
       ),
     ).toBeInTheDocument();
     expect(
-      within(dialog).getByText(/choose another project/i),
+      within(dialog).getByText(/review the existing destination/i),
     ).toBeInTheDocument();
     expect(
       within(dialog).queryByText(/telegram destination already connected/i),
@@ -453,10 +425,11 @@ describe("TelegramConnectPage", () => {
   });
 
   it.each([
-    "Project not found",
+    "Organization not found",
+    "Workspace not found",
     "Not a member of this organization",
   ])(
-    "keeps the challenge usable when project access fails with %s",
+    "keeps the challenge usable when organization access fails with %s",
     async (message) => {
       renderPage([
         previewMock(),
@@ -465,7 +438,7 @@ describe("TelegramConnectPage", () => {
             query: CONNECT_TELEGRAM_CHANNEL,
             variables: {
               token: challengeToken,
-              projectId: "project-1",
+              organizationId: "org-1",
             },
           },
           result: {
@@ -481,14 +454,14 @@ describe("TelegramConnectPage", () => {
 
       const dialog = await screen.findByRole("dialog");
       expect(
-        within(dialog).getByText("Project access changed"),
+        within(dialog).getByText("Organization access changed"),
       ).toBeInTheDocument();
       expect(
-        within(dialog).getByText(/choose another accessible project/i),
+        within(dialog).getByText(/active organization is no longer available/i),
       ).toBeInTheDocument();
       expect(
         within(dialog).getByRole("button", {
-          name: "Choose another project",
+          name: "Return to channels",
         }),
       ).toBeInTheDocument();
       expect(dialog).not.toHaveTextContent(/request a new connection link/i);
@@ -509,7 +482,7 @@ describe("TelegramConnectPage", () => {
           query: CONNECT_TELEGRAM_CHANNEL,
           variables: {
             token: "challenge-secret",
-            projectId: "project-1",
+            organizationId: "org-1",
           },
         },
         result: {

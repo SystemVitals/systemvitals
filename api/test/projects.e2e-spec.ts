@@ -2,7 +2,6 @@ import { buildApp } from '../src/main';
 import type { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { cleanupTestUsers } from './cleanup-test-users';
-import { isValidSlug } from '../src/common/slug';
 
 async function signup(app: NestFastifyApplication, email: string) {
   const r = await app.inject({
@@ -34,6 +33,7 @@ interface GqlMeResponse {
       organizations: Array<{
         id: string;
         name: string;
+        pingKey: string;
         projects: Array<{
           id: string;
           name: string;
@@ -72,11 +72,6 @@ interface GqlCreateTokenResponse {
   };
 }
 
-interface GqlCreateProjectResponse {
-  data?: { createProject: { id: string; name: string; slug: string } };
-  errors?: Array<{ message: string }>;
-}
-
 describe('projects (e2e)', () => {
   let app: NestFastifyApplication;
   let prisma: PrismaService;
@@ -97,6 +92,7 @@ describe('projects (e2e)', () => {
       a.replace('@', '+p@'),
       b.replace('@', '+p@'),
       a.replace('@', '+q@'),
+      a.replace('@', '+legacy-ping@'),
     ];
     await cleanupTestUsers(prisma, allEmails);
   });
@@ -110,6 +106,7 @@ describe('projects (e2e)', () => {
       a.replace('@', '+p@'),
       b.replace('@', '+p@'),
       a.replace('@', '+q@'),
+      a.replace('@', '+legacy-ping@'),
     ];
     try {
       await cleanupTestUsers(prisma, allEmails);
@@ -129,21 +126,82 @@ describe('projects (e2e)', () => {
     expect(res.data.me.organizations[0].projects[0].pingKey).toBeTruthy();
   });
 
-  it('regeneratePingKey changes the key', async () => {
+  it('regenerateOrganizationPingKey changes the implicit workspace key', async () => {
     const token = await signup(app, b);
     const me = (await gql(
       app,
       token,
-      `{ me { organizations { projects { id pingKey } } } }`,
+      `{ me { organizations { id pingKey projects { id pingKey } } } }`,
     )) as GqlMeResponse;
-    const proj = me.data.me.organizations[0].projects[0];
+    const organization = me.data.me.organizations[0];
+    const proj = organization.projects[0];
     const res = (await gql(
+      app,
+      token,
+      `mutation($id:ID!){
+        regenerateOrganizationPingKey(organizationId:$id) {
+          id pingKey projects { id pingKey }
+        }
+      }`,
+      { id: organization.id },
+    )) as {
+      data: {
+        regenerateOrganizationPingKey: {
+          id: string;
+          pingKey: string;
+          projects: Array<{ id: string; pingKey: string }>;
+        };
+      };
+    };
+    const rotated = res.data.regenerateOrganizationPingKey;
+    expect(rotated.pingKey).not.toBe(proj.pingKey);
+    expect(rotated.projects).toEqual([
+      { id: proj.id, pingKey: rotated.pingKey },
+    ]);
+
+    const legacy = (await gql(
       app,
       token,
       `mutation($id:ID!){ regeneratePingKey(projectId:$id){ id pingKey } }`,
       { id: proj.id },
     )) as GqlRegenerateResponse;
-    expect(res.data.regeneratePingKey.pingKey).not.toBe(proj.pingKey);
+    expect(legacy.data.regeneratePingKey.id).toBe(proj.id);
+    expect(legacy.data.regeneratePingKey.pingKey).not.toBe(rotated.pingKey);
+
+    const refreshed = (await gql(
+      app,
+      token,
+      `{ me { organizations { id pingKey projects { id pingKey } } } }`,
+    )) as GqlMeResponse;
+    expect(refreshed.data.me.organizations[0]).toEqual(
+      expect.objectContaining({
+        id: organization.id,
+        pingKey: legacy.data.regeneratePingKey.pingKey,
+        projects: [
+          {
+            id: proj.id,
+            pingKey: legacy.data.regeneratePingKey.pingKey,
+          },
+        ],
+      }),
+    );
+  });
+
+  it('retains regeneratePingKey for legacy clients', async () => {
+    const token = await signup(app, a.replace('@', '+legacy-ping@'));
+    const me = (await gql(
+      app,
+      token,
+      `{ me { organizations { projects { id pingKey } } } }`,
+    )) as GqlMeResponse;
+    const project = me.data.me.organizations[0].projects[0];
+    const res = (await gql(
+      app,
+      token,
+      `mutation($id:ID!){ regeneratePingKey(projectId:$id){ id pingKey } }`,
+      { id: project.id },
+    )) as GqlRegenerateResponse;
+    expect(res.data.regeneratePingKey.pingKey).not.toBe(project.pingKey);
   });
 
   it("a user cannot regenerate another org's project key", async () => {
@@ -198,7 +256,7 @@ describe('projects (e2e)', () => {
     expect(revokedRes.errors).toBeDefined();
   });
 
-  it('projects query returns the signed-up user default project', async () => {
+  it('keeps the deprecated projects query for compatibility', async () => {
     const emailP = a.replace('@', '+p@');
     const token = await signup(app, emailP);
     const res = (await gql(
@@ -236,47 +294,20 @@ describe('projects (e2e)', () => {
     expect(intersection).toHaveLength(0);
   });
 
-  it('N concurrent createProject mutations with the identical name ALL succeed with distinct, valid slugs (Fix 4)', async () => {
+  it('does not expose createProject in the GraphQL schema', async () => {
     const emailQ = a.replace('@', '+q@');
     await cleanupTestUsers(prisma, emailQ);
     const token = await signup(app, emailQ);
-    const me = (await gql(
+    const response = (await gql(
       app,
       token,
-      `{ me { organizations { id } } }`,
-    )) as GqlMeResponse;
-    const organizationId = me.data.me.organizations[0].id;
+      `{ __schema { mutationType { fields { name } } } }`,
+    )) as {
+      data: { __schema: { mutationType: { fields: Array<{ name: string }> } } };
+    };
 
-    const CONCURRENCY = 10;
-    const results = await Promise.all(
-      Array.from({ length: CONCURRENCY }, () =>
-        gql(
-          app,
-          token,
-          `mutation($organizationId: ID!, $name: String!) {
-            createProject(organizationId: $organizationId, name: $name) {
-              id name slug
-            }
-          }`,
-          { organizationId, name: 'Concurrent Same-Name Project' },
-        ),
-      ),
-    );
-    const typed = results as GqlCreateProjectResponse[];
-
-    for (const res of typed) {
-      expect(res.errors).toBeUndefined();
-      expect(res.data?.createProject).toBeTruthy();
-    }
-
-    const slugs = typed.map((res) => res.data!.createProject.slug);
-    const ids = typed.map((res) => res.data!.createProject.id);
-    expect(new Set(slugs).size).toBe(CONCURRENCY);
-    expect(new Set(ids).size).toBe(CONCURRENCY);
-    for (const slug of slugs) {
-      expect(isValidSlug(slug)).toBe(true);
-    }
-
-    await cleanupTestUsers(prisma, emailQ);
+    expect(
+      response.data.__schema.mutationType.fields.map(({ name }) => name),
+    ).not.toContain('createProject');
   });
 });

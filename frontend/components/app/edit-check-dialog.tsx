@@ -76,7 +76,7 @@ function conversionWarning(
 
 export interface EditableCheck {
   id: string;
-  projectId: string;
+  organizationId: string;
   name: string;
   slug: string;
   type: string;
@@ -110,9 +110,7 @@ interface EditCheckDialogProps {
 export function EditCheckDialog({ open, onOpenChange, check, onSaved }: EditCheckDialogProps) {
   const currentType = asCheckType(check.type);
   const { orgs } = useOrg();
-  const owningOrg = orgs.find((org) =>
-    org.projects.some((project) => project.id === check.projectId),
-  );
+  const owningOrg = orgs.find((org) => org.id === check.organizationId);
   const intervalFloor = planIntervalFloor(owningOrg?.plan ?? "SOLO");
 
   const [type, setType] = useState<CheckType>(currentType);

@@ -42,6 +42,7 @@ function pendingChannel(overrides: Record<string, unknown> = {}) {
     project: {
       name: 'Production',
       organizationId: 'organization-1',
+      organization: { name: 'Acme Operations' },
     },
     ...overrides,
   };
@@ -97,6 +98,7 @@ describe('EmailVerificationService preview', () => {
     await expect(service.preview(TOKEN)).resolves.toEqual({
       status: 'PENDING',
       maskedEmail: 'a•••••@example.com',
+      organizationName: 'Acme Operations',
       projectName: 'Production',
       expiresAt: new Date('2032-03-05T05:06:07.000Z'),
     });
@@ -149,6 +151,7 @@ describe('EmailVerificationService verify', () => {
     await expect(service.verify(TOKEN)).resolves.toEqual({
       status: 'VERIFIED',
       maskedEmail: 'a•••••@example.com',
+      organizationName: 'Acme Operations',
       projectName: 'Production',
     });
     expect(notificationChannel.updateMany).toHaveBeenCalledWith({

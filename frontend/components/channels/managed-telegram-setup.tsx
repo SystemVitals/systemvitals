@@ -261,8 +261,8 @@ export function ManagedTelegramSetup({
           />
           <p className="leading-6 text-muted-foreground">
             SystemVitals replies in that destination with a 10-minute
-            connection link. Open it, choose the project, and confirm the
-            channel.
+            connection link. Open it, review the active organization, and
+            confirm the channel.
           </p>
         </div>
       </CardContent>

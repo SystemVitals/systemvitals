@@ -13,12 +13,12 @@ vi.mock("@/lib/org-context", () => ({
     activeOrg: { plan: orgContext.plan },
     orgs: [
       {
+        id: "org-signal",
         plan: "SIGNAL",
-        projects: [{ id: "project-signal" }],
       },
       {
+        id: "org-solo",
         plan: "SOLO",
-        projects: [{ id: "project-solo" }],
       },
     ],
   }),
@@ -32,7 +32,7 @@ vi.mock("@/lib/org-context", () => ({
 // runtime value or assertion.
 interface CheckFixture {
   id: string;
-  projectId: string;
+  organizationId: string;
   name: string;
   slug: string;
   type: string;
@@ -49,7 +49,7 @@ interface CheckFixture {
 
 const HEARTBEAT: CheckFixture = {
   id: "c1",
-  projectId: "project-signal",
+  organizationId: "org-signal",
   name: "Nightly job",
   slug: "nightly-job",
   type: "HEARTBEAT",
@@ -228,7 +228,7 @@ describe("EditCheckDialog", () => {
 
   it("uses the SOLO creator floor for a SIGNAL collaborator", async () => {
     orgContext.plan = "SOLO";
-    renderDialog({ ...HTTP, projectId: "project-solo" }, "SIGNAL");
+    renderDialog({ ...HTTP, organizationId: "org-solo" }, "SIGNAL");
 
     await waitForPlan();
     await waitFor(() =>

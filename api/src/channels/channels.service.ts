@@ -89,16 +89,19 @@ function sanitizeConfig(
   }
 }
 
-export function presentChannel(channel: {
-  id: string;
-  type: string;
-  config: unknown;
-  enabled: boolean;
-  projectId: string;
-  verifiedAt?: Date | null;
-  verificationExpiresAt?: Date | null;
-  verificationSentAt?: Date | null;
-}) {
+export function presentChannel(
+  channel: {
+    id: string;
+    type: string;
+    config: unknown;
+    enabled: boolean;
+    projectId: string;
+    verifiedAt?: Date | null;
+    verificationExpiresAt?: Date | null;
+    verificationSentAt?: Date | null;
+  },
+  organizationId: string,
+) {
   const verificationStatus =
     channel.type !== 'EMAIL'
       ? ('NOT_REQUIRED' as const)
@@ -111,6 +114,7 @@ export function presentChannel(channel: {
     type: channel.type,
     configJson: JSON.stringify(sanitizeConfig(channel.type, channel.config)),
     enabled: channel.enabled,
+    organizationId,
     projectId: channel.projectId,
     verificationStatus,
     verificationExpiresAt:
@@ -239,7 +243,7 @@ export class ChannelsService {
       );
     }
 
-    await this.assertProjectAccess(userId, projectId);
+    const project = await this.assertProjectAccess(userId, projectId);
 
     let config = this.parseAndValidateConfig(type, configJson);
     let verification:
@@ -279,7 +283,7 @@ export class ChannelsService {
           rawToken: verification.rawToken,
         });
       } catch {
-        return presentChannel(channel);
+        return presentChannel(channel, project.organizationId);
       }
 
       const sentAt = new Date();
@@ -305,18 +309,20 @@ export class ChannelsService {
       }
     }
 
-    return presentChannel(channel);
+    return presentChannel(channel, project.organizationId);
   }
 
   async list(userId: string, projectId: string) {
-    await this.assertProjectAccess(userId, projectId);
+    const project = await this.assertProjectAccess(userId, projectId);
 
     const channels = await this.prisma.notificationChannel.findMany({
       where: { projectId },
       orderBy: { createdAt: 'asc' },
     });
 
-    return channels.map(presentChannel);
+    return channels.map((channel) =>
+      presentChannel(channel, project.organizationId),
+    );
   }
 
   async delete(userId: string, channelId: string): Promise<boolean> {

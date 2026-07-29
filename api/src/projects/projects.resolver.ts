@@ -4,28 +4,34 @@ import { ApiAuthGuard } from '../tokens/api-auth.guard';
 import { CurrentUser } from '../common/current-user.decorator';
 import type { JwtUser } from '../auth/jwt.strategy';
 import { ProjectsService } from './projects.service';
-import { ProjectModel } from '../common/models';
+import { OrganizationModel, ProjectModel } from '../common/models';
 
 @Resolver(() => ProjectModel)
 @UseGuards(ApiAuthGuard)
 export class ProjectsResolver {
   constructor(private readonly projectsService: ProjectsService) {}
 
-  @Query(() => [ProjectModel])
+  @Query(() => [ProjectModel], {
+    deprecationReason: 'Organizations now contain one implicit workspace.',
+  })
   projects(@CurrentUser() user: JwtUser) {
     return this.projectsService.listForUser(user.userId);
   }
 
-  @Mutation(() => ProjectModel)
-  createProject(
+  @Mutation(() => OrganizationModel)
+  regenerateOrganizationPingKey(
     @CurrentUser() user: JwtUser,
     @Args('organizationId', { type: () => ID }) organizationId: string,
-    @Args('name') name: string,
   ) {
-    return this.projectsService.create(user.userId, organizationId, name);
+    return this.projectsService.regenerateOrganizationPingKey(
+      user.userId,
+      organizationId,
+    );
   }
 
-  @Mutation(() => ProjectModel)
+  @Mutation(() => ProjectModel, {
+    deprecationReason: 'Use regenerateOrganizationPingKey.',
+  })
   regeneratePingKey(
     @CurrentUser() user: JwtUser,
     @Args('projectId', { type: () => ID }) projectId: string,

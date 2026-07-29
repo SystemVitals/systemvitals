@@ -17,6 +17,18 @@ interface SchemaResponse {
         name: string;
         fields?: Array<{
           name: string;
+          isDeprecated: boolean;
+          deprecationReason: string | null;
+          type: {
+            kind: string;
+            name: string | null;
+            ofType: { kind: string; name: string | null } | null;
+          };
+        }>;
+        inputFields?: Array<{
+          name: string;
+          isDeprecated: boolean;
+          deprecationReason: string | null;
           type: {
             kind: string;
             name: string | null;
@@ -74,7 +86,14 @@ describe('token GraphQL schema isolation (e2e)', () => {
             mutationType { fields { name args { name type { name } } } }
             types {
               name
-              fields { name type { kind name ofType { kind name } } }
+              fields(includeDeprecated: true) {
+                name isDeprecated deprecationReason
+                type { kind name ofType { kind name } }
+              }
+              inputFields(includeDeprecated: true) {
+                name isDeprecated deprecationReason
+                type { kind name ofType { kind name } }
+              }
             }
           }
         }`,
@@ -125,6 +144,81 @@ describe('token GraphQL schema isolation (e2e)', () => {
     expect(publicCredential?.fields?.map(({ name }) => name)).toContain(
       'credentialMode',
     );
+    expect(publicCredential?.fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'organizationId',
+          isDeprecated: false,
+        }),
+        expect.objectContaining({
+          name: 'organizationName',
+          isDeprecated: false,
+        }),
+        expect.objectContaining({
+          name: 'projectId',
+          isDeprecated: true,
+          deprecationReason: 'Use organizationId.',
+        }),
+        expect.objectContaining({
+          name: 'projectName',
+          isDeprecated: true,
+          deprecationReason: 'Use organizationName.',
+        }),
+      ]),
+    );
+
+    const publicToken = publicSchema.data!.__schema.types.find(
+      ({ name }) => name === 'ApiTokenModel',
+    );
+    expect(publicToken?.fields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'organizationId',
+          isDeprecated: false,
+        }),
+        expect.objectContaining({
+          name: 'projectId',
+          isDeprecated: true,
+          deprecationReason: 'Use organizationId.',
+        }),
+        expect.objectContaining({
+          name: 'projectName',
+          isDeprecated: false,
+        }),
+      ]),
+    );
+
+    const publicTokenInput = publicSchema.data!.__schema.types.find(
+      ({ name }) => name === 'CreateApiTokenInput',
+    );
+    expect(publicTokenInput?.inputFields).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'organizationId',
+          isDeprecated: false,
+          type: expect.objectContaining({
+            kind: 'SCALAR',
+            name: 'ID',
+          }) as object,
+        }),
+        expect.objectContaining({
+          name: 'projectId',
+          isDeprecated: true,
+          deprecationReason: 'Use organizationId.',
+          type: expect.objectContaining({
+            kind: 'SCALAR',
+            name: 'ID',
+          }) as object,
+        }),
+      ]),
+    );
+    expect(
+      publicTokenInput?.inputFields
+        ?.filter(({ name }) => ['organizationId', 'projectId'].includes(name))
+        .every(({ type }) => type.kind !== 'NON_NULL'),
+    ).toBe(true);
+    expect(adminTypes).not.toContain('ApiCredential');
+    expect(adminTypes).not.toContain('CreateApiTokenInput');
   });
 
   it('does not let an ordinary session access token management on the admin endpoint', async () => {

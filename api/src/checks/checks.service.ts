@@ -400,7 +400,11 @@ export class ChecksService {
       check.id,
       check.projectId,
     );
-    return { ...check, notificationChannelIds };
+    return {
+      ...check,
+      organizationId: check.project.organizationId,
+      notificationChannelIds,
+    };
   }
 
   async projectIdForCheck(userId: string, checkId: string): Promise<string> {
@@ -413,19 +417,21 @@ export class ChecksService {
     orgSlug: string,
     projectSlug: string,
     checkSlug: string,
+    boundProjectId?: string,
   ) {
     // A slug triple is guessable in a way a cuid is not. Answering "forbidden"
     // for another tenant's check would confirm it exists, so a check the
     // caller cannot see must be reported exactly as one that does not exist
-    // — including in timing. The membership requirement is folded into this
-    // single query (rather than a findFirst-then-membership.findUnique pair)
-    // so that "exists but not mine" and "does not exist" do identical
-    // database work and are indistinguishable by response latency. Do NOT
-    // split this back into two queries.
+    // — including in timing. Membership and any credential project binding
+    // are folded into this single query (rather than a findFirst-then-
+    // membership.findUnique pair) so that "exists but not mine" and "does not
+    // exist" do identical database work and are indistinguishable by response
+    // latency. Do NOT split this back into two queries.
     const check = await this.prisma.check.findFirst({
       where: {
         slug: checkSlug,
         project: {
+          ...(boundProjectId ? { id: boundProjectId } : {}),
           slug: projectSlug,
           organization: {
             slug: orgSlug,
@@ -442,6 +448,45 @@ export class ChecksService {
       check.projectId,
     );
     return { ...check, notificationChannelIds };
+  }
+
+  async findByOrganizationSlug(
+    userId: string,
+    orgSlug: string,
+    checkSlug: string,
+    boundProjectId?: string,
+  ) {
+    // Organization and check slugs are guessable. Fold membership into this
+    // lookup, together with any credential project binding, so an inaccessible
+    // check and a missing check perform the same database work and return the
+    // same public error.
+    const check = await this.prisma.check.findFirst({
+      where: {
+        slug: checkSlug,
+        project: {
+          ...(boundProjectId ? { id: boundProjectId } : {}),
+          organization: {
+            slug: orgSlug,
+            memberships: { some: { userId } },
+          },
+        },
+      },
+      include: {
+        project: { select: { organizationId: true } },
+      },
+    });
+
+    if (!check) throw new NotFoundException('Check not found');
+
+    const notificationChannelIds = await this.effectiveNotificationChannelIds(
+      check.id,
+      check.projectId,
+    );
+    return {
+      ...check,
+      organizationId: check.project.organizationId,
+      notificationChannelIds,
+    };
   }
 
   async effectiveNotificationChannelIds(
@@ -510,7 +555,11 @@ export class ChecksService {
             check.projectId,
             tx,
           );
-        return { ...check, notificationChannelIds } as CheckModel;
+        return {
+          ...check,
+          organizationId: check.project.organizationId,
+          notificationChannelIds,
+        } as CheckModel;
       },
     );
   }
@@ -583,11 +632,11 @@ export class ChecksService {
           },
         });
         if (!initialDestination) {
-          throw new NotFoundException('Destination project not found');
+          throw new NotFoundException('Destination organization not found');
         }
         if (initialCheck.projectId === destinationProjectId) {
           throw new BadRequestException(
-            'Check is already in the destination project',
+            'Check is already in the destination organization',
           );
         }
         if (
@@ -595,7 +644,7 @@ export class ChecksService {
           initialDestination.organizationId
         ) {
           throw new BadRequestException(
-            'Destination project must be in another organization',
+            'Check is already in the destination organization',
           );
         }
 
@@ -628,7 +677,7 @@ export class ChecksService {
         });
         if (!check) throw new NotFoundException('Check not found');
         if (!destination) {
-          throw new NotFoundException('Destination project not found');
+          throw new NotFoundException('Destination organization not found');
         }
         if (
           check.project.organization.creatorUserId !== sourceCreatorId ||
@@ -638,12 +687,12 @@ export class ChecksService {
         }
         if (check.projectId === destinationProjectId) {
           throw new BadRequestException(
-            'Check is already in the destination project',
+            'Check is already in the destination organization',
           );
         }
         if (check.project.organizationId === destination.organizationId) {
           throw new BadRequestException(
-            'Destination project must be in another organization',
+            'Check is already in the destination organization',
           );
         }
 
@@ -660,7 +709,7 @@ export class ChecksService {
         });
         if (collision) {
           throw new ConflictException(
-            `A check with slug "${check.slug}" already exists in the destination project`,
+            `A check with slug "${check.slug}" already exists in the destination organization`,
           );
         }
 
@@ -692,7 +741,7 @@ export class ChecksService {
         error.code === 'P2002'
       ) {
         throw new ConflictException(
-          'A check with this slug already exists in the destination project',
+          'A check with this slug already exists in the destination organization',
         );
       }
       throw error;

@@ -5,11 +5,12 @@ import { TELEGRAM_FETCH, TelegramBotClient } from './telegram-bot.client';
 import { TelegramConnectionsService } from './telegram-connections.service';
 import { TelegramController } from './telegram.controller';
 import { TelegramResolver } from './telegram.resolver';
+import { WorkspacesModule } from '../workspaces/workspaces.module';
 
 export { TELEGRAM_FETCH };
 
 @Module({
-  imports: [AuthModule, TokensCoreModule],
+  imports: [AuthModule, TokensCoreModule, WorkspacesModule],
   providers: [
     {
       provide: TELEGRAM_FETCH,

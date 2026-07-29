@@ -6,6 +6,7 @@ import type { ApiPrincipal } from '../tokens/api-principal';
 import { ChannelsService } from './channels.service';
 import { ChannelModel } from './channel.model';
 import { EmailVerificationService } from './email-verification.service';
+import { WorkspacesService } from '../workspaces/workspaces.service';
 
 @Resolver(() => ChannelModel)
 @UseGuards(ApiAuthGuard)
@@ -13,26 +14,49 @@ export class ChannelsResolver {
   constructor(
     private readonly channelsService: ChannelsService,
     private readonly emailVerificationService: EmailVerificationService,
+    private readonly workspacesService: WorkspacesService,
   ) {}
 
   @Query(() => [ChannelModel])
-  channels(
+  async channels(
     @CurrentUser() user: ApiPrincipal,
-    @Args('projectId', { type: () => ID }) projectId: string,
+    @Args('organizationId', { type: () => ID, nullable: true })
+    organizationId?: string,
+    @Args('projectId', {
+      type: () => ID,
+      nullable: true,
+      deprecationReason: 'Use organizationId.',
+    })
+    projectId?: string,
   ) {
-    return this.channelsService.list(user.userId, projectId);
+    const workspace = await this.workspacesService.resolveForUser(user.userId, {
+      organizationId,
+      projectId,
+    });
+    return this.channelsService.list(user.userId, workspace.projectId);
   }
 
   @Mutation(() => ChannelModel)
-  createChannel(
+  async createChannel(
     @CurrentUser() user: ApiPrincipal,
-    @Args('projectId', { type: () => ID }) projectId: string,
+    @Args('organizationId', { type: () => ID, nullable: true })
+    organizationId: string | undefined,
+    @Args('projectId', {
+      type: () => ID,
+      nullable: true,
+      deprecationReason: 'Use organizationId.',
+    })
+    projectId: string | undefined,
     @Args('type') type: string,
     @Args('configJson') configJson: string,
   ) {
+    const workspace = await this.workspacesService.resolveForUser(user.userId, {
+      organizationId,
+      projectId,
+    });
     return this.channelsService.create(
       user.userId,
-      projectId,
+      workspace.projectId,
       type,
       configJson,
     );

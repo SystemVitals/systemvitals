@@ -112,10 +112,11 @@ type ApiTokenCreateResult {
   id: ID!
   lastUsedAt: DateTime
   name: String!
+  organizationId: ID
   organizationName: String
   plaintext: String!
   prefix: String!
-  projectId: ID
+  projectId: ID @deprecated(reason: "Use organizationId.")
   projectName: String
   revokedAt: DateTime
   scopes: [String!]!
@@ -127,9 +128,10 @@ type ApiTokenModel {
   id: ID!
   lastUsedAt: DateTime
   name: String!
+  organizationId: ID
   organizationName: String
   prefix: String!
-  projectId: ID
+  projectId: ID @deprecated(reason: "Use organizationId.")
   projectName: String
   revokedAt: DateTime
   scopes: [String!]!
@@ -154,7 +156,8 @@ type ChannelModel {
   configJson: String!
   enabled: Boolean!
   id: ID!
-  projectId: ID!
+  organizationId: ID!
+  projectId: ID! @deprecated(reason: "Use organizationId.")
   type: String!
   verificationDeliveryStatus: String!
   verificationExpiresAt: DateTime
@@ -181,9 +184,10 @@ type CheckModel {
   name: String!
   nextExpectedAt: DateTime
   notificationChannelIds: [ID!]!
+  organizationId: ID!
   periodSeconds: Int
   pingSlug: String
-  projectId: ID!
+  projectId: ID! @deprecated(reason: "Use organizationId.")
   schedule: String
   slug: String!
   status: String!
@@ -205,14 +209,16 @@ type DayCount {
 
 type EmailVerificationConfirmationModel {
   maskedEmail: String
-  projectName: String
+  organizationName: String
+  projectName: String @deprecated(reason: "Use organizationName.")
   status: String!
 }
 
 type EmailVerificationPreviewModel {
   expiresAt: DateTime
   maskedEmail: String
-  projectName: String
+  organizationName: String
+  projectName: String @deprecated(reason: "Use organizationName.")
   status: String!
 }
 
@@ -263,12 +269,16 @@ type OrganizationModel {
   creatorUserId: ID!
   id: ID!
   name: String!
+  pingKey: String!
   plan: String!
-  projects: [ProjectModel!]!
+  projects: [ProjectModel!]! @deprecated(reason: "Organizations now contain one implicit workspace.")
   role: String!
   slug: String!
 }
 
+"""
+Deprecated compatibility output. Organizations are the public workspace.
+"""
 type ProjectModel {
   id: ID!
   name: String!
@@ -299,7 +309,8 @@ type StatusPageModel {
   branding: String
   checkIds: [String!]!
   id: ID!
-  projectId: ID!
+  organizationId: ID!
+  projectId: ID! @deprecated(reason: "Use organizationId.")
   slug: String!
   title: String!
 }

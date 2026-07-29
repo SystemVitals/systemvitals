@@ -51,8 +51,8 @@ export function StatusShowcase() {
             Your status page, ready to share
           </h2>
           <p className="mx-auto mt-4 max-w-xl text-muted-foreground">
-            Every project gets a public status page with live uptime history and
-            incident reports — no extra setup required.
+            Every organization gets a public status page with live uptime
+            history and incident reports — no extra setup required.
           </p>
         </div>
 

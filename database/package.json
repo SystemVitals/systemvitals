@@ -7,6 +7,7 @@
     "generate": "prisma generate",
     "migrate": "prisma migrate dev",
     "migrate:deploy": "prisma migrate deploy",
+    "preflight:organization-workspaces": "tsx scripts/preflight-organization-workspaces.ts",
     "studio": "prisma studio",
     "test": "vitest run"
   },

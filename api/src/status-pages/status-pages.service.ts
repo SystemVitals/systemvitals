@@ -95,20 +95,24 @@ export class StatusPagesService {
     }
   }
 
-  private mapPage(page: {
-    id: string;
-    slug: string;
-    title: string;
-    branding: unknown;
-    checkIds: string[];
-    projectId: string;
-  }) {
+  private mapPage(
+    page: {
+      id: string;
+      slug: string;
+      title: string;
+      branding: unknown;
+      checkIds: string[];
+      projectId: string;
+    },
+    organizationId: string,
+  ) {
     return {
       id: page.id,
       slug: page.slug,
       title: page.title,
       branding: page.branding != null ? JSON.stringify(page.branding) : null,
       checkIds: page.checkIds,
+      organizationId,
       projectId: page.projectId,
     };
   }
@@ -126,7 +130,7 @@ export class StatusPagesService {
     try {
       return await this.prisma.$transaction(async (tx) => {
         await lockProjectCheckStatusChanges(tx, [projectId]);
-        await this.assertProjectAccess(tx, userId, projectId);
+        const project = await this.assertProjectAccess(tx, userId, projectId);
         await this.assertChecksInProject(tx, projectId, checkIds);
 
         const page = await tx.statusPage.create({
@@ -138,7 +142,7 @@ export class StatusPagesService {
             ...(branding != null ? { branding } : {}),
           },
         });
-        return this.mapPage(page);
+        return this.mapPage(page, project.organizationId);
       });
     } catch (e: unknown) {
       if (
@@ -156,12 +160,16 @@ export class StatusPagesService {
   }
 
   async list(userId: string, projectId: string) {
-    await this.assertProjectAccess(this.prisma, userId, projectId);
+    const project = await this.assertProjectAccess(
+      this.prisma,
+      userId,
+      projectId,
+    );
     const pages = await this.prisma.statusPage.findMany({
       where: { projectId },
       orderBy: { createdAt: 'asc' },
     });
-    return pages.map((p) => this.mapPage(p));
+    return pages.map((page) => this.mapPage(page, project.organizationId));
   }
 
   async update(
@@ -202,7 +210,7 @@ export class StatusPagesService {
             : {}),
         },
       });
-      return this.mapPage(updated);
+      return this.mapPage(updated, page.project.organizationId);
     });
   }
 

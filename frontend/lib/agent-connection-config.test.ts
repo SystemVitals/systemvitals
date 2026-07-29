@@ -8,10 +8,10 @@ import {
 } from "./agent-connection-config";
 
 const input = {
-  connectionName: "Production checks",
+  organizationName: "Production checks",
   apiUrl: "https://api.systemvitals.example/graphql",
   token: "svt_secret",
-  projectId: "project_123",
+  organizationId: "org_123",
 };
 
 describe("generateAgentConnectionConfig", () => {
@@ -73,7 +73,7 @@ printf '\\n'
 curl --request POST 'https://api.systemvitals.example/graphql' \\
   --header "Authorization: Bearer $SYSTEMVITALS_API_TOKEN" \\
   --header 'Content-Type: application/json' \\
-  --data-raw '{"query":"mutation CreateHeartbeat($projectId: ID!) { createCheck(projectId: $projectId, name: \\"agent-heartbeat\\", periodSeconds: 300, graceSeconds: 60) { id } }","variables":{"projectId":"project_123"}}'
+  --data-raw '{"query":"mutation CreateHeartbeat($organizationId: ID!) { createCheck(organizationId: $organizationId, name: \\"agent-heartbeat\\", periodSeconds: 300, graceSeconds: 60) { id } }","variables":{"organizationId":"org_123"}}'
 unset SYSTEMVITALS_API_TOKEN`,
     ],
   ])("generates the exact %s output", (client, expected) => {
@@ -89,17 +89,17 @@ unset SYSTEMVITALS_API_TOKEN`,
     (client) => {
       const adversarial = {
         client,
-        connectionName: 'name "quoted"\nnext',
+        organizationName: 'name "quoted"\nnext',
         apiUrl: "https://example.test/g?q=\"yes\"\nline",
         token: "svt_'\" $() `touch nope`\nsecret",
-        projectId: "project ignored by MCP config",
+        organizationId: "organization ignored by MCP config",
       };
 
       const parsed = JSON.parse(generateAgentConnectionConfig(adversarial));
 
       expect(parsed).toEqual({
         mcpServers: {
-          [adversarial.connectionName]: {
+          [adversarial.organizationName]: {
             command: "npx",
             args: ["-y", "@systemvitals/mcp"],
             env: {
@@ -115,10 +115,10 @@ unset SYSTEMVITALS_API_TOKEN`,
   it("escapes Codex TOML strings and quoted table keys", () => {
     const result = generateAgentConnectionConfig({
       client: "codex",
-      connectionName: 'prod"]\n[mcp_servers.injected',
+      organizationName: 'prod"]\n[mcp_servers.injected',
       apiUrl: 'https://example.test/"quoted"\nline',
       token: 'svt_"quoted"\\backslash\nnext',
-      projectId: "unused",
+      organizationId: "unused",
     });
 
     expect(result).toBe(`[mcp_servers."prod\\"]\\n[mcp_servers.injected"]
@@ -151,10 +151,10 @@ env = { SYSTEMVITALS_API_URL = "https://example.test/\\"quoted\\"\\nline", SYSTE
     const controls = "\0\r\u001b\u007f";
     const result = generateAgentConnectionConfig({
       client: "codex",
-      connectionName: `name${controls}`,
+      organizationName: `name${controls}`,
       apiUrl: `https://example.test/${controls}`,
       token: `svt_${controls}`,
-      projectId: "unused",
+      organizationId: "unused",
     });
 
     expect(result).toContain(
@@ -195,10 +195,10 @@ env = { SYSTEMVITALS_API_URL = "https://example.test/\\"quoted\\"\\nline", SYSTE
     for (const client of ["claude-code", "graphql"] as const) {
       const result = generateAgentConnectionConfig({
         client,
-        connectionName: "Production checks",
+        organizationName: "Production checks",
         apiUrl: "https://example.test/graphql",
         token: secret,
-        projectId: "project_123",
+        organizationId: "org_123",
       });
       expect(result).not.toContain("svt_private");
       expect(result).not.toContain("do-not-print");
@@ -210,10 +210,10 @@ env = { SYSTEMVITALS_API_URL = "https://example.test/\\"quoted\\"\\nline", SYSTE
     (client) => {
       const adversarial = {
         client,
-        connectionName: "agent'; touch /tmp/systemvitals-injected; echo '",
+        organizationName: "agent'; touch /tmp/systemvitals-injected; echo '",
         apiUrl: "https://example.test/' $(touch /tmp/systemvitals-injected)\nnext",
         token: "svt_'\"; touch /tmp/systemvitals-injected; # secret",
-        projectId: "project_' $(touch /tmp/systemvitals-injected)\nnext",
+        organizationId: "organization_' $(touch /tmp/systemvitals-injected)\nnext",
       };
       const command = generateAgentConnectionConfig(adversarial);
 
@@ -236,7 +236,7 @@ printf 'token-after=%s' "\${SYSTEMVITALS_API_TOKEN-unset}"`,
         expect(argumentsOutput.replace(/^\n/, "").split("\0").slice(0, -1)).toEqual([
           "mcp",
           "add",
-          adversarial.connectionName,
+          adversarial.organizationName,
           "--env",
           `SYSTEMVITALS_API_URL=${adversarial.apiUrl}`,
           "--env",
@@ -269,7 +269,7 @@ printf 'token-after=%s' "\${SYSTEMVITALS_API_TOKEN-unset}"`,
           "--header",
         ]);
         const body = JSON.parse(args.at(-1) ?? "");
-        expect(body.variables).toEqual({ projectId: adversarial.projectId });
+        expect(body.variables).toEqual({ organizationId: adversarial.organizationId });
         expect(tokenAfter).toBe("unset");
       }
       expect(command).not.toContain(adversarial.token);
@@ -286,6 +286,19 @@ printf 'token-after=%s' "\${SYSTEMVITALS_API_TOKEN-unset}"`,
       const result = generateAgentConnectionConfig({ client, ...input });
       expect(result).toContain("@systemvitals/mcp");
       expect(result).not.toMatch(/integrations\/mcp|cli\/mcp|tsx/);
+    }
+  });
+
+  it("does not expose the bound organization's internal ID in MCP configuration", () => {
+    for (const client of [
+      "claude-code",
+      "codex",
+      "cursor",
+      "universal",
+    ] satisfies AgentClient[]) {
+      const result = generateAgentConnectionConfig({ client, ...input });
+      expect(result).not.toContain(input.organizationId);
+      expect(result).not.toContain("SYSTEMVITALS_ORGANIZATION_ID");
     }
   });
 });

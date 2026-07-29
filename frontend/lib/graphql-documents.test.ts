@@ -5,6 +5,7 @@ import { buildSchema, validate, parse, print } from "graphql";
 
 import * as publicDocs from "./queries";
 import * as adminDocs from "./admin-queries";
+import * as legacyDocs from "./legacy-queries";
 
 /**
  * Validates every GraphQL document the frontend sends against the schema the
@@ -37,6 +38,7 @@ function documentsOf(mod: Record<string, unknown>): [string, string][] {
 describe.each([
   ["public", SCHEMAS.public, publicDocs] as const,
   ["admin", SCHEMAS.admin, adminDocs] as const,
+  ["legacy public", SCHEMAS.public, legacyDocs] as const,
 ])("%s GraphQL documents match the served schema", (_surface, schemaPath, mod) => {
   const schema = buildSchema(readFileSync(schemaPath, "utf8"));
   const documents = documentsOf(mod as Record<string, unknown>);
@@ -49,4 +51,69 @@ describe.each([
     const errors = validate(schema, parse(source));
     expect(errors.map((e) => e.message)).toEqual([]);
   });
+});
+
+const CANONICAL_WORKSPACE_DOCUMENTS = [
+  "CHECKS",
+  "CREATE_CHECK",
+  "CREATE_ACTIVE_CHECK",
+  "CHANNELS",
+  "CREATE_CHANNEL",
+  "STATUS_PAGES",
+  "CREATE_STATUS_PAGE",
+] as const;
+
+const CANONICAL_TOKEN_DOCUMENTS = [
+  "CREATE_API_TOKEN",
+  "API_TOKENS",
+] as const;
+
+const CANONICAL_TOKEN_SOURCE_FILES = [
+  ["queries", resolve(__dirname, "queries.ts")],
+  [
+    "agent connections page",
+    resolve(__dirname, "../app/(app)/account/agent-connections/page.tsx"),
+  ],
+  [
+    "agent connections fixtures",
+    resolve(__dirname, "../app/(app)/account/agent-connections/page.test.tsx"),
+  ],
+  [
+    "connect agent fixtures",
+    resolve(__dirname, "../components/app/connect-agent-dialog.test.tsx"),
+  ],
+] as const;
+
+describe("canonical workspace GraphQL documents", () => {
+  it.each(CANONICAL_WORKSPACE_DOCUMENTS)(
+    "%s is organization-scoped without a project selector",
+    (name) => {
+      const source = print(publicDocs[name]);
+      expect(source).toContain("$organizationId: ID!");
+      expect(source).toContain("organizationId: $organizationId");
+      expect(source).not.toContain("projectId");
+    },
+  );
+
+  it("keeps project-slug lookup only in the legacy document module", () => {
+    expect(legacyDocs).toHaveProperty("CHECK_BY_SLUG");
+    expect(print(legacyDocs.CHECK_BY_SLUG)).toContain("projectSlug");
+    expect(publicDocs).not.toHaveProperty("CHECK_BY_SLUG");
+  });
+});
+
+describe("canonical API token GraphQL surface", () => {
+  it.each(CANONICAL_TOKEN_DOCUMENTS)(
+    "%s does not select a legacy project ID",
+    (name) => {
+      expect(print(publicDocs[name])).not.toContain("projectId");
+    },
+  );
+
+  it.each(CANONICAL_TOKEN_SOURCE_FILES)(
+    "%s contains no canonical projectId type or fixture",
+    (_name, path) => {
+      expect(readFileSync(path, "utf8")).not.toContain("projectId");
+    },
+  );
 });

@@ -98,7 +98,7 @@ export default function AdminOrganizationsPage() {
                         </span>
                       </div>
                       <p className="mt-0.5 text-xs text-muted-foreground">
-                        {org.projectCount} project{org.projectCount !== 1 ? "s" : ""} · {org.members.length} member{org.members.length !== 1 ? "s" : ""} · Created {new Date(org.createdAt).toLocaleDateString()}
+                        {org.members.length} member{org.members.length !== 1 ? "s" : ""} · Created {new Date(org.createdAt).toLocaleDateString()}
                       </p>
                     </div>
                     <Link

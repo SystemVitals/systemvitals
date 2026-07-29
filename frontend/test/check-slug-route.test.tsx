@@ -1,16 +1,23 @@
 import { Suspense, act } from "react";
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { ApolloClient, ApolloLink, InMemoryCache, Observable } from "@apollo/client";
 import { ApolloProvider } from "@apollo/client/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { print } from "graphql";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import CanonicalCheckPage from "@/app/(app)/[org]/[check]/page";
+import LegacyCheckPage from "@/app/(app)/[org]/[check]/[legacyCheck]/page";
 import type { Org } from "@/lib/org-context";
+import { CHECK_BY_ORGANIZATION_SLUG } from "@/lib/queries";
 
-// See `app/(auth)/login/page.test.tsx` / `app/auth/callback/page.test.tsx` for
-// the established pattern of mocking `next/navigation`'s `useRouter`.
-const replace = vi.fn();
-const setActiveOrgId = vi.fn();
+const navigation = vi.hoisted(() => ({
+  permanentRedirect: vi.fn(),
+  replace: vi.fn(),
+}));
+const setActiveOrgId = vi.hoisted(() => vi.fn());
+
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace }),
+  permanentRedirect: navigation.permanentRedirect,
+  useRouter: () => ({ replace: navigation.replace }),
 }));
 
 const orgs = [
@@ -22,7 +29,7 @@ const orgs = [
     plan: "SOLO",
     creatorUserId: "creator-source",
     creatorLabel: "source@example.com",
-    projects: [{ id: "project-1", name: "Source", slug: "source", pingKey: "source" }],
+    pingKey: "source",
   },
   {
     id: "org-destination",
@@ -32,14 +39,7 @@ const orgs = [
     plan: "SOLO",
     creatorUserId: "creator-destination",
     creatorLabel: "destination@example.com",
-    projects: [
-      {
-        id: "project-destination",
-        name: "Production",
-        slug: "production",
-        pingKey: "production",
-      },
-    ],
+    pingKey: "destination",
   },
 ] satisfies Org[];
 
@@ -47,12 +47,10 @@ vi.mock("@/lib/org-context", () => ({
   useOrg: () => ({ activeOrg: orgs[0], orgs, setActiveOrgId }),
 }));
 
-import CheckDetailBySlugPage from "@/app/(app)/[org]/[project]/[check]/page";
-
 interface CheckRecord {
   __typename: "Check";
   id: string;
-  projectId: string;
+  organizationId: string;
   notificationChannelIds: string[];
   name: string;
   slug: string;
@@ -76,7 +74,7 @@ interface CheckRecord {
 const INITIAL_CHECK: CheckRecord = {
   __typename: "Check",
   id: "c1",
-  projectId: "project-1",
+  organizationId: "org-source",
   notificationChannelIds: ["email"],
   name: "Nightly job",
   slug: "old-slug",
@@ -97,39 +95,29 @@ const INITIAL_CHECK: CheckRecord = {
   events: [],
 };
 
-/**
- * A link that serves `CheckBySlug` from a mutable ref (so a bare `refetch()`
- * sees whatever `UpdateCheck` last wrote) and applies `UpdateCheck`'s input
- * onto that same ref, mirroring what the real API does. Mirrors the
- * capturing-link pattern in `edit-check-dialog.test.tsx`, extended to cover
- * two operations instead of one.
- */
-function makeLink(checkRef: { current: CheckRecord }, queryCount: { current: number }) {
-  return new ApolloLink((operation) => {
-    return new Observable((observer) => {
-      if (operation.operationName === "CheckBySlug") {
+function makeCanonicalLink(
+  checkRef: { current: CheckRecord },
+  queryCount: { current: number },
+  variables: { current?: Record<string, unknown> },
+  options?: { rejectCanonicalLookup?: boolean },
+) {
+  return new ApolloLink((operation) =>
+    new Observable((observer) => {
+      if (operation.operationName === "CheckByOrganizationSlug") {
         queryCount.current += 1;
-        observer.next({ data: { checkBySlug: { ...checkRef.current } } });
+        variables.current = operation.variables;
+        if (options?.rejectCanonicalLookup) {
+          observer.error(new Error("Check not found"));
+          return;
+        }
+        observer.next({
+          data: { checkByOrganizationSlug: { ...checkRef.current } },
+        });
         observer.complete();
         return;
       }
       if (operation.operationName === "channels") {
-        observer.next({
-          data: {
-            channels: [
-              {
-                __typename: "NotificationChannelModel",
-                id: "email",
-                type: "EMAIL",
-                configJson: '{"email":"alerts@example.com"}',
-                enabled: true,
-                verificationStatus: "VERIFIED",
-                verificationDeliveryStatus: "DELIVERED",
-                verificationExpiresAt: null,
-              },
-            ],
-          },
-        });
+        observer.next({ data: { channels: [] } });
         observer.complete();
         return;
       }
@@ -149,7 +137,7 @@ function makeLink(checkRef: { current: CheckRecord }, queryCount: { current: num
           data: {
             moveCheck: {
               id: checkRef.current.id,
-              projectId: "project-destination",
+              organizationId: "org-destination",
               slug: checkRef.current.slug,
             },
           },
@@ -158,43 +146,96 @@ function makeLink(checkRef: { current: CheckRecord }, queryCount: { current: num
         return;
       }
       observer.error(new Error(`Unexpected operation: ${operation.operationName}`));
-    });
-  });
+    }),
+  );
 }
 
-async function renderPage() {
-  const checkRef = { current: { ...INITIAL_CHECK } };
-  const queryCount = { current: 0 };
-  const client = new ApolloClient({
-    link: makeLink(checkRef, queryCount),
-    cache: new InMemoryCache(),
-  });
+const OLD_CANONICAL_VARIABLES = {
+  orgSlug: "source",
+  checkSlug: "old-slug",
+};
 
-  // The route's `use(params)` needs a Suspense boundary above it — in the
-  // real app the Next.js App Router provides one; here it must be supplied
-  // explicitly. Unwrapping the params promise happens on a later microtask
-  // than the synchronous `render()` call, so the render must be wrapped in
-  // an awaited `act` to let that resolution settle before assertions run.
-  let utils!: ReturnType<typeof render>;
+async function renderCanonicalPage(options?: {
+  seedCanonicalCache?: boolean;
+  rejectCanonicalLookup?: boolean;
+  organizationId?: string;
+  orgSlug?: string;
+}) {
+  const checkRef = {
+    current: {
+      ...INITIAL_CHECK,
+      organizationId: options?.organizationId ?? INITIAL_CHECK.organizationId,
+    },
+  };
+  const queryCount = { current: 0 };
+  const variables: { current?: Record<string, unknown> } = {};
+  const cache = new InMemoryCache();
+  if (options?.seedCanonicalCache) {
+    cache.writeQuery({
+      query: CHECK_BY_ORGANIZATION_SLUG,
+      variables: OLD_CANONICAL_VARIABLES,
+      data: { checkByOrganizationSlug: { ...checkRef.current } },
+    });
+  }
+  const client = new ApolloClient({
+    link: makeCanonicalLink(checkRef, queryCount, variables, options),
+    cache,
+  });
+  vi.spyOn(client, "refetchQueries").mockResolvedValue([]);
+
+  let view!: ReturnType<typeof render>;
   await act(async () => {
-    utils = render(
+    view = render(
       <ApolloProvider client={client}>
         <Suspense fallback={null}>
-          <CheckDetailBySlugPage
-            params={Promise.resolve({ org: "acme", project: "proj1", check: "old-slug" })}
+          <CanonicalCheckPage
+            params={Promise.resolve({
+              org: options?.orgSlug ?? "source",
+              check: "old-slug",
+            })}
           />
         </Suspense>
-      </ApolloProvider>
+      </ApolloProvider>,
     );
   });
 
-  return { ...utils, checkRef, queryCount };
+  return { checkRef, client, queryCount, variables, unmount: view.unmount };
 }
 
-// The dialog content is rendered into a Radix portal appended to
-// `document.body`, not into the `container` div `render()` returns, so the
-// form must be looked up against the document (matches
-// `edit-check-dialog.test.tsx`'s `submitForm`).
+function readOldCanonicalRoute(client: ApolloClient) {
+  return client.cache.readQuery<{ checkByOrganizationSlug: CheckRecord }>({
+    query: CHECK_BY_ORGANIZATION_SLUG,
+    variables: OLD_CANONICAL_VARIABLES,
+  });
+}
+
+function hasOldCanonicalRootEntry(client: ApolloClient) {
+  const extracted = client.cache.extract() as Record<string, unknown>;
+  const rootQuery = extracted.ROOT_QUERY as
+    | Record<string, unknown>
+    | undefined;
+  return Object.keys(rootQuery ?? {}).some(
+    (field) =>
+      field.startsWith("checkByOrganizationSlug(") &&
+      field.includes('"source"') &&
+      field.includes('"old-slug"'),
+  );
+}
+
+async function expectOldCanonicalRouteRequiresNetwork(
+  client: ApolloClient,
+  queryCount: { current: number },
+) {
+  const beforeRevisit = queryCount.current;
+  await expect(
+    client.query({
+      query: CHECK_BY_ORGANIZATION_SLUG,
+      variables: OLD_CANONICAL_VARIABLES,
+    }),
+  ).rejects.toThrow("Check not found");
+  expect(queryCount.current).toBe(beforeRevisit + 1);
+}
+
 function submitEditForm() {
   const form = document.querySelector("form");
   if (!form) throw new Error("form not found");
@@ -204,24 +245,73 @@ function submitEditForm() {
 async function moveToDestination() {
   fireEvent.click(screen.getByRole("button", { name: "Move check" }));
   const selects = screen.getAllByRole("combobox");
+  expect(selects).toHaveLength(1);
   fireEvent.click(selects[0]);
   fireEvent.click(await screen.findByRole("option", { name: "Destination Org" }));
-  fireEvent.click(selects[1]);
-  fireEvent.click(await screen.findByRole("option", { name: "Production" }));
   fireEvent.click(
     within(screen.getByRole("dialog")).getByRole("button", { name: "Move check" }),
   );
 }
 
-describe("CheckDetailBySlugPage — rename handling", () => {
+describe("canonical organization/check route", () => {
   beforeEach(() => {
-    replace.mockClear();
+    navigation.replace.mockClear();
     setActiveOrgId.mockClear();
   });
 
-  it("navigates to the new slug URL after an in-place slug rename", async () => {
-    await renderPage();
+  it("declares the organization-scoped slug query without a project argument", () => {
+    const document = print(CHECK_BY_ORGANIZATION_SLUG);
+    expect(document).toContain("query CheckByOrganizationSlug");
+    expect(document).toContain(
+      "checkByOrganizationSlug(orgSlug: $orgSlug, checkSlug: $checkSlug)",
+    );
+    expect(document).toContain("organizationId");
+    expect(document).not.toContain("projectSlug");
+  });
+
+  it("queries the complete canonical tuple", async () => {
+    const { variables } = await renderCanonicalPage();
     await screen.findByText("Nightly job");
+
+    expect(variables.current).toEqual({
+      orgSlug: "source",
+      checkSlug: "old-slug",
+    });
+  });
+
+  it("synchronizes the active organization after a direct canonical lookup", async () => {
+    await renderCanonicalPage({
+      orgSlug: "destination",
+      organizationId: "org-destination",
+    });
+
+    await screen.findByText("Nightly job");
+    await waitFor(() =>
+      expect(setActiveOrgId).toHaveBeenCalledWith("org-destination"),
+    );
+    expect(
+      screen.getByRole("link", { name: "Back to dashboard" }),
+    ).toHaveAttribute("href", "/dashboard");
+  });
+
+  it("evicts a renamed check's old canonical route before replacing it", async () => {
+    const { client, queryCount, unmount } = await renderCanonicalPage({
+      seedCanonicalCache: true,
+      rejectCanonicalLookup: true,
+    });
+    await screen.findByText("Nightly job");
+    expect(readOldCanonicalRoute(client)?.checkByOrganizationSlug.slug).toBe(
+      "old-slug",
+    );
+    expect(hasOldCanonicalRootEntry(client)).toBe(true);
+    let cachedRouteAtNavigation:
+      | ReturnType<typeof readOldCanonicalRoute>
+      | undefined;
+    let rootEntryAtNavigation: boolean | undefined;
+    navigation.replace.mockImplementationOnce(() => {
+      cachedRouteAtNavigation = readOldCanonicalRoute(client);
+      rootEntryAtNavigation = hasOldCanonicalRootEntry(client);
+    });
 
     fireEvent.click(screen.getByRole("button", { name: /edit/i }));
     fireEvent.change(screen.getByLabelText(/url slug/i), {
@@ -229,11 +319,17 @@ describe("CheckDetailBySlugPage — rename handling", () => {
     });
     submitEditForm();
 
-    await waitFor(() => expect(replace).toHaveBeenCalledWith("/acme/proj1/new-slug"));
+    await waitFor(() =>
+      expect(navigation.replace).toHaveBeenCalledWith("/source/new-slug"),
+    );
+    expect(cachedRouteAtNavigation).toBeNull();
+    expect(rootEntryAtNavigation).toBe(false);
+    unmount();
+    await expectOldCanonicalRouteRequiresNetwork(client, queryCount);
   });
 
-  it("does not navigate for a non-slug edit, and refetches in place instead", async () => {
-    await renderPage();
+  it("refetches a non-slug edit in place", async () => {
+    await renderCanonicalPage();
     await screen.findByText("Nightly job");
 
     fireEvent.click(screen.getByRole("button", { name: /edit/i }));
@@ -242,25 +338,132 @@ describe("CheckDetailBySlugPage — rename handling", () => {
     });
     submitEditForm();
 
-    // The refetch (triggered because the slug did not change) picks up the
-    // renamed check under the same URL.
     await screen.findByText("Renamed job");
-    expect(replace).not.toHaveBeenCalled();
+    expect(navigation.replace).not.toHaveBeenCalled();
   });
 
-  it("replaces the route with the canonical destination without refetching the source", async () => {
-    const { queryCount } = await renderPage();
+  it("evicts a moved check's old canonical route before replacing it", async () => {
+    const { client, queryCount, unmount } = await renderCanonicalPage({
+      seedCanonicalCache: true,
+      rejectCanonicalLookup: true,
+    });
     await screen.findByText("Nightly job");
+    expect(readOldCanonicalRoute(client)?.checkByOrganizationSlug.slug).toBe(
+      "old-slug",
+    );
+    expect(hasOldCanonicalRootEntry(client)).toBe(true);
+    let cachedRouteAtNavigation:
+      | ReturnType<typeof readOldCanonicalRoute>
+      | undefined;
+    let rootEntryAtNavigation: boolean | undefined;
+    navigation.replace.mockImplementationOnce(() => {
+      cachedRouteAtNavigation = readOldCanonicalRoute(client);
+      rootEntryAtNavigation = hasOldCanonicalRootEntry(client);
+    });
 
     await moveToDestination();
 
     await waitFor(() =>
-      expect(replace).toHaveBeenCalledWith("/destination/production/old-slug"),
+      expect(navigation.replace).toHaveBeenCalledWith("/destination/old-slug"),
     );
+    expect(cachedRouteAtNavigation).toBeNull();
+    expect(rootEntryAtNavigation).toBe(false);
     expect(setActiveOrgId).toHaveBeenCalledWith("org-destination");
     expect(setActiveOrgId.mock.invocationCallOrder[0]).toBeLessThan(
-      replace.mock.invocationCallOrder[0],
+      navigation.replace.mock.invocationCallOrder[0],
     );
-    expect(queryCount.current).toBe(1);
+    unmount();
+    await expectOldCanonicalRouteRequiresNetwork(client, queryCount);
   });
+});
+
+const legacyRequest: { current?: Record<string, unknown> } = {};
+
+function legacyClient(result: "success" | "missing" | "error" | "mismatched") {
+  return new ApolloClient({
+    cache: new InMemoryCache(),
+    link: new ApolloLink((operation) =>
+      new Observable((observer) => {
+        if (operation.operationName !== "CheckBySlug") {
+          observer.error(new Error(`Unexpected operation: ${operation.operationName}`));
+          return;
+        }
+        legacyRequest.current = operation.variables;
+        if (result === "error") {
+          observer.error(new Error("Check not found"));
+          return;
+        }
+        observer.next({
+          data: {
+            checkBySlug:
+              result === "success"
+                ? {
+                    ...INITIAL_CHECK,
+                    projectId: "legacy-project",
+                    slug: "returned-slug",
+                  }
+                : result === "mismatched"
+                  ? {
+                      ...INITIAL_CHECK,
+                      projectId: "",
+                    }
+                : null,
+          },
+        });
+        observer.complete();
+      }),
+    ),
+  });
+}
+
+async function renderLegacyPage(
+  result: "success" | "missing" | "error" | "mismatched",
+) {
+  await act(async () => {
+    render(
+      <ApolloProvider client={legacyClient(result)}>
+        <Suspense fallback={null}>
+          <LegacyCheckPage
+            params={Promise.resolve({
+              org: "source",
+              check: "legacy-project",
+              legacyCheck: "old-slug",
+            })}
+          />
+        </Suspense>
+      </ApolloProvider>,
+    );
+  });
+}
+
+describe("legacy organization/project/check route", () => {
+  beforeEach(() => {
+    navigation.permanentRedirect.mockClear();
+    legacyRequest.current = undefined;
+  });
+
+  it("permanently redirects only after the authenticated full tuple resolves", async () => {
+    await renderLegacyPage("success");
+
+    await waitFor(() =>
+      expect(navigation.permanentRedirect).toHaveBeenCalledWith(
+        "/source/returned-slug",
+      ),
+    );
+    expect(legacyRequest.current).toEqual({
+      orgSlug: "source",
+      projectSlug: "legacy-project",
+      checkSlug: "old-slug",
+    });
+  });
+
+  it.each(["missing", "error", "mismatched"] as const)(
+    "does not redirect an inaccessible or %s tuple",
+    async (result) => {
+      await renderLegacyPage(result);
+
+      await waitFor(() => expect(screen.getByRole("dialog")).toHaveTextContent("Error"));
+      expect(navigation.permanentRedirect).not.toHaveBeenCalled();
+    },
+  );
 });

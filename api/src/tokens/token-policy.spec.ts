@@ -98,6 +98,7 @@ describe('requireOperationAccess', () => {
     'checks',
     'check',
     'checkBySlug',
+    'checkByOrganizationSlug',
     'events',
     'nextExpectedAt',
     'notificationChannelIds',

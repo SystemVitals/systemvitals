@@ -307,7 +307,7 @@ describe('ApiTokenStrategy', () => {
     );
   });
 
-  it('updates lastUsedAt and returns the API-token principal', async () => {
+  it('authenticates an existing stored project token unchanged', async () => {
     const { strategy, findUnique, updateMany, queryRaw } = setup();
 
     const principal = await strategy.validate(bearer('svt_valid'));

@@ -4,9 +4,11 @@ import { JwtModule } from '@nestjs/jwt';
 import { ApiAuthGuard } from './api-auth.guard';
 import { ApiTokenStrategy } from './api-token.strategy';
 import { TokensService } from './tokens.service';
+import { WorkspacesModule } from '../workspaces/workspaces.module';
 
 @Module({
   imports: [
+    WorkspacesModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (cfg: ConfigService) => ({

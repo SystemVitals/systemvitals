@@ -124,6 +124,7 @@ describe('OrganizationsService.create', () => {
       id: 'org-new',
       name: 'Acme Inc',
       slug: 'acme-inc',
+      pingKey: 'ping-key',
       role: 'OWNER',
       plan: 'SOLO',
       creatorUserId: 'u1',
@@ -153,6 +154,24 @@ describe('OrganizationsService.create', () => {
       data: { name: 'Default', slug: 'default', organizationId: 'org-new' },
     });
     expect(prisma.subscription.create).not.toHaveBeenCalled();
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects the whole creation operation when the Default project cannot be created', async () => {
+    const prisma = makePrisma();
+    const { service: svc } = serviceWithTx(prisma);
+    prisma.tx.project.create.mockRejectedValue(
+      new Error('project invariant rejected'),
+    );
+
+    await expect(svc.create('u1', 'Acme Inc')).rejects.toThrow(
+      'project invariant rejected',
+    );
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.tx.organization.create).toHaveBeenCalledTimes(1);
+    expect(prisma.tx.membership.create).toHaveBeenCalledTimes(1);
+    expect(prisma.tx.project.create).toHaveBeenCalledTimes(1);
   });
 
   it('rejects a blank name', async () => {
@@ -513,6 +532,7 @@ describe('OrganizationsService.transferCreatorship', () => {
       id: 'org1',
       name: 'Acme',
       slug: 'acme',
+      pingKey: 'pk1',
       role: 'OWNER',
       plan: 'SIGNAL',
       creatorUserId: recipientId,
@@ -543,7 +563,15 @@ describe('OrganizationsService.rename', () => {
       id: 'org1',
       name: 'New',
       slug: 's',
-      projects: [],
+      projects: [
+        {
+          id: 'p1',
+          name: 'Default',
+          slug: 'default',
+          pingKey: 'pk1',
+          organizationId: 'org1',
+        },
+      ],
       creatorUserId: 'creator-1',
       creator: {
         email: 'creator@example.com',
@@ -626,6 +654,7 @@ describe('OrganizationsService.update', () => {
       id: 'org1',
       name: 'Renamed',
       slug: 'new-slug',
+      pingKey: 'pk1',
       role: 'ADMIN',
       plan: 'FLEET',
       creatorUserId: 'creator-1',
@@ -681,7 +710,15 @@ describe('OrganizationsService.updateSlug (org-scoped)', () => {
       id: 'org2',
       name: 'n',
       slug: 'new-slug',
-      projects: [],
+      projects: [
+        {
+          id: 'p2',
+          name: 'Default',
+          slug: 'default',
+          pingKey: 'pk2',
+          organizationId: 'org2',
+        },
+      ],
       creatorUserId: 'creator-1',
       creator: {
         email: 'creator@example.com',

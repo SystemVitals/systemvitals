@@ -5,15 +5,18 @@ export type AgentClient =
   | "universal"
   | "graphql";
 
-type AgentConnectionConfigInput = {
+export interface AgentConnectionConfigInput {
   client: AgentClient;
-  connectionName: string;
+  organizationId: string;
+  organizationName: string;
   apiUrl: string;
   token: string;
-  projectId: string;
-};
+}
 
-type McpConfigInput = Omit<AgentConnectionConfigInput, "client" | "projectId">;
+type McpConfigInput = Omit<
+  AgentConnectionConfigInput,
+  "client" | "organizationId"
+>;
 
 const MCP_COMMAND = "npx";
 const MCP_ARGS = ["-y", "@systemvitals/mcp"] as const;
@@ -87,7 +90,7 @@ function mcpServer(input: McpConfigInput) {
 }
 
 function generateClaudeCode(input: McpConfigInput): string {
-  assertShellSafe(input.connectionName, "connectionName");
+  assertShellSafe(input.organizationName, "organizationName");
   assertShellSafe(input.apiUrl, "apiUrl");
 
   return [
@@ -95,7 +98,7 @@ function generateClaudeCode(input: McpConfigInput): string {
     "printf '\\n'",
     [
     "claude mcp add",
-    shellQuote(input.connectionName),
+    shellQuote(input.organizationName),
     "--env",
     shellQuote(`SYSTEMVITALS_API_URL=${input.apiUrl}`),
     "--env",
@@ -109,7 +112,7 @@ function generateClaudeCode(input: McpConfigInput): string {
 }
 
 function generateCodex(input: McpConfigInput): string {
-  return `[mcp_servers.${tomlString(input.connectionName)}]
+  return `[mcp_servers.${tomlString(input.organizationName)}]
 command = ${tomlString(MCP_COMMAND)}
 args = [${MCP_ARGS.map(tomlString).join(", ")}]
 env = { SYSTEMVITALS_API_URL = ${tomlString(input.apiUrl)}, SYSTEMVITALS_API_TOKEN = ${tomlString(input.token)} }`;
@@ -119,7 +122,7 @@ function generateMcpJson(input: McpConfigInput): string {
   return JSON.stringify(
     {
       mcpServers: {
-        [input.connectionName]: mcpServer(input),
+        [input.organizationName]: mcpServer(input),
       },
     },
     null,
@@ -136,15 +139,18 @@ function generateUniversal(input: McpConfigInput): string {
 }
 
 function generateGraphql(
-  input: Pick<AgentConnectionConfigInput, "apiUrl" | "token" | "projectId">,
+  input: Pick<
+    AgentConnectionConfigInput,
+    "apiUrl" | "token" | "organizationId"
+  >,
 ): string {
   assertShellSafe(input.apiUrl, "apiUrl");
-  assertShellSafe(input.projectId, "projectId");
+  assertShellSafe(input.organizationId, "organizationId");
 
   const body = JSON.stringify({
     query:
-      'mutation CreateHeartbeat($projectId: ID!) { createCheck(projectId: $projectId, name: "agent-heartbeat", periodSeconds: 300, graceSeconds: 60) { id } }',
-    variables: { projectId: input.projectId },
+      'mutation CreateHeartbeat($organizationId: ID!) { createCheck(organizationId: $organizationId, name: "agent-heartbeat", periodSeconds: 300, graceSeconds: 60) { id } }',
+    variables: { organizationId: input.organizationId },
   });
 
   return `read -rsp 'SystemVitals API token: ' SYSTEMVITALS_API_TOKEN

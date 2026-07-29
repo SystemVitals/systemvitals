@@ -166,7 +166,7 @@ model Project {
   name               String
   slug               String
   pingKey            String                @unique @default(cuid()) @map("ping_key")
-  organizationId     String                @map("organization_id")
+  organizationId     String                @unique @map("organization_id")
   organization       Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   checks             Check[]
   channels           NotificationChannel[]

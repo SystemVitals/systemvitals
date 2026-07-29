@@ -82,9 +82,13 @@ describe('StatusPagesService project coordination', () => {
   it('creates inside a transaction that locks the project before check validation', async () => {
     const h = harness();
 
-    await h.service.create('owner', project.id, 'public', 'Public status', [
-      'check-1',
-    ]);
+    const result = await h.service.create(
+      'owner',
+      project.id,
+      'public',
+      'Public status',
+      ['check-1'],
+    );
 
     expect(h.prisma.$transaction).toHaveBeenCalledTimes(1);
     expect(h.order).toEqual([
@@ -95,12 +99,17 @@ describe('StatusPagesService project coordination', () => {
       'tx:create',
     ]);
     expect(h.root.statusPage.create).not.toHaveBeenCalled();
+    expect(result).toEqual(
+      expect.objectContaining({ organizationId: 'org-source' }),
+    );
   });
 
   it('fresh-reads and updates a page under its project lock', async () => {
     const h = harness();
 
-    await h.service.update('owner', page.id, { checkIds: ['check-1'] });
+    const result = await h.service.update('owner', page.id, {
+      checkIds: ['check-1'],
+    });
 
     expect(h.prisma.$transaction).toHaveBeenCalledTimes(1);
     expect(h.order).toEqual([
@@ -112,5 +121,8 @@ describe('StatusPagesService project coordination', () => {
       'tx:update',
     ]);
     expect(h.root.statusPage.update).not.toHaveBeenCalled();
+    expect(result).toEqual(
+      expect.objectContaining({ organizationId: 'org-source' }),
+    );
   });
 });

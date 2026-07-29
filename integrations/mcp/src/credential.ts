@@ -5,12 +5,18 @@ export type Credential = {
   authKind: "session" | "api-token";
   credentialMode: "SESSION" | "LEGACY_BROAD" | "PROJECT_SCOPED";
   capabilities: readonly string[];
+  organizationId: string | null;
+  organizationName: string | null;
   projectId: string | null;
   projectName: string | null;
 };
 
 interface ApiCredentialResponse {
   apiCredential: Credential;
+}
+
+interface LegacyApiCredentialResponse {
+  apiCredential: Omit<Credential, "organizationId" | "organizationName">;
 }
 
 const READ_TOOLS = ["list_checks", "get_check"] as const;
@@ -24,17 +30,55 @@ const WRITE_TOOLS = [
   "set_check_channel_enabled",
 ] as const;
 
+const CANONICAL_CREDENTIAL_QUERY = `query ApiCredential {
+  apiCredential {
+    authKind
+    credentialMode
+    capabilities
+    organizationId
+    organizationName
+    projectId
+    projectName
+  }
+}`;
+
+const LEGACY_CREDENTIAL_QUERY = `query LegacyApiCredential {
+  apiCredential {
+    authKind
+    credentialMode
+    capabilities
+    projectId
+    projectName
+  }
+}`;
+
+function isUnknownOrganizationCredentialField(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+
+  return ["organizationId", "organizationName"].some((field) =>
+    error.message.startsWith(
+      `Cannot query field "${field}" on type "ApiCredential"`,
+    ),
+  );
+}
+
 export async function fetchCredential(gql: Gql): Promise<Credential> {
-  const data = await gql(`query ApiCredential {
-    apiCredential {
-      authKind
-      credentialMode
-      capabilities
-      projectId
-      projectName
+  try {
+    const data = await gql(CANONICAL_CREDENTIAL_QUERY);
+    return (data as unknown as ApiCredentialResponse).apiCredential;
+  } catch (error) {
+    if (!isUnknownOrganizationCredentialField(error)) {
+      throw error;
     }
-  }`);
-  return (data as unknown as ApiCredentialResponse).apiCredential;
+    const data = await gql(LEGACY_CREDENTIAL_QUERY);
+    const legacyCredential = (data as unknown as LegacyApiCredentialResponse)
+      .apiCredential;
+    return {
+      ...legacyCredential,
+      organizationId: null,
+      organizationName: null,
+    };
+  }
 }
 
 export function toolsForCredential(
@@ -47,9 +91,16 @@ export function toolsForCredential(
     return tools;
   }
 
-  if (credential.projectId === null) {
+  const workspaceSelector =
+    credential.organizationId !== null
+      ? { organizationId: credential.organizationId }
+      : credential.projectId !== null
+        ? { projectId: credential.projectId }
+        : null;
+
+  if (workspaceSelector === null) {
     throw new Error(
-      "Scoped API credential reports check capabilities but has no project ID.",
+      "Scoped API credential reports check capabilities but has no organization workspace ID.",
     );
   }
 
@@ -65,15 +116,25 @@ export function toolsForCredential(
   return [...names].map((name) => {
     const definition = byName.get(name);
     if (!definition) throw new Error(`MCP tool definition missing: ${name}`);
-    const { projectId: _projectId, ...inputSchema } = definition.inputSchema;
+    const {
+      organizationId: _organizationId,
+      projectId: _projectId,
+      ...inputSchema
+    } = definition.inputSchema;
     return {
       ...definition,
       inputSchema,
-      handler: (args, gql) =>
-        definition.handler(
-          { ...args, projectId: credential.projectId },
+      handler: (args, gql) => {
+        const {
+          organizationId: _callerOrganizationId,
+          projectId: _callerProjectId,
+          ...resourceArgs
+        } = args;
+        return definition.handler(
+          { ...resourceArgs, ...workspaceSelector },
           gql,
-        ),
+        );
+      },
     };
   });
 }

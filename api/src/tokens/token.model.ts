@@ -8,8 +8,14 @@ export class ApiTokenModel {
   @Field() name!: string;
   @Field() prefix!: string;
   @Field(() => [String]) scopes!: string[];
-  @Field(() => ID, { nullable: true }) projectId?: string;
-  @Field({ nullable: true }) projectName?: string;
+  @Field(() => ID, { nullable: true }) organizationId?: string | null;
+  @Field(() => ID, {
+    nullable: true,
+    deprecationReason: 'Use organizationId.',
+  })
+  projectId?: string | null;
+  @Field(() => String, { nullable: true })
+  projectName?: string | null;
   @Field({ nullable: true }) organizationName?: string;
   @Field({ nullable: true }) expiresAt?: Date;
   @Field({ nullable: true }) lastUsedAt?: Date;
@@ -27,6 +33,16 @@ export class ApiCredential {
   @Field() authKind!: string;
   @Field() credentialMode!: CredentialMode;
   @Field(() => [String]) capabilities!: string[];
-  @Field(() => ID, { nullable: true }) projectId!: string | null;
-  @Field(() => String, { nullable: true }) projectName!: string | null;
+  @Field(() => ID, { nullable: true }) organizationId!: string | null;
+  @Field(() => String, { nullable: true }) organizationName!: string | null;
+  @Field(() => ID, {
+    nullable: true,
+    deprecationReason: 'Use organizationId.',
+  })
+  projectId!: string | null;
+  @Field(() => String, {
+    nullable: true,
+    deprecationReason: 'Use organizationName.',
+  })
+  projectName!: string | null;
 }

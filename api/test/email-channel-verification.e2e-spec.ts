@@ -33,6 +33,7 @@ describe('email channel verification GraphQL flow (e2e)', () => {
   let ownerJwt: string;
   let intruderJwt: string;
   let ownerId: string;
+  let organizationName: string;
   let projectId: string;
   let apiToken: string;
   let enqueueSpy: jest.SpiedFunction<EmailVerificationQueueService['enqueue']>;
@@ -114,6 +115,7 @@ describe('email channel verification GraphQL flow (e2e)', () => {
       },
     });
     ownerId = owner.id;
+    organizationName = owner.memberships[0].organization.name;
     projectId = owner.memberships[0].organization.projects[0].id;
 
     const generated = generateToken();
@@ -171,13 +173,14 @@ describe('email channel verification GraphQL flow (e2e)', () => {
       emailChannelVerificationPreview: {
         status: string;
         maskedEmail: string | null;
+        organizationName: string | null;
         projectName: string | null;
         expiresAt: string | null;
       };
     }>(
       `query Preview($token: String!) {
         emailChannelVerificationPreview(token: $token) {
-          status maskedEmail projectName expiresAt
+          status maskedEmail organizationName projectName expiresAt
         }
       }`,
       { token: job.rawToken },
@@ -193,6 +196,12 @@ describe('email channel verification GraphQL flow (e2e)', () => {
     expect(
       preview.data!.emailChannelVerificationPreview.projectName,
     ).toBeTruthy();
+    expect(preview.data!.emailChannelVerificationPreview.organizationName).toBe(
+      organizationName,
+    );
+    expect(
+      preview.data!.emailChannelVerificationPreview.organizationName,
+    ).not.toContain('Default');
 
     const afterPreview = await prisma.notificationChannel.findUniqueOrThrow({
       where: { id: channel.id },
@@ -207,18 +216,25 @@ describe('email channel verification GraphQL flow (e2e)', () => {
       verifyEmailChannel: {
         status: string;
         maskedEmail: string | null;
+        organizationName: string | null;
         projectName: string | null;
       };
     }>(
       `mutation Verify($token: String!) {
         verifyEmailChannel(token: $token) {
-          status maskedEmail projectName
+          status maskedEmail organizationName projectName
         }
       }`,
       { token: job.rawToken },
     );
     expect(confirmation.errors).toBeUndefined();
     expect(confirmation.data!.verifyEmailChannel.status).toBe('VERIFIED');
+    expect(confirmation.data!.verifyEmailChannel.organizationName).toBe(
+      organizationName,
+    );
+    expect(
+      confirmation.data!.verifyEmailChannel.organizationName,
+    ).not.toContain('Default');
 
     const verified = await prisma.notificationChannel.findUniqueOrThrow({
       where: { id: channel.id },

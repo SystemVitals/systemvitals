@@ -33,21 +33,21 @@ export function normalizeGqlError(error: unknown): Error {
     );
   }
   if (
-    /credential project no longer exists|project.*credential.*no longer exists|project (?:was )?deleted/i.test(
+    /credential (?:organization|project) no longer exists|(?:organization|project).*credential.*no longer exists|(?:organization|project) (?:was )?deleted/i.test(
       message,
     )
   ) {
     return new Error(
-      "The project bound to this SystemVitals credential no longer exists. Connect the agent to an existing project.",
+      "The organization workspace bound to this SystemVitals credential no longer exists. Connect the agent to an existing organization.",
     );
   }
   if (
-    /credential project is no longer accessible|access to the project bound to this systemvitals credential was removed|not a member|project not found|no longer.*access|lost access/i.test(
+    /credential (?:organization|project) is no longer accessible|access to the (?:organization|project) bound to this systemvitals credential was removed|not a member|(?:organization|project) not found|no longer.*access|lost access/i.test(
       message,
     )
   ) {
     return new Error(
-      "Access to the project bound to this SystemVitals credential was removed. Restore the owner's project membership or create a new agent connection.",
+      "Access to the organization workspace bound to this SystemVitals credential was removed. Restore the owner's organization membership or create a new agent connection.",
     );
   }
 
@@ -66,12 +66,12 @@ export function normalizeGqlError(error: unknown): Error {
     );
   }
   if (
-    /credential is bound to a different project|different project|wrong project|project scope|scoped to/i.test(
+    /credential is bound to a different (?:organization|project)|different (?:organization|project)|wrong (?:organization|project)|(?:organization|project) scope|scoped to/i.test(
       message,
     )
   ) {
     return new Error(
-      "This SystemVitals credential is bound to a different project. Use the bound project or connect with a credential for the requested project.",
+      "This SystemVitals credential is bound to a different organization workspace. Use the bound organization or connect with a credential for the requested organization.",
     );
   }
   if (/unauthorized|unauthenticated/i.test(message)) {
@@ -83,7 +83,9 @@ export function normalizeGqlError(error: unknown): Error {
     return new Error("The account's shared check quota has been reached.");
   }
   if (/forbidden/i.test(message)) {
-    return new Error("This credential cannot perform that project operation.");
+    return new Error(
+      "This credential cannot perform that organization workspace operation.",
+    );
   }
 
   const withoutTokens = message

@@ -32,6 +32,7 @@ interface GqlMeResponse {
   data: {
     me: {
       organizations: Array<{
+        id: string;
         projects: Array<{ id: string }>;
       }>;
     };
@@ -44,6 +45,7 @@ interface StatusPageShape {
   title: string;
   branding: string | null;
   checkIds: string[];
+  organizationId: string;
   projectId: string;
 }
 
@@ -97,6 +99,7 @@ describe('status-pages (e2e)', () => {
 
   let tokenA: string;
   let tokenB: string;
+  let organizationIdA: string;
   let projectIdA: string;
   let projectIdB: string;
   let check1Id: string;
@@ -109,8 +112,9 @@ describe('status-pages (e2e)', () => {
     const me = (await gql(
       app,
       tokenA,
-      `{ me { organizations { projects { id } } } }`,
+      `{ me { organizations { id projects { id } } } }`,
     )) as GqlMeResponse;
+    organizationIdA = me.data.me.organizations[0].id;
     projectIdA = me.data.me.organizations[0].projects[0].id;
     expect(projectIdA).toBeTruthy();
   });
@@ -194,18 +198,24 @@ describe('status-pages (e2e)', () => {
     const res = (await gql(
       app,
       tokenA,
-      `mutation($projectId: ID!, $slug: String!, $title: String!, $checkIds: [ID!]!) {
-        createStatusPage(projectId: $projectId, slug: $slug, title: $title, checkIds: $checkIds) {
-          id slug title branding checkIds projectId
+      `mutation($organizationId: ID!, $slug: String!, $title: String!, $checkIds: [ID!]!) {
+        createStatusPage(organizationId: $organizationId, slug: $slug, title: $title, checkIds: $checkIds) {
+          id slug title branding checkIds organizationId projectId
         }
       }`,
-      { projectId: projectIdA, slug, title: 'Acme', checkIds: [check1Id] },
+      {
+        organizationId: organizationIdA,
+        slug,
+        title: 'Acme',
+        checkIds: [check1Id],
+      },
     )) as GqlCreateStatusPageResponse;
 
     expect(res.errors).toBeUndefined();
     expect(res.data?.createStatusPage.slug).toBe(slug);
     expect(res.data?.createStatusPage.title).toBe('Acme');
     expect(res.data?.createStatusPage.checkIds).toContain(check1Id);
+    expect(res.data?.createStatusPage.organizationId).toBe(organizationIdA);
     expect(res.data?.createStatusPage.projectId).toBe(projectIdA);
     expect(res.data?.createStatusPage.branding).toBeNull();
     statusPageId = res.data!.createStatusPage.id;
@@ -231,6 +241,29 @@ describe('status-pages (e2e)', () => {
     expect(page?.slug).toBeTruthy();
     expect(page?.checkIds).toContain(check1Id);
   });
+
+  it.each([
+    ['both', { organizationId: 'org', projectId: 'project' }],
+    ['neither', {}],
+  ])(
+    'rejects %s workspace selector for status pages',
+    async (_case, variables) => {
+      const res = (await gql(
+        app,
+        tokenA,
+        `query($organizationId: ID, $projectId: ID) {
+        statusPages(organizationId: $organizationId, projectId: $projectId) {
+          id
+        }
+      }`,
+        variables,
+      )) as GqlStatusPagesResponse;
+
+      expect(res.errors?.[0]?.message).toBe(
+        'Provide exactly one of organizationId or projectId',
+      );
+    },
+  );
 
   it('createStatusPage with a checkId from ANOTHER project → error', async () => {
     const slug = `cross-project-${suffix}`;
@@ -266,21 +299,26 @@ describe('status-pages (e2e)', () => {
     expect(res.errors?.[0]?.message).toMatch(/slug|conflict|already/i);
   });
 
-  it('cross-user: 2nd user CANNOT createStatusPage in 1st user project', async () => {
+  it('does not disclose another user organization during canonical create', async () => {
     const slug = `cross-user-${suffix}`;
     const res = (await gql(
       app,
       tokenB,
-      `mutation($projectId: ID!, $slug: String!, $title: String!, $checkIds: [ID!]!) {
-        createStatusPage(projectId: $projectId, slug: $slug, title: $title, checkIds: $checkIds) {
+      `mutation($organizationId: ID!, $slug: String!, $title: String!, $checkIds: [ID!]!) {
+        createStatusPage(organizationId: $organizationId, slug: $slug, title: $title, checkIds: $checkIds) {
           id
         }
       }`,
-      { projectId: projectIdA, slug, title: 'Intruder', checkIds: [] },
+      {
+        organizationId: organizationIdA,
+        slug,
+        title: 'Intruder',
+        checkIds: [],
+      },
     )) as GqlCreateStatusPageResponse;
 
     expect(res.errors).toBeDefined();
-    expect(res.errors?.[0]?.message).toMatch(/not a member|forbidden/i);
+    expect(res.errors?.[0]?.message).toBe('Workspace not found');
   });
 
   it('updateStatusPage changes title and checkIds', async () => {

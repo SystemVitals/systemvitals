@@ -28,6 +28,8 @@ export class ApiCredentialResolver {
         authKind: 'session',
         credentialMode: 'SESSION',
         capabilities: [],
+        organizationId: null,
+        organizationName: null,
         projectId: null,
         projectName: null,
       };
@@ -56,13 +58,19 @@ export class ApiCredentialResolver {
         ? null
         : await this.prisma.project.findUnique({
             where: { id: projectId },
-            select: { name: true },
+            select: {
+              name: true,
+              organizationId: true,
+              organization: { select: { name: true } },
+            },
           });
 
     return {
       authKind: 'api-token',
       credentialMode,
       capabilities: [...capabilities].sort(),
+      organizationId: project?.organizationId ?? null,
+      organizationName: project?.organization.name ?? null,
       projectId,
       projectName: project?.name ?? null,
     };

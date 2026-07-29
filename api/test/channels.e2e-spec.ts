@@ -38,6 +38,7 @@ interface GqlMeResponse {
   data: {
     me: {
       organizations: Array<{
+        id: string;
         projects: Array<{ id: string }>;
       }>;
     };
@@ -49,6 +50,7 @@ interface ChannelShape {
   type: string;
   configJson: string;
   enabled: boolean;
+  organizationId: string;
   projectId: string;
   verificationStatus: string;
   verificationDeliveryStatus: string;
@@ -113,6 +115,7 @@ describe('channels (e2e)', () => {
   });
 
   let tokenA: string;
+  let organizationIdA: string;
   let projectIdA: string;
   let channelId: string;
 
@@ -121,8 +124,9 @@ describe('channels (e2e)', () => {
     const me = (await gql(
       app,
       tokenA,
-      `{ me { organizations { projects { id } } } }`,
+      `{ me { organizations { id projects { id } } } }`,
     )) as GqlMeResponse;
+    organizationIdA = me.data.me.organizations[0].id;
     projectIdA = me.data.me.organizations[0].projects[0].id;
     expect(projectIdA).toBeTruthy();
   });
@@ -132,14 +136,14 @@ describe('channels (e2e)', () => {
     const res = (await gql(
       app,
       tokenA,
-      `mutation($projectId: ID!, $type: String!, $configJson: String!) {
-        createChannel(projectId: $projectId, type: $type, configJson: $configJson) {
-          id type configJson enabled projectId
+      `mutation($organizationId: ID!, $type: String!, $configJson: String!) {
+        createChannel(organizationId: $organizationId, type: $type, configJson: $configJson) {
+          id type configJson enabled organizationId projectId
           verificationStatus verificationDeliveryStatus
         }
       }`,
       {
-        projectId: projectIdA,
+        organizationId: organizationIdA,
         type: 'EMAIL',
         configJson: '{"email":"ops@example.com"}',
       },
@@ -152,6 +156,7 @@ describe('channels (e2e)', () => {
       expect(channel.enabled).toBe(false);
       expect(channel.verificationStatus).toBe('PENDING');
       expect(channel.verificationDeliveryStatus).toBe('SENT');
+      expect(channel.organizationId).toBe(organizationIdA);
       expect(channel.projectId).toBe(projectIdA);
       const parsed = JSON.parse(channel.configJson) as {
         email: string;
@@ -200,25 +205,43 @@ describe('channels (e2e)', () => {
     expect(ch?.verificationDeliveryStatus).toBe('SENT');
   });
 
-  it('a 2nd user CANNOT createChannel in the 1st user project', async () => {
+  it.each([
+    ['both', { organizationId: 'org', projectId: 'project' }],
+    ['neither', {}],
+  ])('rejects %s workspace selector for channels', async (_case, variables) => {
+    const res = (await gql(
+      app,
+      tokenA,
+      `query($organizationId: ID, $projectId: ID) {
+        channels(organizationId: $organizationId, projectId: $projectId) { id }
+      }`,
+      variables,
+    )) as GqlChannelsResponse;
+
+    expect(res.errors?.[0]?.message).toBe(
+      'Provide exactly one of organizationId or projectId',
+    );
+  });
+
+  it('does not disclose another user organization during canonical create', async () => {
     const tokenB = await signup(app, emailB);
     const res = (await gql(
       app,
       tokenB,
-      `mutation($projectId: ID!, $type: String!, $configJson: String!) {
-        createChannel(projectId: $projectId, type: $type, configJson: $configJson) {
+      `mutation($organizationId: ID!, $type: String!, $configJson: String!) {
+        createChannel(organizationId: $organizationId, type: $type, configJson: $configJson) {
           id
         }
       }`,
       {
-        projectId: projectIdA,
+        organizationId: organizationIdA,
         type: 'EMAIL',
         configJson: '{"email":"intruder@example.com"}',
       },
     )) as GqlCreateChannelResponse;
 
     expect(res.errors).toBeDefined();
-    expect(res.errors?.[0]?.message).toMatch(/not a member/i);
+    expect(res.errors?.[0]?.message).toBe('Workspace not found');
   });
 
   it('createChannel with EMAIL but missing config.email → errors', async () => {

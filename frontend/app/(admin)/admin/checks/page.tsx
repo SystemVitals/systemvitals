@@ -32,8 +32,6 @@ interface AdminCheck {
   name: string;
   type: string;
   status: string;
-  projectId: string;
-  projectName: string;
   organizationId: string;
   organizationName: string;
 }
@@ -153,7 +151,7 @@ export default function AdminChecksPage() {
                         <StatusBadge status={check.status} />
                       </div>
                       <p className="mt-0.5 text-xs text-muted-foreground truncate">
-                        {check.organizationName} / {check.projectName}
+                        {check.organizationName}
                       </p>
                     </div>
                     <div className="flex items-center gap-1 shrink-0">

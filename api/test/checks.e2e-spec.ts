@@ -329,7 +329,7 @@ describe('checks (e2e)', () => {
     )) as GqlCreateCheckResponse;
 
     expect(res.errors).toBeDefined();
-    expect(res.errors?.[0]?.message).toMatch(/not a member/i);
+    expect(res.errors?.[0]?.message).toBe('Workspace not found');
   });
 
   it('deleteCheck returns true and the check disappears from checks list', async () => {

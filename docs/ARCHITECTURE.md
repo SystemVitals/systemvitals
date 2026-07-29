@@ -19,9 +19,33 @@ flowchart LR
 
 - **Frontend**: Next.js application for the public site and authenticated monitoring interface.
 - **API**: NestJS service that provides GraphQL management operations, REST authentication, heartbeat ingestion, health endpoints, and webhook handling.
-- **Database**: Prisma schema package shared by the API and worker; PostgreSQL stores users, projects, checks, events, notification channels, and status pages.
+- **Database**: Prisma schema package shared by the API and worker; PostgreSQL stores users, organizations, internal projects, checks, events, notification channels, and status pages.
 - **Worker**: BullMQ consumers schedule active probes, detect missed heartbeats, and deliver transition notifications to each check's selected channels.
 - **MCP integration**: an external API client for supported management tasks.
+
+## Organization workspace facade
+
+An organization is the only public workspace. Each organization owns exactly
+one internal `Project` row so existing database relations, authorization
+policy, worker jobs, and queued payloads can continue using their established
+internal IDs. A unique `projects.organization_id` constraint enforces at most
+one internal project, while organization and signup transactions create the
+project atomically to enforce the complementary at-least-one rule.
+
+Canonical workspace-scoped GraphQL and MCP operations accept
+`organizationId`. The API verifies organization access and resolves that ID to
+the internal project before calling existing services. Deprecated `projectId`
+inputs, response fields, queries, tools, and legacy check routes remain
+functional for this compatibility release only. Existing project-scoped API
+tokens retain their stored internal scope and remain valid. Resource-addressed
+operations continue to derive ownership from the check, channel, token, or
+status-page ID rather than adding a redundant workspace selector.
+
+Organization creation is the only way to create a workspace. The public
+`createProject` operation is removed because a second project would violate the
+invariant. The next cleanup release removes the deprecated public project
+surface; deleting the internal `Project` table is a separate optional migration
+that requires its own approved design.
 
 ## Monitoring flow
 
@@ -47,21 +71,23 @@ retroactively. Routing changes affect future transitions only.
 ## Per-check notification routing
 
 The effective routing set is every globally enabled notification channel in
-the check's project, minus rows in `CheckChannelExclusion`. Storing exclusions
-instead of selections gives the system its default-all behavior:
+the check's organization workspace, minus rows in `CheckChannelExclusion`.
+Internally, those resources remain related through the organization's sole
+project. Storing exclusions instead of selections gives the system its
+default-all behavior:
 
-- existing and new checks select every enabled project channel by default;
+- existing and new checks select every enabled organization channel by default;
 - a channel enabled later is selected unless that check explicitly excluded
   it;
 - a check may exclude every channel, which the UI presents as
   `Notifications off`;
-- moving a check to another project deletes its exclusions in the move
+- moving a check to another organization deletes its exclusions in the move
   transaction, so all enabled destination channels become selected.
 
 GraphQL exposes the resulting IDs as
 `CheckModel.notificationChannelIds`. The idempotent
 `setCheckChannelEnabled(checkId, channelId, enabled)` mutation adds or removes
-one exclusion after checking project ownership and the channel's global
+one exclusion after checking organization ownership and the channel's global
 enabled state. It does not create a check event or queue delivery work.
 
 The producer resolves recipient IDs while it holds the same database lock used
@@ -69,10 +95,10 @@ for the transition, returns those IDs in process memory after the transaction
 commits, and then puts them in the Redis job. A worker treats a present
 `channelIds` field as authoritative, including an empty array. Before delivery
 it still checks that each channel exists, belongs to the check's current
-project, and remains globally enabled; it does not reapply exclusions changed
-after the transition. Only legacy jobs without `channelIds` resolve current
-exclusions at consumption time, which keeps rolling deployments compatible
-with older producers.
+organization workspace, and remains globally enabled; it does not reapply
+exclusions changed after the transition. Only legacy jobs without `channelIds`
+resolve current exclusions at consumption time, which keeps rolling
+deployments compatible with older producers.
 
 ## Release 3 cleanup
 

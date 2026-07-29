@@ -19,6 +19,7 @@ export type EmailVerificationPreview =
   | {
       status: 'PENDING';
       maskedEmail: string;
+      organizationName: string;
       projectName: string;
       expiresAt: Date;
     }
@@ -28,6 +29,7 @@ export type EmailVerificationConfirmation =
   | {
       status: 'VERIFIED';
       maskedEmail: string;
+      organizationName: string;
       projectName: string;
     }
   | { status: 'EXPIRED' | 'INVALID' };
@@ -63,7 +65,14 @@ export class EmailVerificationService {
 
     const channel = await this.prisma.notificationChannel.findUnique({
       where: { verificationTokenHash: tokenHash },
-      include: { project: { select: { name: true } } },
+      include: {
+        project: {
+          select: {
+            name: true,
+            organization: { select: { name: true } },
+          },
+        },
+      },
     });
     if (!channel || channel.type !== 'EMAIL' || channel.verifiedAt) {
       return { status: 'INVALID' };
@@ -77,6 +86,7 @@ export class EmailVerificationService {
     return {
       status: 'PENDING',
       maskedEmail: maskEmailDestination(emailFromConfig(channel.config)),
+      organizationName: channel.project.organization.name,
       projectName: channel.project.name,
       expiresAt,
     };
@@ -97,7 +107,14 @@ export class EmailVerificationService {
 
       const channel = await tx.notificationChannel.findUnique({
         where: { id: channelId },
-        include: { project: { select: { name: true } } },
+        include: {
+          project: {
+            select: {
+              name: true,
+              organization: { select: { name: true } },
+            },
+          },
+        },
       });
       if (!channel || channel.type !== 'EMAIL' || channel.verifiedAt) {
         return { status: 'INVALID' as const };
@@ -128,6 +145,7 @@ export class EmailVerificationService {
       return {
         status: 'VERIFIED' as const,
         maskedEmail: maskEmailDestination(emailFromConfig(channel.config)),
+        organizationName: channel.project.organization.name,
         projectName: channel.project.name,
       };
     });
@@ -153,10 +171,13 @@ export class EmailVerificationService {
         data: { verificationSentAt: null },
       });
       if (cleared.count === 1) {
-        return presentChannel({
-          ...rotated.channel,
-          verificationSentAt: null,
-        });
+        return presentChannel(
+          {
+            ...rotated.channel,
+            verificationSentAt: null,
+          },
+          rotated.organizationId,
+        );
       }
 
       const current = await this.prisma.notificationChannel.findUnique({
@@ -167,7 +188,7 @@ export class EmailVerificationService {
           'A newer email verification request has replaced this one',
         );
       }
-      return presentChannel(current);
+      return presentChannel(current, rotated.organizationId);
     }
 
     const sentAt = new Date();
@@ -185,10 +206,13 @@ export class EmailVerificationService {
       );
     }
 
-    return presentChannel({
-      ...rotated.channel,
-      verificationSentAt: sentAt,
-    });
+    return presentChannel(
+      {
+        ...rotated.channel,
+        verificationSentAt: sentAt,
+      },
+      rotated.organizationId,
+    );
   }
 
   private async rotateToken(
@@ -260,6 +284,7 @@ export class EmailVerificationService {
       rawToken: token.rawToken,
       tokenHash: token.tokenHash,
       reservedAt: now,
+      organizationId: channel.project.organizationId,
     };
   }
 }

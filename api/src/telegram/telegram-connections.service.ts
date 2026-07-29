@@ -163,6 +163,7 @@ export class TelegramConnectionsService {
           type: channel.type,
           configJson: JSON.stringify(config),
           enabled: channel.enabled,
+          organizationId: project.organizationId,
           projectId: channel.projectId,
         };
       },

@@ -69,6 +69,10 @@ describe("ManagedTelegramSetup", () => {
     expect(
       screen.getByText(/replies in that destination with a 10-minute connection link/i)
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(/review the active organization, and confirm the channel/i)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/choose the project/i)).not.toBeInTheDocument();
   });
 
   it("copies the exact command and reports success", async () => {

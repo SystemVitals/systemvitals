@@ -89,7 +89,7 @@ describe('slug columns (e2e)', () => {
     ).resolves.toBeTruthy();
   });
 
-  it('rejects a duplicate project slug within one organization', async () => {
+  it('rejects a second project within one organization', async () => {
     const org = await prisma.organization.create({
       data: {
         name: 'OrgC',
@@ -106,7 +106,11 @@ describe('slug columns (e2e)', () => {
     });
     await expect(
       prisma.project.create({
-        data: { name: 'P2', slug, organizationId: org.id },
+        data: {
+          name: 'P2',
+          slug: `different-${Date.now()}`,
+          organizationId: org.id,
+        },
       }),
     ).rejects.toThrow();
   });

@@ -110,14 +110,29 @@ beforeAll(async () => {
   });
   slackChannelId = slackChannel.id;
 
-  // Create check with NO channels (separate project)
-  const projectNoChannel = await prisma.project.create({
-    data: {
-      name: `AlertHandler No-Channel Project ${Date.now()}`,
-      slug: `alert-handler-no-channel-project-${Date.now()}`,
-      organizationId: orgId,
-    },
-  });
+  async function createProjectInOwnOrganization(label: string) {
+    const organization = await prisma.organization.create({
+      data: {
+        name: `AlertHandler ${label} Org ${Date.now()}`,
+        slug: `alert-handler-${label}-org-${Date.now()}`,
+        creatorUserId: userId,
+        memberships: {
+          create: { userId, role: "OWNER" },
+        },
+      },
+    });
+    return prisma.project.create({
+      data: {
+        name: `AlertHandler ${label} Project ${Date.now()}`,
+        slug: `alert-handler-${label}-project-${Date.now()}`,
+        organizationId: organization.id,
+      },
+    });
+  }
+
+  // Create check with NO channels in its own workspace
+  const projectNoChannel =
+    await createProjectInOwnOrganization("no-channel");
 
   const checkNo = await prisma.check.create({
     data: {
@@ -130,13 +145,8 @@ beforeAll(async () => {
   });
   checkNoChannelId = checkNo.id;
 
-  const selectedProject = await prisma.project.create({
-    data: {
-      name: `AlertHandler Selected Channel Project ${Date.now()}`,
-      slug: `alert-handler-selected-channel-project-${Date.now()}`,
-      organizationId: orgId,
-    },
-  });
+  const selectedProject =
+    await createProjectInOwnOrganization("selected-channel");
   selectedProjectId = selectedProject.id;
 
   const selectedChannel = await prisma.notificationChannel.create({
@@ -160,13 +170,8 @@ beforeAll(async () => {
   });
   selectedCheckId = selectedCheck.id;
 
-  const dynamicProject = await prisma.project.create({
-    data: {
-      name: `AlertHandler Dynamic Routing Project ${Date.now()}`,
-      slug: `alert-handler-dynamic-routing-project-${Date.now()}`,
-      organizationId: orgId,
-    },
-  });
+  const dynamicProject =
+    await createProjectInOwnOrganization("dynamic-routing");
   dynamicProjectId = dynamicProject.id;
 
   const dynamicCheck = await prisma.check.create({
@@ -180,13 +185,8 @@ beforeAll(async () => {
   });
   dynamicCheckId = dynamicCheck.id;
 
-  const telegramProject = await prisma.project.create({
-    data: {
-      name: `AlertHandler Telegram Project ${Date.now()}`,
-      slug: `alert-handler-telegram-project-${Date.now()}`,
-      organizationId: orgId,
-    },
-  });
+  const telegramProject =
+    await createProjectInOwnOrganization("telegram");
   telegramProjectId = telegramProject.id;
 
   const telegramCheck = await prisma.check.create({
@@ -268,11 +268,7 @@ afterAll(async () => {
     },
   });
 
-  // Delete all projects belonging to this org
-  await prisma.project.deleteMany({ where: { organizationId: orgId } });
-
-  await prisma.membership.deleteMany({ where: { userId } });
-  await prisma.organization.delete({ where: { id: orgId } });
+  await prisma.organization.deleteMany({ where: { creatorUserId: userId } });
   await prisma.user.delete({ where: { id: userId } });
   await prisma.$disconnect();
 });

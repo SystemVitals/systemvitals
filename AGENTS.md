@@ -12,6 +12,15 @@ Run validation from the relevant directory:
 
 Docker build contexts are intentional: build the API and worker from the repository root (`-f api/Dockerfile .` and `-f worker/Dockerfile .`), and build the frontend from `frontend/` (`-f frontend/Dockerfile frontend`).
 
+Organizations are the only public workspace. Each organization owns exactly
+one internal project used by existing relations, authorization, workers, and
+job payloads. New public operations use `organizationId`; deprecated
+`projectId` inputs and fields remain compatible for this release only, and
+existing project-scoped tokens remain valid. `createProject` is removed because
+organization creation provisions the workspace. The next cleanup release
+removes the deprecated public project surface, but physical removal of the
+internal project table requires a separate approved design.
+
 Never commit credentials, production data, generated keys, or local `.env` files. Keep `.env.example` files limited to safe placeholders. The `docker-compose.infrastructure.yml` file is a generic stateful infrastructure template and must never contain production values, identifiers, hosts, or credentials.
 
 Keep pull requests focused, add tests for behavior changes, and update public documentation when a user-visible workflow, deployment contract, or API changes.

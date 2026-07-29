@@ -74,8 +74,10 @@ type ApiCredential {
   authKind: String!
   capabilities: [String!]!
   credentialMode: String!
-  projectId: ID
-  projectName: String
+  organizationId: ID
+  organizationName: String
+  projectId: ID @deprecated(reason: "Use organizationId.")
+  projectName: String @deprecated(reason: "Use organizationName.")
 }
 
 type ApiTokenCreateResult {
@@ -84,10 +86,11 @@ type ApiTokenCreateResult {
   id: ID!
   lastUsedAt: DateTime
   name: String!
+  organizationId: ID
   organizationName: String
   plaintext: String!
   prefix: String!
-  projectId: ID
+  projectId: ID @deprecated(reason: "Use organizationId.")
   projectName: String
   revokedAt: DateTime
   scopes: [String!]!
@@ -99,9 +102,10 @@ type ApiTokenModel {
   id: ID!
   lastUsedAt: DateTime
   name: String!
+  organizationId: ID
   organizationName: String
   prefix: String!
-  projectId: ID
+  projectId: ID @deprecated(reason: "Use organizationId.")
   projectName: String
   revokedAt: DateTime
   scopes: [String!]!
@@ -121,7 +125,8 @@ type ChannelModel {
   configJson: String!
   enabled: Boolean!
   id: ID!
-  projectId: ID!
+  organizationId: ID!
+  projectId: ID! @deprecated(reason: "Use organizationId.")
   type: String!
   verificationDeliveryStatus: String!
   verificationExpiresAt: DateTime
@@ -148,9 +153,10 @@ type CheckModel {
   name: String!
   nextExpectedAt: DateTime
   notificationChannelIds: [ID!]!
+  organizationId: ID!
   periodSeconds: Int
   pingSlug: String
-  projectId: ID!
+  projectId: ID! @deprecated(reason: "Use organizationId.")
   schedule: String
   slug: String!
   status: String!
@@ -164,7 +170,8 @@ input CreateApiTokenInput {
   capabilities: [String!]!
   expirationDays: Int
   name: String!
-  projectId: ID!
+  organizationId: ID
+  projectId: ID @deprecated(reason: "Use organizationId.")
 }
 
 """
@@ -179,14 +186,16 @@ type DayCount {
 
 type EmailVerificationConfirmationModel {
   maskedEmail: String
-  projectName: String
+  organizationName: String
+  projectName: String @deprecated(reason: "Use organizationName.")
   status: String!
 }
 
 type EmailVerificationPreviewModel {
   expiresAt: DateTime
   maskedEmail: String
-  projectName: String
+  organizationName: String
+  projectName: String @deprecated(reason: "Use organizationName.")
   status: String!
 }
 
@@ -221,24 +230,24 @@ type MemberModel {
 
 type Mutation {
   acceptInvite(token: String!): MemberModel!
-  connectTelegramChannel(projectId: ID!, token: String!): ChannelModel!
-  createActiveCheck(expectedStatus: Int, intervalSeconds: Int!, method: String, name: String!, projectId: ID!, target: String!, timeoutMs: Int!, type: String!): CheckModel!
+  connectTelegramChannel(organizationId: ID, projectId: ID @deprecated(reason: "Use organizationId."), token: String!): ChannelModel!
+  createActiveCheck(expectedStatus: Int, intervalSeconds: Int!, method: String, name: String!, organizationId: ID, projectId: ID @deprecated(reason: "Use organizationId."), target: String!, timeoutMs: Int!, type: String!): CheckModel!
   createApiToken(name: String!, scopes: [String!]!): ApiTokenCreateResult!
-  createChannel(configJson: String!, projectId: ID!, type: String!): ChannelModel!
-  createCheck(graceSeconds: Int!, name: String!, periodSeconds: Int, projectId: ID!, schedule: String, tz: String): CheckModel!
+  createChannel(configJson: String!, organizationId: ID, projectId: ID @deprecated(reason: "Use organizationId."), type: String!): ChannelModel!
+  createCheck(graceSeconds: Int!, name: String!, organizationId: ID, periodSeconds: Int, projectId: ID @deprecated(reason: "Use organizationId."), schedule: String, tz: String): CheckModel!
   createOrganization(name: String!): OrganizationModel!
-  createProject(name: String!, organizationId: ID!): ProjectModel!
   createScopedApiToken(input: CreateApiTokenInput!): ApiTokenCreateResult!
-  createStatusPage(brandingJson: String, checkIds: [ID!]!, projectId: ID!, slug: String!, title: String!): StatusPageModel!
+  createStatusPage(brandingJson: String, checkIds: [ID!]!, organizationId: ID, projectId: ID @deprecated(reason: "Use organizationId."), slug: String!, title: String!): StatusPageModel!
   deleteChannel(id: ID!): Boolean!
   deleteCheck(id: ID!): Boolean!
   deleteOrganization(organizationId: ID!): Boolean!
   deleteStatusPage(id: ID!): Boolean!
   inviteMember(email: String!, organizationId: ID!, role: String!): InviteModel!
   leaveOrganization(organizationId: ID!): Boolean!
-  moveCheck(checkId: ID!, destinationProjectId: ID!): CheckModel!
+  moveCheck(checkId: ID!, destinationOrganizationId: ID, destinationProjectId: ID @deprecated(reason: "Use destinationOrganizationId.")): CheckModel!
   pauseCheck(id: ID!): CheckModel!
-  regeneratePingKey(projectId: ID!): ProjectModel!
+  regenerateOrganizationPingKey(organizationId: ID!): OrganizationModel!
+  regeneratePingKey(projectId: ID!): ProjectModel! @deprecated(reason: "Use regenerateOrganizationPingKey.")
   removeMember(membershipId: ID!): Boolean!
   resendEmailChannelVerification(channelId: ID!): ChannelModel!
   resumeCheck(id: ID!): CheckModel!
@@ -260,12 +269,16 @@ type OrganizationModel {
   creatorUserId: ID!
   id: ID!
   name: String!
+  pingKey: String!
   plan: String!
-  projects: [ProjectModel!]!
+  projects: [ProjectModel!]! @deprecated(reason: "Organizations now contain one implicit workspace.")
   role: String!
   slug: String!
 }
 
+"""
+Deprecated compatibility output. Organizations are the public workspace.
+"""
 type ProjectModel {
   id: ID!
   name: String!
@@ -277,10 +290,11 @@ type ProjectModel {
 type Query {
   apiCredential: ApiCredential!
   apiTokens: [ApiTokenModel!]!
-  channels(projectId: ID!): [ChannelModel!]!
+  channels(organizationId: ID, projectId: ID @deprecated(reason: "Use organizationId.")): [ChannelModel!]!
   check(id: ID!): CheckModel!
+  checkByOrganizationSlug(checkSlug: String!, orgSlug: String!): CheckModel!
   checkBySlug(checkSlug: String!, orgSlug: String!, projectSlug: String!): CheckModel!
-  checks(projectId: ID!): [CheckModel!]!
+  checks(organizationId: ID, projectId: ID @deprecated(reason: "Use organizationId.")): [CheckModel!]!
   emailChannelVerificationPreview(token: String!): EmailVerificationPreviewModel!
   health: String!
   invitePreview(token: String!): InvitePreviewModel!
@@ -289,8 +303,8 @@ type Query {
   mySubscription: SubscriptionStatus!
   organizationInvites(organizationId: ID!): [InviteModel!]!
   organizationMembers(organizationId: ID!): [MemberModel!]!
-  projects: [ProjectModel!]!
-  statusPages(projectId: ID!): [StatusPageModel!]!
+  projects: [ProjectModel!]! @deprecated(reason: "Organizations now contain one implicit workspace.")
+  statusPages(organizationId: ID, projectId: ID @deprecated(reason: "Use organizationId.")): [StatusPageModel!]!
   telegramConnectionPreview(token: String!): TelegramConnectionPreviewModel!
 }
 
@@ -303,7 +317,8 @@ type StatusPageModel {
   branding: String
   checkIds: [String!]!
   id: ID!
-  projectId: ID!
+  organizationId: ID!
+  projectId: ID! @deprecated(reason: "Use organizationId.")
   slug: String!
   title: String!
 }

@@ -3,7 +3,9 @@ import type { Gql } from "../src/gql.js";
 import { buildServer } from "../src/server.js";
 import {
   EMAIL_VERIFICATION_TOOL_ALLOWLIST,
+  LEGACY_PROJECT_TOOL_ALLOWLIST,
   emailVerificationLifecycleToolNames,
+  legacyProjectToolNames,
 } from "./email-verification-tool-boundary.js";
 
 // ---------------------------------------------------------------------------
@@ -19,7 +21,6 @@ const SESSION_TOOL_NAMES = [
   "create_channel",
   "create_heartbeat_check",
   "create_organization",
-  "create_project",
   "delete_channel",
   "delete_check",
   "delete_organization",
@@ -29,6 +30,7 @@ const SESSION_TOOL_NAMES = [
   "list_channels",
   "list_checks",
   "list_members",
+  "list_organizations",
   "list_projects",
   "pause_check",
   "regenerate_ping_key",
@@ -65,6 +67,8 @@ describe("buildServer", () => {
           authKind: "session",
           credentialMode: "SESSION",
           capabilities: [],
+          organizationId: null,
+          organizationName: null,
           projectId: null,
           projectName: null,
         },
@@ -78,6 +82,9 @@ describe("buildServer", () => {
     expect(emailVerificationLifecycleToolNames(toolNames)).toEqual(
       EMAIL_VERIFICATION_TOOL_ALLOWLIST,
     );
+    expect(legacyProjectToolNames(toolNames)).toEqual(
+      LEGACY_PROJECT_TOOL_ALLOWLIST,
+    );
   });
 
   it("registers the full catalog, including email verification resend, for a legacy broad token", async () => {
@@ -86,6 +93,8 @@ describe("buildServer", () => {
         authKind: "api-token",
         credentialMode: "LEGACY_BROAD",
         capabilities: ["checks:read", "checks:write"],
+        organizationId: null,
+        organizationName: null,
         projectId: null,
         projectName: null,
       }),
@@ -96,6 +105,9 @@ describe("buildServer", () => {
     expect(emailVerificationLifecycleToolNames(toolNames)).toEqual(
       EMAIL_VERIFICATION_TOOL_ALLOWLIST,
     );
+    expect(legacyProjectToolNames(toolNames)).toEqual(
+      LEGACY_PROJECT_TOOL_ALLOWLIST,
+    );
   });
 
   it("registers exactly the scoped read tools for a read-only token", async () => {
@@ -104,6 +116,8 @@ describe("buildServer", () => {
         authKind: "api-token",
         credentialMode: "PROJECT_SCOPED",
         capabilities: ["checks:read"],
+        organizationId: null,
+        organizationName: null,
         projectId: "project-1",
         projectName: "Production",
       }),
@@ -118,8 +132,10 @@ describe("buildServer", () => {
         authKind: "api-token",
         credentialMode: "PROJECT_SCOPED",
         capabilities: ["checks:read", "checks:write"],
-        projectId: "project-1",
-        projectName: "Production",
+        organizationId: "organization-1",
+        organizationName: "Acme",
+        projectId: null,
+        projectName: null,
       }),
     );
 
@@ -134,12 +150,14 @@ describe("buildServer", () => {
           authKind: "api-token",
           credentialMode: "PROJECT_SCOPED",
           capabilities: ["checks:read", "checks:write"],
+          organizationId: null,
+          organizationName: null,
           projectId: null,
           projectName: null,
         }),
       ),
     ).rejects.toThrow(
-      "Scoped API credential reports check capabilities but has no project ID.",
+      "Scoped API credential reports check capabilities but has no organization workspace ID.",
     );
   });
 });

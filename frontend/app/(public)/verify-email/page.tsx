@@ -32,6 +32,7 @@ type PreviewStatus = "PENDING" | "EXPIRED" | "INVALID";
 type Preview = {
   status: PreviewStatus;
   maskedEmail: string | null;
+  organizationName: string | null;
   projectName: string | null;
   expiresAt: string | null;
 };
@@ -39,15 +40,31 @@ type Preview = {
 type Confirmation = {
   status: "VERIFIED" | "EXPIRED" | "INVALID";
   maskedEmail: string | null;
+  organizationName: string | null;
   projectName: string | null;
 };
 
 const invalidState: Preview = {
   status: "INVALID",
   maskedEmail: null,
+  organizationName: null,
   projectName: null,
   expiresAt: null,
 };
+
+function getOrganizationName(
+  value: Pick<Preview | Confirmation, "organizationName" | "projectName">,
+) {
+  const organizationName = value.organizationName?.trim();
+  if (organizationName) return organizationName;
+
+  const legacyProjectName = value.projectName?.trim();
+  if (legacyProjectName && legacyProjectName !== "Default") {
+    return legacyProjectName;
+  }
+
+  return "this organization";
+}
 
 function VerificationShell({ children }: { children: React.ReactNode }) {
   return (
@@ -247,6 +264,7 @@ function VerifyEmailContent() {
   }
 
   const current = confirmation ?? preview ?? invalidState;
+  const organizationName = getOrganizationName(current);
 
   if (current.status === "EXPIRED" || current.status === "INVALID") {
     return <SafeTerminalState status={current.status} />;
@@ -270,7 +288,7 @@ function VerifyEmailContent() {
               <p className="text-sm leading-relaxed text-muted-foreground">
                 SystemVitals can now send monitoring alerts for{" "}
                 <span className="font-medium text-foreground">
-                  {current.projectName}
+                  {organizationName}
                 </span>{" "}
                 to{" "}
                 <span className="font-mono text-xs text-foreground">
@@ -321,10 +339,10 @@ function VerifyEmailContent() {
             </div>
             <div className="grid grid-cols-[5rem_1fr] gap-3 px-4 py-3">
               <dt className="text-xs font-medium text-muted-foreground">
-                Project
+                Organization
               </dt>
               <dd className="text-right text-sm font-medium text-foreground">
-                {current.projectName}
+                {organizationName}
               </dd>
             </div>
           </dl>

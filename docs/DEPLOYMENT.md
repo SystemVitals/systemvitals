@@ -2,6 +2,30 @@
 
 SystemVitals supports two deployment modes. Store credentials in your deployment platform or an untracked environment file; never add production values to this repository.
 
+## Compatibility-release upgrade preflight
+
+An organization is now the sole public workspace, backed by exactly one
+internal project. Before upgrading any self-hosted installation to this
+compatibility release, run the read-only preflight against its PostgreSQL
+database:
+
+```bash
+cd database
+npm run preflight:organization-workspaces
+```
+
+The preflight reports organizations with zero or multiple internal projects
+and does not write data. The deployment migration repeats the same guard and
+aborts without writes when it finds incompatible data. Reconcile such data
+deliberately before retrying; neither path selects a project, creates a missing
+one, merges or moves resources, or deletes data automatically.
+
+The public `createProject` operation is removed. New clients use
+`organizationId`; deprecated `projectId` inputs and fields remain functional
+for this release only, and existing project-scoped API tokens remain valid.
+The next cleanup release removes the deprecated public project surface but does
+not automatically delete the internal project table.
+
 ## Generic self-hosting
 
 `docker-compose.prod.yml` runs PostgreSQL, Redis, API, worker, and frontend as one stack. Create a protected `.env.production` with the required values, then:
@@ -42,12 +66,12 @@ Use this application release order:
 
 Merging to `main` still triggers all three applications automatically. Observe
 the Dokploy deployment queue and application status during every release.
-Verify that each predecessor reaches its readiness gate before allowing the
-next application rollout to continue. If the order differs, deployments
-overlap, or a readiness gate fails, intervene manually to stop the later
-rollout and roll back the failed application before continuing. Application
-releases do not require deploying the infrastructure Compose project unless
-the release explicitly changes the stateful infrastructure.
+The API must reach `/health/ready` before the frontend rolls out, and the
+frontend must reach `/api/health` before the worker rolls out. If the order
+differs, deployments overlap, or a readiness gate fails, intervene manually to
+stop the later rollout and roll back the failed application before continuing.
+This compatibility release does not change stateful infrastructure: do not
+modify, deploy, or restart the infrastructure Compose project.
 
 ### Active worker queues
 

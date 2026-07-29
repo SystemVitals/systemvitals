@@ -1,11 +1,34 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { OrgProvider, useOrg, ACTIVE_ORG_STORAGE_KEY } from "./org-context";
+import {
+  OrgProvider,
+  useOrg,
+  ACTIVE_ORG_STORAGE_KEY,
+  type Org,
+} from "./org-context";
 
 const orgs = [
-  { id: "org1", name: "First", role: "OWNER", projects: [] },
-  { id: "org2", name: "Second", role: "MEMBER", projects: [] },
-];
+  {
+    id: "org1",
+    name: "First",
+    slug: "first",
+    role: "OWNER",
+    plan: "SOLO",
+    creatorUserId: "user-1",
+    creatorLabel: "owner@example.com",
+    pingKey: "ping-1",
+  },
+  {
+    id: "org2",
+    name: "Second",
+    slug: "second",
+    role: "MEMBER",
+    plan: "SOLO",
+    creatorUserId: "user-2",
+    creatorLabel: "creator@example.com",
+    pingKey: "ping-2",
+  },
+] satisfies Org[];
 
 let mockOrgs = orgs;
 
@@ -18,6 +41,7 @@ function Probe() {
   return (
     <div>
       <span data-testid="active">{activeOrg?.name ?? "none"}</span>
+      <span data-testid="ping-key">{activeOrg?.pingKey ?? "none"}</span>
       <button onClick={() => setActiveOrgId("org2")}>switch</button>
     </div>
   );
@@ -40,12 +64,14 @@ describe("OrgProvider", () => {
   it("defaults to the first organization", () => {
     renderProbe();
     expect(screen.getByTestId("active").textContent).toBe("First");
+    expect(screen.getByTestId("ping-key").textContent).toBe("ping-1");
   });
 
   it("persists the active organization to localStorage", () => {
     renderProbe();
     fireEvent.click(screen.getByText("switch"));
     expect(screen.getByTestId("active").textContent).toBe("Second");
+    expect(screen.getByTestId("ping-key").textContent).toBe("ping-2");
     expect(localStorage.getItem(ACTIVE_ORG_STORAGE_KEY)).toBe("org2");
   });
 

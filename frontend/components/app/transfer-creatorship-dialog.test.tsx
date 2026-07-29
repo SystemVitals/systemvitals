@@ -17,7 +17,7 @@ const organization: Org = {
   plan: "SIGNAL",
   creatorUserId: "creator-exact",
   creatorLabel: "creator@example.com",
-  projects: [],
+  pingKey: "acme-key",
 };
 
 const owners = [

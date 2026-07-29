@@ -11,10 +11,16 @@ import {
 } from "@/lib/queries";
 
 const mockSetActiveOrgId = vi.fn();
+const internalDefaultProject = {
+  id: "project-default",
+  name: "Default",
+  slug: "default",
+  pingKey: "default-key",
+};
 const mockOrgs = [
-  { id: "org1", name: "Acme", slug: "acme", role: "OWNER", plan: "SOLO", creatorUserId: "user1", creatorLabel: "me@example.com", projects: [] },
-  { id: "org2", name: "Beta", slug: "beta", role: "MEMBER", plan: "SIGNAL", creatorUserId: "user2", creatorLabel: "creator@example.com", projects: [] },
-  { id: "org3", name: "Gamma", slug: "gamma", role: "OWNER", plan: "FLEET", creatorUserId: "user3", creatorLabel: "other@example.com", projects: [] },
+  { id: "org1", name: "Acme", slug: "acme", role: "OWNER", plan: "SOLO", creatorUserId: "user1", creatorLabel: "me@example.com", pingKey: "acme-key", projects: [internalDefaultProject] },
+  { id: "org2", name: "Beta", slug: "beta", role: "MEMBER", plan: "SIGNAL", creatorUserId: "user2", creatorLabel: "creator@example.com", pingKey: "beta-key", projects: [internalDefaultProject] },
+  { id: "org3", name: "Gamma", slug: "gamma", role: "OWNER", plan: "FLEET", creatorUserId: "user3", creatorLabel: "other@example.com", pingKey: "gamma-key", projects: [internalDefaultProject] },
 ];
 
 const mockRefetchMe = vi.fn().mockResolvedValue(undefined);
@@ -159,6 +165,13 @@ describe("OrganizationsPage", () => {
     expect(
       screen.getByText(/lose access to beta/i),
     ).toBeInTheDocument();
+    expect(screen.getByText(/checks/i)).toBeInTheDocument();
+    expect(screen.getByText(/notification channels/i)).toBeInTheDocument();
+    expect(screen.getByText(/status pages/i)).toBeInTheDocument();
+    expect(screen.getByText(/members/i)).toBeInTheDocument();
+    expect(screen.getByText(/data/i)).toBeInTheDocument();
+    expect(screen.queryByText(/projects?/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("Default")).not.toBeInTheDocument();
     expect(leaveResult).not.toHaveBeenCalled();
 
     fireEvent.click(
@@ -215,11 +228,13 @@ describe("OrganizationsPage", () => {
 
     expect(
       await screen.findByText(
-        /this permanently deletes all of gamma's projects, checks, and history/i,
+        /this permanently deletes all of gamma's checks, notification channels, status pages, members, and data/i,
       ),
     ).toBeInTheDocument();
     expect(screen.getByText(/account billing is unaffected/i)).toBeInTheDocument();
     expect(screen.getByText(/manage billing separately/i)).toBeInTheDocument();
+    expect(screen.queryByText(/projects?/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("Default")).not.toBeInTheDocument();
     expect(screen.queryByText(/cancel(?:s|led|lation)?/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/free teams?/i)).not.toBeInTheDocument();
   });

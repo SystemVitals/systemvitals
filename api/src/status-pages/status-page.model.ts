@@ -7,5 +7,7 @@ export class StatusPageModel {
   @Field() title!: string;
   @Field({ nullable: true }) branding?: string;
   @Field(() => [String]) checkIds!: string[];
-  @Field(() => ID) projectId!: string;
+  @Field(() => ID) organizationId!: string;
+  @Field(() => ID, { deprecationReason: 'Use organizationId.' })
+  projectId!: string;
 }

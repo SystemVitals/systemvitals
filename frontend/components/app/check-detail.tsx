@@ -36,7 +36,7 @@ type CheckEvent = TimelineEvent;
 
 export interface CheckDetailData {
   id: string;
-  projectId: string;
+  organizationId: string;
   notificationChannelIds: string[];
   name: string;
   slug: string;
@@ -95,7 +95,7 @@ function CheckNotificationChannelsSection({
     error,
     refetch,
   } = useQuery<{ channels: NotificationChannelOption[] }>(CHANNELS, {
-    variables: { projectId: check.projectId },
+    variables: { organizationId: check.organizationId },
   });
   const channels = useMemo(
     () => (data?.channels ?? []).filter((channel) => channel.enabled),
@@ -237,7 +237,7 @@ export function CheckDetail({
             </Button>
             <MoveCheckDialog
               checkId={check.id}
-              sourceProjectId={check.projectId}
+              sourceOrganizationId={check.organizationId}
               checkSlug={check.slug}
               onMoved={onMoved}
             />
@@ -295,7 +295,7 @@ export function CheckDetail({
           )}
 
           <CheckNotificationChannelsSection
-            key={`${check.id}:${check.projectId}`}
+            key={`${check.id}:${check.organizationId}`}
             check={check}
           />
 

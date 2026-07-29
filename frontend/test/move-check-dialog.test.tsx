@@ -22,7 +22,7 @@ const orgs = [
     plan: "SOLO",
     creatorUserId: "creator-source",
     creatorLabel: "source@example.com",
-    projects: [{ id: "project-source", name: "Source", slug: "source", pingKey: "source" }],
+    pingKey: "source",
   },
   {
     id: "org-admin",
@@ -32,7 +32,7 @@ const orgs = [
     plan: "SOLO",
     creatorUserId: "creator-admin",
     creatorLabel: "admin@example.com",
-    projects: [{ id: "project-admin", name: "Admin", slug: "admin", pingKey: "admin" }],
+    pingKey: "admin",
   },
   {
     id: "org-destination",
@@ -42,14 +42,7 @@ const orgs = [
     plan: "SOLO",
     creatorUserId: "creator-destination",
     creatorLabel: "destination@example.com",
-    projects: [
-      {
-        id: "project-destination",
-        name: "Production",
-        slug: "production",
-        pingKey: "production",
-      },
-    ],
+    pingKey: "destination",
   },
 ] satisfies Org[];
 
@@ -66,7 +59,7 @@ function renderDialog(options?: { reject?: boolean; refreshReject?: boolean }) {
         data: {
           moveCheck: {
             id: "check-1",
-            projectId: "project-destination",
+            organizationId: "org-destination",
             slug: "nightly-backup",
           },
         },
@@ -89,7 +82,7 @@ function renderDialog(options?: { reject?: boolean; refreshReject?: boolean }) {
     <ApolloProvider client={client}>
       <MoveCheckDialog
         checkId="check-1"
-        sourceProjectId="project-source"
+        sourceOrganizationId="org-source"
         checkSlug="nightly-backup"
         onMoved={onMoved}
       />
@@ -109,10 +102,9 @@ async function selectDestination() {
   fireEvent.click(screen.getByRole("button", { name: "Move check" }));
 
   const selects = screen.getAllByRole("combobox");
+  expect(selects).toHaveLength(1);
   fireEvent.click(selects[0]);
   fireEvent.click(await screen.findByRole("option", { name: "Destination Org" }));
-  fireEvent.click(selects[1]);
-  fireEvent.click(await screen.findByRole("option", { name: "Production" }));
 }
 
 describe("MoveCheckDialog", () => {
@@ -122,14 +114,13 @@ describe("MoveCheckDialog", () => {
 
   it("declares the move mutation result and arguments", () => {
     const query = print(MOVE_CHECK);
-    expect(query).toContain(
-      "moveCheck(checkId: $checkId, destinationProjectId: $destinationProjectId)",
-    );
-    expect(query).toContain("projectId");
+    expect(query).toContain("destinationOrganizationId: $destinationOrganizationId");
+    expect(query).toContain("organizationId");
+    expect(query).not.toContain("projectId");
     expect(query).toContain("slug");
   });
 
-  it("shows only other owned organizations with projects and previews the path", async () => {
+  it("shows only other owned organizations and previews the canonical path", async () => {
     renderDialog();
 
     expect(screen.getByRole("button", { name: "Move check" })).toBeInTheDocument();
@@ -137,18 +128,14 @@ describe("MoveCheckDialog", () => {
 
     expect(screen.queryByRole("option", { name: "Admin Org" })).not.toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "Source Org" })).not.toBeInTheDocument();
-    expect(screen.getByText("/destination/production/nightly-backup")).toBeInTheDocument();
+    expect(screen.getByText("/destination/nightly-backup")).toBeInTheDocument();
     expect(
       within(screen.getByRole("dialog")).getByRole("button", { name: "Move check" }),
     ).toBeEnabled();
   });
 
-  it("renders nothing without another owned organization containing a project", () => {
-    orgContext.orgs = [
-      orgs[0],
-      orgs[1],
-      { ...orgs[2], projects: [] },
-    ];
+  it("renders nothing without another owned organization", () => {
+    orgContext.orgs = [orgs[0], orgs[1]];
     renderDialog();
 
     expect(screen.queryByRole("button", { name: "Move check" })).not.toBeInTheDocument();
@@ -178,17 +165,24 @@ describe("MoveCheckDialog", () => {
     await waitFor(() =>
       expect(getCapturedVariables()).toEqual({
         checkId: "check-1",
-        destinationProjectId: "project-destination",
+        destinationOrganizationId: "org-destination",
       }),
     );
     expect(evict).toHaveBeenCalledWith({ id: "ROOT_QUERY", fieldName: "checks" });
     expect(evict).toHaveBeenCalledWith({ id: "ROOT_QUERY", fieldName: "statusPages" });
+    expect(evict).toHaveBeenCalledWith({
+      id: "ROOT_QUERY",
+      fieldName: "checkByOrganizationSlug",
+      args: {
+        orgSlug: "source",
+        checkSlug: "nightly-backup",
+      },
+    });
     expect(gc).toHaveBeenCalled();
     expect(refetchQueries).toHaveBeenCalledWith({ include: ["checks", "statusPages"] });
     expect(onMoved).toHaveBeenCalledWith({
       organizationId: "org-destination",
       organizationSlug: "destination",
-      projectSlug: "production",
       checkSlug: "nightly-backup",
     });
     await waitFor(() =>
@@ -209,7 +203,7 @@ describe("MoveCheckDialog", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  it("shows a rejected mutation inline and retains both selections", async () => {
+  it("shows a rejected mutation inline and retains the selection", async () => {
     renderDialog({ reject: true });
     await selectDestination();
 
@@ -220,7 +214,6 @@ describe("MoveCheckDialog", () => {
     expect(await screen.findByText("Destination already has that slug")).toBeInTheDocument();
     const selects = screen.getAllByRole("combobox");
     expect(selects[0]).toHaveTextContent("Destination Org");
-    expect(selects[1]).toHaveTextContent("Production");
   });
 
   it("resets selections and errors when reopened", async () => {
@@ -235,8 +228,8 @@ describe("MoveCheckDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Move check" }));
 
     const selects = screen.getAllByRole("combobox");
+    expect(selects).toHaveLength(1);
     expect(selects[0]).toHaveTextContent("Select organization");
-    expect(selects[1]).toHaveTextContent("Select project");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });
