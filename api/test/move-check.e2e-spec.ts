@@ -57,7 +57,6 @@ interface Fixture {
   destinationPageCheckIds: string[];
   eventId: string;
   alertId: string;
-  acknowledgementId: string;
   sourceChannelId: string;
   destinationChannelIds: string[];
 }
@@ -299,9 +298,6 @@ describe('moveCheck (e2e)', () => {
           payload: { history: 'preserved' },
         },
       });
-      const acknowledgement = await tx.acknowledgement.create({
-        data: { checkId: check.id, userId: actor.id },
-      });
       const sourcePages = await Promise.all([
         tx.statusPage.create({
           data: {
@@ -347,7 +343,6 @@ describe('moveCheck (e2e)', () => {
         destinationPageCheckIds: destinationPage.checkIds,
         eventId: event.id,
         alertId: alert.id,
-        acknowledgementId: acknowledgement.id,
         sourceChannelId: sourceChannel.id,
         destinationChannelIds: destinationChannels.map(({ id }) => id),
       };
@@ -393,7 +388,6 @@ describe('moveCheck (e2e)', () => {
       check,
       events,
       alerts,
-      acknowledgements,
       sourcePages,
       destination,
       exclusions,
@@ -401,9 +395,6 @@ describe('moveCheck (e2e)', () => {
       prisma.check.findUniqueOrThrow({ where: { id: fixture.checkId } }),
       prisma.checkEvent.findMany({ where: { checkId: fixture.checkId } }),
       prisma.alertLog.findMany({ where: { checkId: fixture.checkId } }),
-      prisma.acknowledgement.findMany({
-        where: { checkId: fixture.checkId },
-      }),
       prisma.statusPage.findMany({
         where: { id: { in: fixture.sourcePageIds } },
       }),
@@ -435,9 +426,6 @@ describe('moveCheck (e2e)', () => {
     });
     expect(events.map(({ id }) => id)).toEqual([fixture.eventId]);
     expect(alerts.map(({ id }) => id)).toEqual([fixture.alertId]);
-    expect(acknowledgements.map(({ id }) => id)).toEqual([
-      fixture.acknowledgementId,
-    ]);
     expect(sourcePages.every((page) => !page.checkIds.includes(check.id))).toBe(
       true,
     );
@@ -691,7 +679,6 @@ describe('moveCheck (e2e)', () => {
       check,
       eventCount,
       alertCount,
-      acknowledgementCount,
       sourcePages,
       destinationPage,
       secondDestinationPage,
@@ -699,7 +686,6 @@ describe('moveCheck (e2e)', () => {
       prisma.check.findUniqueOrThrow({ where: { id: fixture.checkId } }),
       prisma.checkEvent.count({ where: { checkId: fixture.checkId } }),
       prisma.alertLog.count({ where: { checkId: fixture.checkId } }),
-      prisma.acknowledgement.count({ where: { checkId: fixture.checkId } }),
       prisma.statusPage.findMany({
         where: { id: { in: fixture.sourcePageIds } },
       }),
@@ -717,7 +703,7 @@ describe('moveCheck (e2e)', () => {
     expect(await prisma.check.count({ where: { id: fixture.checkId } })).toBe(
       1,
     );
-    expect([eventCount, alertCount, acknowledgementCount]).toEqual([1, 1, 1]);
+    expect([eventCount, alertCount]).toEqual([1, 1]);
     expect(
       sourcePages.every((page) => !page.checkIds.includes(fixture.checkId)),
     ).toBe(true);

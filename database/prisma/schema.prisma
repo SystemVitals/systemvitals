@@ -64,7 +64,6 @@ model User {
   subscription             Subscription?
   createdOrganizations     Organization[]    @relation("OrganizationCreator")
   apiTokens                ApiToken[]
-  acknowledgements         Acknowledgement[]
   isAdmin                  Boolean           @default(false) @map("is_admin")
   suspendedAt              DateTime?         @map("suspended_at")
   auditLogs                AuditLog[]
@@ -171,7 +170,6 @@ model Project {
   organization       Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   checks             Check[]
   channels           NotificationChannel[]
-  escalationPolicies EscalationPolicy[]
   statusPages        StatusPage[]
   apiTokens          ApiToken[]
   createdAt          DateTime              @default(now()) @map("created_at")
@@ -225,7 +223,6 @@ model Check {
   updatedAt        DateTime          @updatedAt @map("updated_at")
   events           CheckEvent[]
   alertLogs        AlertLog[]
-  acknowledgements Acknowledgement[]
   channelExclusions CheckChannelExclusion[]
 
   @@unique([projectId, slug])
@@ -297,27 +294,6 @@ model TelegramConnectionChallenge {
   @@index([chatId, messageThreadId, createdAt], map: "telegram_connection_challenges_chat_id_message_thread_id_create")
   @@index([expiresAt])
   @@map("telegram_connection_challenges")
-}
-
-model EscalationPolicy {
-  id        String   @id @default(cuid())
-  projectId String   @map("project_id")
-  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  steps     Json // ordered [{ channelId, delaySeconds }]
-  createdAt DateTime @default(now()) @map("created_at")
-
-  @@map("escalation_policies")
-}
-
-model Acknowledgement {
-  id        String   @id @default(cuid())
-  checkId   String   @map("check_id")
-  check     Check    @relation(fields: [checkId], references: [id], onDelete: Cascade)
-  userId    String?  @map("user_id")
-  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  createdAt DateTime @default(now()) @map("created_at")
-
-  @@map("acknowledgements")
 }
 
 model AlertLog {
