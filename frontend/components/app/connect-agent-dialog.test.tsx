@@ -575,7 +575,6 @@ describe("ConnectAgentDialog", () => {
       scopes: ["checks:read", "checks:write"],
       organizationId: "org_123",
       organizationName: "Production",
-      projectId: null,
       projectName: null,
       createdAt: "2026-07-24T12:00:00.000Z",
       expiresAt: null,

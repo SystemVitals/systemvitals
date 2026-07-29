@@ -25,7 +25,6 @@ interface ApiToken {
   prefix: string;
   scopes: string[];
   organizationId: string | null;
-  projectId: string | null;
   projectName: string | null;
   organizationName: string | null;
   createdAt: string;

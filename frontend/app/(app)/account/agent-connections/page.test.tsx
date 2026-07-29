@@ -15,7 +15,6 @@ interface TestToken {
   prefix: string;
   scopes: string[];
   organizationId: string | null;
-  projectId: string | null;
   projectName: string | null;
   organizationName: string | null;
   createdAt: string;
@@ -30,7 +29,6 @@ const active: TestToken = {
   prefix: "svt_abcd",
   scopes: ["checks:read", "checks:write"],
   organizationId: "org-1",
-  projectId: "project-1",
   projectName: "Production",
   organizationName: "Acme",
   createdAt: "2026-07-20T12:00:00.000Z",
@@ -57,7 +55,6 @@ const deletedProject: TestToken = {
   id: "deleted-project",
   name: "Historical project agent",
   organizationId: null,
-  projectId: null,
   projectName: "Retired production",
   organizationName: "Acme",
 };
@@ -114,7 +111,6 @@ describe("AgentConnectionsPage", () => {
     prefix
     scopes
     organizationId
-    projectId
     projectName
     organizationName
     createdAt
@@ -153,7 +149,6 @@ describe("AgentConnectionsPage", () => {
       id: "legacy",
       name: "Legacy account token",
       organizationId: null,
-      projectId: null,
       projectName: null,
       organizationName: null,
       scopes: ["read", "write"],

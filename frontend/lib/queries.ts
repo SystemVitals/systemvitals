@@ -520,7 +520,6 @@ export const CREATE_API_TOKEN = gql`
       name
       scopes
       organizationId
-      projectId
       expiresAt
       plaintext
     }
@@ -535,7 +534,6 @@ export const API_TOKENS = gql`
       prefix
       scopes
       organizationId
-      projectId
       projectName
       organizationName
       createdAt

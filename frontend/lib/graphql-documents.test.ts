@@ -63,6 +63,27 @@ const CANONICAL_WORKSPACE_DOCUMENTS = [
   "CREATE_STATUS_PAGE",
 ] as const;
 
+const CANONICAL_TOKEN_DOCUMENTS = [
+  "CREATE_API_TOKEN",
+  "API_TOKENS",
+] as const;
+
+const CANONICAL_TOKEN_SOURCE_FILES = [
+  ["queries", resolve(__dirname, "queries.ts")],
+  [
+    "agent connections page",
+    resolve(__dirname, "../app/(app)/account/agent-connections/page.tsx"),
+  ],
+  [
+    "agent connections fixtures",
+    resolve(__dirname, "../app/(app)/account/agent-connections/page.test.tsx"),
+  ],
+  [
+    "connect agent fixtures",
+    resolve(__dirname, "../components/app/connect-agent-dialog.test.tsx"),
+  ],
+] as const;
+
 describe("canonical workspace GraphQL documents", () => {
   it.each(CANONICAL_WORKSPACE_DOCUMENTS)(
     "%s is organization-scoped without a project selector",
@@ -79,4 +100,20 @@ describe("canonical workspace GraphQL documents", () => {
     expect(print(legacyDocs.CHECK_BY_SLUG)).toContain("projectSlug");
     expect(publicDocs).not.toHaveProperty("CHECK_BY_SLUG");
   });
+});
+
+describe("canonical API token GraphQL surface", () => {
+  it.each(CANONICAL_TOKEN_DOCUMENTS)(
+    "%s does not select a legacy project ID",
+    (name) => {
+      expect(print(publicDocs[name])).not.toContain("projectId");
+    },
+  );
+
+  it.each(CANONICAL_TOKEN_SOURCE_FILES)(
+    "%s contains no canonical projectId type or fixture",
+    (_name, path) => {
+      expect(readFileSync(path, "utf8")).not.toContain("projectId");
+    },
+  );
 });
