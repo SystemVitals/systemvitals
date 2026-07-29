@@ -158,8 +158,15 @@ const OLD_CANONICAL_VARIABLES = {
 async function renderCanonicalPage(options?: {
   seedCanonicalCache?: boolean;
   rejectCanonicalLookup?: boolean;
+  organizationId?: string;
+  orgSlug?: string;
 }) {
-  const checkRef = { current: { ...INITIAL_CHECK } };
+  const checkRef = {
+    current: {
+      ...INITIAL_CHECK,
+      organizationId: options?.organizationId ?? INITIAL_CHECK.organizationId,
+    },
+  };
   const queryCount = { current: 0 };
   const variables: { current?: Record<string, unknown> } = {};
   const cache = new InMemoryCache();
@@ -182,7 +189,10 @@ async function renderCanonicalPage(options?: {
       <ApolloProvider client={client}>
         <Suspense fallback={null}>
           <CanonicalCheckPage
-            params={Promise.resolve({ org: "source", check: "old-slug" })}
+            params={Promise.resolve({
+              org: options?.orgSlug ?? "source",
+              check: "old-slug",
+            })}
           />
         </Suspense>
       </ApolloProvider>,
@@ -267,6 +277,21 @@ describe("canonical organization/check route", () => {
       orgSlug: "source",
       checkSlug: "old-slug",
     });
+  });
+
+  it("synchronizes the active organization after a direct canonical lookup", async () => {
+    await renderCanonicalPage({
+      orgSlug: "destination",
+      organizationId: "org-destination",
+    });
+
+    await screen.findByText("Nightly job");
+    await waitFor(() =>
+      expect(setActiveOrgId).toHaveBeenCalledWith("org-destination"),
+    );
+    expect(
+      screen.getByRole("link", { name: "Back to dashboard" }),
+    ).toHaveAttribute("href", "/dashboard");
   });
 
   it("evicts a renamed check's old canonical route before replacing it", async () => {

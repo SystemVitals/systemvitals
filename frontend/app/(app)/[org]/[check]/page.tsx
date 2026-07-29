@@ -1,6 +1,6 @@
 "use client";
 
-import { use } from "react";
+import { use, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useApolloClient, useQuery } from "@apollo/client/react";
 import { CheckDetail, type CheckDetailData } from "@/components/app/check-detail";
@@ -17,7 +17,7 @@ export default function CheckDetailByOrganizationSlugPage({
   const { org, check } = use(params);
   const router = useRouter();
   const client = useApolloClient();
-  const { setActiveOrgId } = useOrg();
+  const { activeOrg, setActiveOrgId } = useOrg();
   const query = useQuery<{ checkByOrganizationSlug: CheckDetailData }>(
     CHECK_BY_ORGANIZATION_SLUG,
     {
@@ -26,6 +26,23 @@ export default function CheckDetailByOrganizationSlugPage({
     },
   );
   const { data, loading, error, refetch } = query;
+  const resolvedOrganizationId =
+    data?.checkByOrganizationSlug.organizationId ?? null;
+  const synchronizedOrganizationId = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (
+      !resolvedOrganizationId ||
+      synchronizedOrganizationId.current === resolvedOrganizationId
+    ) {
+      return;
+    }
+
+    synchronizedOrganizationId.current = resolvedOrganizationId;
+    if (activeOrg?.id !== resolvedOrganizationId) {
+      setActiveOrgId(resolvedOrganizationId);
+    }
+  }, [activeOrg?.id, resolvedOrganizationId, setActiveOrgId]);
 
   usePollWhenVisible(query, CHECK_POLL_INTERVAL_MS);
 
