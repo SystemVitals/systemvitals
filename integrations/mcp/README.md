@@ -117,9 +117,9 @@ Organization-first tool call example:
 requires `checks:read` and reports the effective notification channel IDs,
 including an empty selection.
 
-> **Migration note:** Creating an organization automatically provisions its
-> sole internal workspace. Use `create_organization`; no separate
-> project-creation step is needed.
+> **Migration note:** An organization is the workspace for its checks and
+> channels. Use `create_organization`; no separate workspace-creation step is
+> needed.
 
 ## Legacy/session tool catalog (26 total)
 
@@ -160,7 +160,7 @@ release. New clients should discover workspaces with `list_organizations`.
 | `update_organization` | Atomically update an organization's display name and/or URL slug; at least one is required (owner/admin only) |
 | `transfer_organization_creatorship` | Transfer creatorship to an existing owner; rejected if their account lacks organization or check capacity |
 | `leave_organization` | Leave an organization, subject to the last-owner guard |
-| `delete_organization` | Permanently delete an owned, non-last organization |
+| `delete_organization` | Permanently delete an owned, non-last organization and its checks, channels, status pages, members, invites, and monitoring data |
 
 Team membership (`list_members`, `invite_member`, `revoke_invite`,
 `update_member_role`, `remove_member`) is available on every plan — it is not

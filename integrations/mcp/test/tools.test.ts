@@ -30,6 +30,30 @@ function findTool(name: string) {
   return tool;
 }
 
+describe("canonical organization-workspace copy", () => {
+  const canonicalCopy = tools
+    .filter(({ name }) => name !== "list_projects")
+    .flatMap((tool) => [
+      tool.description,
+      ...Object.values(tool.inputSchema).map((field) => field.description ?? ""),
+    ])
+    .join("\n");
+
+  it("does not describe projectId as an immutable canonical check field", () => {
+    expect(canonicalCopy).not.toMatch(/projectId[^.]*cannot be changed/i);
+  });
+
+  it("does not describe check slugs as unique within a project", () => {
+    expect(canonicalCopy).not.toMatch(/unique within (?:the )?project/i);
+  });
+
+  it("does not say deleting an organization deletes projects", () => {
+    expect(canonicalCopy).not.toMatch(
+      /delete an organization[^.]*\bprojects?\b/i,
+    );
+  });
+});
+
 // ---------------------------------------------------------------------------
 // list_organizations
 // ---------------------------------------------------------------------------

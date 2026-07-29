@@ -953,7 +953,7 @@ const UPDATE_CHECK_INPUT_KEYS = [
 const updateCheck: ToolDef = {
   name: "update_check",
   description:
-    "Update mutable fields on an existing check. Only the fields you supply are changed — everything else is left as-is. A heartbeat check is timed by either periodSeconds or schedule+tz, never both. Active (HTTP/TCP) checks use target, intervalSeconds, and timeoutMs; HTTP also has method and expectedStatus. id, projectId, pingSlug, and status cannot be changed here.",
+    "Update mutable fields on an existing check. Only the fields you supply are changed — everything else is left as-is. A heartbeat check is timed by either periodSeconds or schedule+tz, never both. Active (HTTP/TCP) checks use target, intervalSeconds, and timeoutMs; HTTP also has method and expectedStatus. This operation cannot move the check to another organization workspace or change its id, pingSlug, or status.",
   inputSchema: {
     id: z.string().min(1).describe("The check ID to update"),
     name: z.string().optional().describe("New display name"),
@@ -961,7 +961,7 @@ const updateCheck: ToolDef = {
       .string()
       .optional()
       .describe(
-        "URL slug, unique within the project. Changing it changes the check's URL and the old one stops working.",
+        "URL slug, unique within the organization workspace. Changing it changes the check's URL and the old one stops working.",
       ),
     type: z
       .enum(["HEARTBEAT", "HTTP", "TCP"])
@@ -1310,7 +1310,7 @@ const leaveOrganization: ToolDef = {
 const deleteOrganization: ToolDef = {
   name: "delete_organization",
   description:
-    "Delete an organization and everything in it (projects, checks, members, invites). Requires owner. Cannot delete your last organization.",
+    "Delete an organization and all of its checks, notification channels, status pages, members, invites, and monitoring data. Requires owner. Cannot delete your last organization.",
   inputSchema: {
     organizationId: z.string().min(1).describe("Organization id"),
   },
