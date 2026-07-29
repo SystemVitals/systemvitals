@@ -102,18 +102,18 @@ const HISTORY_GUARD_KEY = "__systemVitalsAgentSecretGuard";
 let fallbackGuardSequence = 0;
 
 export function ConnectAgentDialog({
-  projectId,
-  projectName,
+  organizationId,
+  organizationName,
   secondary = false,
 }: {
-  projectId: string;
-  projectName: string;
+  organizationId: string;
+  organizationName: string;
   secondary?: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pendingExit, setPendingExit] = useState<PendingExit | null>(null);
-  const [name, setName] = useState(() => `Claude Code — ${projectName}`);
+  const [name, setName] = useState(() => `Claude Code — ${organizationName}`);
   const [nameEdited, setNameEdited] = useState(false);
   const [expiration, setExpiration] = useState<Expiration>("never");
   const [customDays, setCustomDays] = useState("");
@@ -154,10 +154,10 @@ export function ConnectAgentDialog({
   const config = created
     ? generateAgentConnectionConfig({
         client,
-        connectionName: created.name,
+        organizationName,
         apiUrl,
         token: created.plaintext,
-        projectId,
+        organizationId,
       })
     : "";
   const secretSecured = secretCopied || tokenAcknowledged;
@@ -319,7 +319,7 @@ export function ConnectAgentDialog({
   function handleOpenChange(nextOpen: boolean) {
     if (nextOpen) {
       setClient("claude-code");
-      setName(`Claude Code — ${projectName}`);
+      setName(`Claude Code — ${organizationName}`);
       setNameEdited(false);
       setExpiration("never");
       setCustomDays("");
@@ -344,7 +344,7 @@ export function ConnectAgentDialog({
     setSetupCopied(false);
     setCopyError(null);
     if (!nameEdited) {
-      setName(`${CLIENT_LABELS[nextClient]} — ${projectName}`);
+      setName(`${CLIENT_LABELS[nextClient]} — ${organizationName}`);
     }
   }
 
@@ -367,7 +367,7 @@ export function ConnectAgentDialog({
     const input = {
       name: name.trim(),
       capabilities: [...CAPABILITIES],
-      projectId,
+      organizationId,
       ...(expiration === "never" ? {} : { expirationDays: selectedDays }),
     };
 
@@ -573,8 +573,8 @@ export function ConnectAgentDialog({
               <DialogHeader>
                 <DialogTitle>Connect agent</DialogTitle>
                 <DialogDescription>
-                  Create a project-scoped connection for{" "}
-                  <strong>{projectName}</strong>.
+                  Create an organization-scoped connection for{" "}
+                  <strong>{organizationName}</strong>.
                 </DialogDescription>
               </DialogHeader>
 
@@ -745,9 +745,9 @@ export function ConnectAgentDialog({
                   </p>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Limited to <strong>{projectName}</strong>. No access to
-                  organizations, members, billing, notification channels, or other
-                  projects.
+                  Limited to <strong>{organizationName}</strong>. No access to
+                  members, billing, notification channels, or other
+                  organizations.
                 </p>
               </div>
 

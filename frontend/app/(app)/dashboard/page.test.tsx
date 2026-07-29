@@ -42,8 +42,8 @@ vi.mock("@/lib/use-poll-when-visible", () => ({
   usePollWhenVisible: context.pollWhenVisible,
 }));
 
-vi.mock("@/components/app/connect-agent-dialog", () => ({
-  ConnectAgentDialog: () => null,
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn() }),
 }));
 
 vi.mock("@/components/ui/slider", () => ({
@@ -180,6 +180,24 @@ describe("DashboardPage", () => {
 
   it("requests notification channel selections with checks", () => {
     expect(print(CHECKS)).toContain("notificationChannelIds");
+  });
+
+  it("restores Connect agent entry points for the active organization", async () => {
+    renderDashboard("SIGNAL");
+
+    await screen.findByText("No checks yet. Start monitoring your first service.");
+    const entryPoints = screen.getAllByRole("button", {
+      name: "Connect agent",
+    });
+    expect(entryPoints).toHaveLength(2);
+
+    fireEvent.click(entryPoints[0]);
+    const dialog = await screen.findByRole("dialog", {
+      name: "Connect agent",
+    });
+    expect(dialog).toHaveTextContent(
+      "Create an organization-scoped connection for Signal org.",
+    );
   });
 
   it("uses the SIGNAL creator floor when a SOLO collaborator creates a check", async () => {

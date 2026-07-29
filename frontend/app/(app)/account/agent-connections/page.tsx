@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery } from "@apollo/client/react";
 import { KeyRound, RotateCcw, ShieldCheck } from "lucide-react";
 
 import { API_TOKENS, REVOKE_API_TOKEN } from "@/lib/queries";
+import { useOrg } from "@/lib/org-context";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import {
@@ -23,6 +24,7 @@ interface ApiToken {
   name: string;
   prefix: string;
   scopes: string[];
+  organizationId: string | null;
   projectId: string | null;
   projectName: string | null;
   organizationName: string | null;
@@ -56,12 +58,12 @@ function connectionStatus(token: ApiToken, now: Date): ConnectionStatus {
   if (token.expiresAt && new Date(token.expiresAt).getTime() <= now.getTime()) {
     return "Expired";
   }
-  if (isDeletedProjectConnection(token)) return "Inactive";
+  if (isDeletedWorkspaceConnection(token)) return "Inactive";
   return "Active";
 }
 
-function isDeletedProjectConnection(token: ApiToken) {
-  return token.projectId === null && token.projectName !== null;
+function isDeletedWorkspaceConnection(token: ApiToken) {
+  return token.organizationId === null && token.projectName !== null;
 }
 
 function formatDate(value: string) {
@@ -118,6 +120,7 @@ function LoadingRows() {
 }
 
 export function AgentConnectionsPage({ now = systemNow }: { now?: () => Date }) {
+  const { activeOrg } = useOrg();
   const { data, loading, error, refetch } = useQuery<ApiTokensData>(API_TOKENS, {
     fetchPolicy: "cache-and-network",
   });
@@ -130,7 +133,15 @@ export function AgentConnectionsPage({ now = systemNow }: { now?: () => Date }) 
   const [revoking, setRevoking] = useState(false);
   const [currentTime, setCurrentTime] = useState(now);
   const revokingRef = useRef(false);
-  const connections = data?.apiTokens ?? noConnections;
+  const connections = useMemo(
+    () =>
+      (data?.apiTokens ?? noConnections).filter(
+        (token) =>
+          token.organizationId === activeOrg?.id ||
+          token.organizationId === null,
+      ),
+    [activeOrg?.id, data?.apiTokens],
+  );
 
   useEffect(() => {
     const currentTimestamp = currentTime.getTime();
@@ -224,7 +235,7 @@ export function AgentConnectionsPage({ now = systemNow }: { now?: () => Date }) 
               Connection history
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Expired, revoked, and deleted-project credentials remain here for your
+              Expired, revoked, and unavailable-workspace credentials remain here for your
               records.
             </p>
           </div>
@@ -252,7 +263,7 @@ export function AgentConnectionsPage({ now = systemNow }: { now?: () => Date }) 
             <KeyRound className="mx-auto h-7 w-7 text-muted-foreground" aria-hidden="true" />
             <h3 className="mt-3 font-heading font-medium">No agent connections yet</h3>
             <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
-              Open a project and choose Connect agent to create one.
+              Open an organization and choose Connect agent to create one.
             </p>
             <Link href="/dashboard" className={`${buttonVariants()} mt-4`}>
               Go to dashboard
@@ -262,13 +273,9 @@ export function AgentConnectionsPage({ now = systemNow }: { now?: () => Date }) 
           <ul className="divide-y">
             {connections.map((token) => {
               const status = connectionStatus(token, currentTime);
-              const historicalLocation =
-                token.organizationName && token.projectName
-                  ? `${token.organizationName} / ${token.projectName}`
-                  : token.projectName ?? token.organizationName ?? "All projects";
-              const location = isDeletedProjectConnection(token)
-                ? `Deleted project · ${historicalLocation}`
-                : historicalLocation;
+              const location = isDeletedWorkspaceConnection(token)
+                ? "Workspace unavailable"
+                : token.organizationName ?? "All organizations";
               return (
                 <li
                   key={token.id}

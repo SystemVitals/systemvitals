@@ -16,21 +16,25 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(search),
 }));
 
-const pendingPreview = {
+type PreviewFixture = {
+  status: "PENDING" | "EXPIRED" | "INVALID";
+  maskedEmail: string | null;
+  organizationName: string | null;
+  projectName: string | null;
+  expiresAt: string | null;
+};
+
+const pendingPreview: PreviewFixture = {
   status: "PENDING",
   maskedEmail: "a•••••@example.com",
-  projectName: "Production",
+  organizationName: "Acme",
+  projectName: "Default",
   expiresAt: "2026-07-28T12:00:00.000Z",
 };
 
 function previewMock(
-  preview: typeof pendingPreview | {
-    status: "EXPIRED" | "INVALID";
-    maskedEmail: string | null;
-    projectName: string | null;
-    expiresAt: string | null;
-  } = pendingPreview,
-  result = vi.fn(() => ({
+  preview: PreviewFixture = pendingPreview,
+  result: MockedResponse["result"] = vi.fn(() => ({
     data: { emailChannelVerificationPreview: preview },
   })),
 ): MockedResponse {
@@ -44,12 +48,13 @@ function previewMock(
 }
 
 function verificationMock(
-  result = vi.fn(() => ({
+  result: MockedResponse["result"] = vi.fn(() => ({
     data: {
       verifyEmailChannel: {
         status: "VERIFIED",
         maskedEmail: "a•••••@example.com",
-        projectName: "Production",
+        organizationName: "Acme",
+        projectName: "Default",
       },
     },
   })),
@@ -90,6 +95,7 @@ describe("/verify-email", () => {
         verifyEmailChannel: {
           status: "VERIFIED",
           maskedEmail: pendingPreview.maskedEmail,
+          organizationName: pendingPreview.organizationName,
           projectName: pendingPreview.projectName,
         },
       },
@@ -104,11 +110,13 @@ describe("/verify-email", () => {
     expect(verify).not.toHaveBeenCalled();
   });
 
-  it("shows the masked recipient, project, and dominant verification action", async () => {
+  it("shows the masked recipient, organization, and dominant verification action", async () => {
     renderPage([previewMock()]);
 
     expect(await screen.findByText("a•••••@example.com")).toBeInTheDocument();
-    expect(screen.getByText("Production")).toBeInTheDocument();
+    expect(screen.getByText("Acme")).toBeInTheDocument();
+    expect(screen.getByText("Organization")).toBeInTheDocument();
+    expect(screen.queryByText("Default")).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: "Verify email" }),
     ).toBeEnabled();
@@ -120,6 +128,7 @@ describe("/verify-email", () => {
         verifyEmailChannel: {
           status: "VERIFIED",
           maskedEmail: pendingPreview.maskedEmail,
+          organizationName: pendingPreview.organizationName,
           projectName: pendingPreview.projectName,
         },
       },
@@ -156,7 +165,8 @@ describe("/verify-email", () => {
     ).toBeInTheDocument();
     expect(replaceState).toHaveBeenCalledWith(null, "", "/verify-email");
     expect(screen.getByText("a•••••@example.com")).toBeInTheDocument();
-    expect(screen.getByText("Production")).toBeInTheDocument();
+    expect(screen.getByText("Acme")).toBeInTheDocument();
+    expect(screen.queryByText("Default")).not.toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /log in/i }),
     ).toHaveAttribute("href", "/login");
@@ -189,6 +199,7 @@ describe("/verify-email", () => {
         verifyEmailChannel: {
           status: "VERIFIED",
           maskedEmail: pendingPreview.maskedEmail,
+          organizationName: pendingPreview.organizationName,
           projectName: pendingPreview.projectName,
         },
       },
@@ -240,6 +251,7 @@ describe("/verify-email", () => {
       previewMock({
         status,
         maskedEmail: null,
+        organizationName: null,
         projectName: null,
         expiresAt: null,
       }),
@@ -323,6 +335,19 @@ describe("/verify-email", () => {
     expect(
       screen.getByRole("link", { name: /log in/i }),
     ).toHaveAttribute("href", "/login");
+  });
+
+  it("uses legacy projectName only as a rolling-deployment fallback", async () => {
+    renderPage([
+      previewMock({
+        ...pendingPreview,
+        organizationName: null,
+        projectName: "Legacy workspace",
+      }),
+    ]);
+
+    expect(await screen.findByText("Legacy workspace")).toBeInTheDocument();
+    expect(screen.getByText("Organization")).toBeInTheDocument();
   });
 
   it("never renders or persists the raw token", async () => {

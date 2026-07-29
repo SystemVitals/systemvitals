@@ -11,11 +11,26 @@ import { ConnectAgentDialog } from "./connect-agent-dialog";
 import { AgentConnectionsPage } from "@/app/(app)/account/agent-connections/page";
 
 const plaintext = "svt_once_only_secret";
-const project = { projectId: "project_123", projectName: "Production" };
+const organization = { organizationId: "org_123", organizationName: "Production" };
 const mockRouterPush = vi.fn();
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockRouterPush }),
+}));
+
+vi.mock("@/lib/org-context", () => ({
+  useOrg: () => ({
+    activeOrg: {
+      id: "org_123",
+      name: "Production",
+      slug: "production",
+      role: "OWNER",
+      plan: "SIGNAL",
+      creatorUserId: "user-1",
+      creatorLabel: "owner@example.com",
+      pingKey: "ping-key",
+    },
+  }),
 }));
 
 function successResult(name: string) {
@@ -25,7 +40,7 @@ function successResult(name: string) {
         id: "token_123",
         name,
         scopes: ["checks:read", "checks:write"],
-        projectId: "project_123",
+        organizationId: "org_123",
         expiresAt: null,
         plaintext,
       },
@@ -37,7 +52,7 @@ function successMock(
   input: Record<string, unknown> = {
     name: "Claude Code — Production",
     capabilities: ["checks:read", "checks:write"],
-    projectId: "project_123",
+    organizationId: "org_123",
   },
 ): MockedResponse {
   return {
@@ -54,7 +69,7 @@ function transportFailureMock(): MockedResponse {
         input: {
           name: "Claude Code — Production",
           capabilities: ["checks:read", "checks:write"],
-          projectId: "project_123",
+          organizationId: "org_123",
         },
       },
     },
@@ -65,7 +80,7 @@ function transportFailureMock(): MockedResponse {
 function renderDialog(mocks: MockedResponse[] = [successMock()]) {
   return render(
     <MockedProvider mocks={mocks}>
-      <ConnectAgentDialog {...project} />
+      <ConnectAgentDialog {...organization} />
     </MockedProvider>,
   );
 }
@@ -82,7 +97,7 @@ function renderDialogWithInternalLink(
         <Link href="/account" target="_parent" onClick={(event) => event.preventDefault()}>Account parent</Link>
         <Link href="/organizations" target="_top" onClick={(event) => event.preventDefault()}>Organizations top</Link>
         <Link href="/status-pages" target="_blank" onClick={(event) => event.preventDefault()}>Status pages new tab</Link>
-        <ConnectAgentDialog {...project} />
+        <ConnectAgentDialog {...organization} />
       </div>
     </MockedProvider>,
   );
@@ -92,7 +107,7 @@ function renderStrictDialog(mocks: MockedResponse[] = [successMock()]) {
   return render(
     <StrictMode>
       <MockedProvider mocks={mocks}>
-        <ConnectAgentDialog {...project} />
+        <ConnectAgentDialog {...organization} />
       </MockedProvider>
     </StrictMode>,
   );
@@ -120,14 +135,14 @@ describe("ConnectAgentDialog", () => {
     });
   });
 
-  it("names the project and makes the fixed authority and exclusions explicit", async () => {
+  it("names the organization and makes the fixed authority and exclusions explicit", async () => {
     const dialog = await openDialogWithRender();
 
     expect(within(dialog).getAllByText("Production").length).toBeGreaterThan(0);
     expect(within(dialog).getByText(/view checks and recent status/i)).toBeInTheDocument();
     expect(within(dialog).getByText(/create, edit, pause, resume, and delete checks/i)).toBeInTheDocument();
     expect(
-      within(dialog).getByText(/no access to organizations, members, billing, notification channels, or other projects/i),
+      within(dialog).getByText(/no access to members, billing, notification channels, or other organizations/i),
     ).toBeInTheDocument();
     expect(within(dialog).getByLabelText(/connection name/i)).toHaveValue("Claude Code — Production");
   });
@@ -200,12 +215,12 @@ describe("ConnectAgentDialog", () => {
     expect(dispatchBeforeUnload()).toBe(false);
   });
 
-  it("submits the project, fixed capabilities, name, and expiration days", async () => {
+  it("submits the organization, fixed capabilities, name, and expiration days", async () => {
     renderDialog([
       successMock({
         name: "Deploy bot",
         capabilities: ["checks:read", "checks:write"],
-        projectId: "project_123",
+        organizationId: "org_123",
         expirationDays: 30,
       }),
     ]);
@@ -528,7 +543,7 @@ describe("ConnectAgentDialog", () => {
 
     rerender(
       <MockedProvider mocks={[]}>
-        <ConnectAgentDialog {...project} />
+        <ConnectAgentDialog {...organization} />
       </MockedProvider>,
     );
     fireEvent.click(screen.getByRole("button", { name: /connect agent/i }));
@@ -539,7 +554,7 @@ describe("ConnectAgentDialog", () => {
     const cache = new InMemoryCache();
     render(
       <MockedProvider mocks={[successMock()]} cache={cache}>
-        <ConnectAgentDialog {...project} />
+        <ConnectAgentDialog {...organization} />
       </MockedProvider>,
     );
     await createConnection();
@@ -558,9 +573,10 @@ describe("ConnectAgentDialog", () => {
       name: "Claude Code — Production",
       prefix: "svt_new",
       scopes: ["checks:read", "checks:write"],
-      projectId: "project_123",
-      projectName: "Production",
-      organizationName: "Acme",
+      organizationId: "org_123",
+      organizationName: "Production",
+      projectId: null,
+      projectName: null,
       createdAt: "2026-07-24T12:00:00.000Z",
       expiresAt: null,
       lastUsedAt: null,
@@ -568,7 +584,7 @@ describe("ConnectAgentDialog", () => {
     };
     const creation = render(
       <MockedProvider mocks={[successMock()]} cache={cache}>
-        <ConnectAgentDialog {...project} />
+        <ConnectAgentDialog {...organization} />
       </MockedProvider>,
     );
     await createConnection();
@@ -672,7 +688,7 @@ describe("ConnectAgentDialog", () => {
       <MockedProvider mocks={[{ ...successMock(), delay: 200 }]}>
         <div>
           <Link href="/channels">Channels</Link>
-          <ConnectAgentDialog {...project} />
+          <ConnectAgentDialog {...organization} />
         </div>
       </MockedProvider>,
     );

@@ -162,6 +162,7 @@ export const EMAIL_CHANNEL_VERIFICATION_PREVIEW = gql`
     emailChannelVerificationPreview(token: $token) {
       status
       maskedEmail
+      organizationName
       projectName
       expiresAt
     }
@@ -173,6 +174,7 @@ export const VERIFY_EMAIL_CHANNEL = gql`
     verifyEmailChannel(token: $token) {
       status
       maskedEmail
+      organizationName
       projectName
     }
   }
@@ -206,13 +208,13 @@ export const TELEGRAM_CONNECTION_PREVIEW = gql`
 `;
 
 export const CONNECT_TELEGRAM_CHANNEL = gql`
-  mutation connectTelegramChannel($token: String!, $projectId: ID!) {
-    connectTelegramChannel(token: $token, projectId: $projectId) {
+  mutation connectTelegramChannel($token: String!, $organizationId: ID!) {
+    connectTelegramChannel(token: $token, organizationId: $organizationId) {
       id
       type
       configJson
       enabled
-      projectId
+      organizationId
     }
   }
 `;
@@ -485,6 +487,7 @@ export const CREATE_API_TOKEN = gql`
       id
       name
       scopes
+      organizationId
       projectId
       expiresAt
       plaintext
@@ -499,6 +502,7 @@ export const API_TOKENS = gql`
       name
       prefix
       scopes
+      organizationId
       projectId
       projectName
       organizationName

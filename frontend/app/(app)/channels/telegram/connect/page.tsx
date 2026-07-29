@@ -29,17 +29,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { useAuth } from "@/lib/auth-context";
 import { useOrg } from "@/lib/org-context";
 import {
   CONNECT_TELEGRAM_CHANNEL,
@@ -58,13 +47,6 @@ interface TelegramPreview {
 
 interface PreviewData {
   telegramConnectionPreview: TelegramPreview;
-}
-
-interface ProjectOption {
-  id: string;
-  name: string;
-  organizationId: string;
-  organizationName: string;
 }
 
 interface Recovery {
@@ -98,7 +80,7 @@ function recoveryFor(message: string): Recovery {
     return {
       title: "This connection link was already used",
       description:
-        "Request a new connection link in Telegram to connect another project.",
+        "Request a new connection link in Telegram to connect another organization.",
     };
   }
 
@@ -109,7 +91,7 @@ function recoveryFor(message: string): Recovery {
     return {
       title: "This Telegram destination is already connected",
       description:
-        "Choose another project, or review the existing destination on the Channels page.",
+        "Review the existing destination on the Channels page.",
     };
   }
 
@@ -128,14 +110,14 @@ function mutationRecoveryFor(message: string): Recovery {
   const normalized = message.toLowerCase();
 
   if (
-    normalized.includes("project not found") ||
+    normalized.includes("organization not found") ||
     normalized.includes("not a member of this organization")
   ) {
     return {
-      title: "Project access changed",
+      title: "Organization access changed",
       description:
-        "You no longer have access to that project. Choose another accessible project and try again, or refresh the page.",
-      actionLabel: "Choose another project",
+        "The active organization is no longer available. Return to Channels and choose an accessible organization.",
+      actionLabel: "Return to channels",
     };
   }
 
@@ -207,22 +189,10 @@ function ChallengeConfirmation() {
   const router = useRouter();
   const client = useApolloClient();
   const searchParams = useSearchParams();
-  const { user } = useAuth();
-  const { setActiveOrgId } = useOrg();
+  const { activeOrg } = useOrg();
   const tokenRef = useRef<string | null>(null);
   const handledRef = useRef(false);
   const [missingToken, setMissingToken] = useState(false);
-  const projects: ProjectOption[] =
-    user?.organizations.flatMap((organization) =>
-      organization.projects.map((project) => ({
-        id: project.id,
-        name: project.name,
-        organizationId: organization.id,
-        organizationName: organization.name,
-      })),
-    ) ?? [];
-  const firstProjectId = projects.at(0)?.id ?? "";
-  const [selectedProjectId, setSelectedProjectId] = useState(firstProjectId);
   const [mutationRecovery, setMutationRecovery] = useState<Recovery | null>(
     null,
   );
@@ -271,26 +241,18 @@ function ChallengeConfirmation() {
     (preview.chatType.toLowerCase() === "private"
       ? "Unnamed private chat"
       : "Unnamed Telegram chat");
-  const selectItems = projects.map((project) => ({
-    value: project.id,
-    label: `${project.organizationName} / ${project.name}`,
-  }));
-
   async function handleConnect() {
-    if (!selectedProjectId || connecting) return;
+    if (!activeOrg || connecting) return;
 
     const token = tokenRef.current;
-    const project = projects.find(
-      (candidate) => candidate.id === selectedProjectId,
-    );
-    if (!token || !project) return;
+    if (!token) return;
 
     setMutationRecovery(null);
     try {
       await connectTelegram({
         variables: {
           token,
-          projectId: project.id,
+          organizationId: activeOrg.id,
         },
       });
     } catch (connectionError) {
@@ -303,11 +265,10 @@ function ChallengeConfirmation() {
     client.cache.evict({
       id: "ROOT_QUERY",
       fieldName: "channels",
-      args: { projectId: project.id },
+      args: { organizationId: activeOrg.id },
     });
     client.cache.gc();
-    setActiveOrgId(project.organizationId);
-    router.push(`/channels?projectId=${encodeURIComponent(project.id)}`);
+    router.push("/channels");
   }
 
   return (
@@ -322,8 +283,7 @@ function ChallengeConfirmation() {
             <h1 className="text-xl sm:text-2xl">Confirm Telegram connection</h1>
           </CardTitle>
           <CardDescription>
-            Review the destination, then choose which project should send
-            alerts here.
+            Review the destination, then connect it to the active organization.
           </CardDescription>
         </CardHeader>
 
@@ -360,57 +320,16 @@ function ChallengeConfirmation() {
             </p>
           </section>
 
-          <section
-            aria-labelledby="project-destination-heading"
-            className="space-y-2"
-          >
-            <div>
-              <Label
-                id="project-destination-heading"
-                htmlFor="telegram-project"
-              >
-                Destination project
-              </Label>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Alerts from this project will be delivered to the destination
-                above.
-              </p>
-            </div>
-
-            {projects.length > 0 ? (
-              <Select
-                items={selectItems}
-                value={selectedProjectId}
-                onValueChange={(value) => {
-                  if (value) setSelectedProjectId(value);
-                }}
-              >
-                <SelectTrigger
-                  id="telegram-project"
-                  aria-labelledby="project-destination-heading"
-                  className="h-10 w-full"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent align="start">
-                  {user?.organizations.map((organization) => (
-                    <SelectGroup key={organization.id}>
-                      <SelectLabel>{organization.name}</SelectLabel>
-                      {organization.projects.map((project) => (
-                        <SelectItem key={project.id} value={project.id}>
-                          {project.name}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <p className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                No accessible projects are available. Create a project before
-                connecting this destination.
-              </p>
-            )}
+          <section aria-labelledby="organization-destination-heading">
+            <h2
+              id="organization-destination-heading"
+              className="mb-2 font-mono text-xs font-medium uppercase tracking-wider text-muted-foreground"
+            >
+              Organization
+            </h2>
+            <p className="rounded-lg border bg-background p-4 text-sm font-medium">
+              {activeOrg?.name ?? "No active organization"}
+            </p>
           </section>
 
           <div className="flex flex-col-reverse gap-2 border-t pt-5 sm:flex-row sm:items-center sm:justify-between">
@@ -420,7 +339,7 @@ function ChallengeConfirmation() {
             </p>
             <Button
               onClick={() => void handleConnect()}
-              disabled={!selectedProjectId || connecting}
+              disabled={!activeOrg || connecting}
               className="w-full gap-2 sm:w-auto"
             >
               {connecting ? "Connecting…" : "Connect Telegram"}
@@ -443,7 +362,15 @@ function ChallengeConfirmation() {
               {mutationRecovery?.description}
             </DialogDescription>
           </DialogHeader>
-          <Button onClick={() => setMutationRecovery(null)}>
+          <Button
+            onClick={() => {
+              if (mutationRecovery?.actionLabel === "Return to channels") {
+                router.push("/channels");
+              } else {
+                setMutationRecovery(null);
+              }
+            }}
+          >
             {mutationRecovery?.actionLabel ?? "Dismiss"}
           </Button>
         </DialogContent>

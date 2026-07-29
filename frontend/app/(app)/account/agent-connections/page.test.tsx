@@ -14,6 +14,7 @@ interface TestToken {
   name: string;
   prefix: string;
   scopes: string[];
+  organizationId: string | null;
   projectId: string | null;
   projectName: string | null;
   organizationName: string | null;
@@ -28,6 +29,7 @@ const active: TestToken = {
   name: "Codex — Production",
   prefix: "svt_abcd",
   scopes: ["checks:read", "checks:write"],
+  organizationId: "org-1",
   projectId: "project-1",
   projectName: "Production",
   organizationName: "Acme",
@@ -54,10 +56,34 @@ const deletedProject: TestToken = {
   ...active,
   id: "deleted-project",
   name: "Historical project agent",
+  organizationId: null,
   projectId: null,
   projectName: "Retired production",
   organizationName: "Acme",
 };
+
+const otherOrganization: TestToken = {
+  ...active,
+  id: "other-organization",
+  name: "Other organization agent",
+  organizationId: "org-2",
+  organizationName: "Other organization",
+};
+
+vi.mock("@/lib/org-context", () => ({
+  useOrg: () => ({
+    activeOrg: {
+      id: "org-1",
+      name: "Acme",
+      slug: "acme",
+      role: "OWNER",
+      plan: "SIGNAL",
+      creatorUserId: "user-1",
+      creatorLabel: "owner@example.com",
+      pingKey: "ping-key",
+    },
+  }),
+}));
 
 function queryMock(tokens: TestToken[] = [active, expired, revoked]): MockedResponse {
   return {
@@ -87,6 +113,7 @@ describe("AgentConnectionsPage", () => {
     name
     prefix
     scopes
+    organizationId
     projectId
     projectName
     organizationName
@@ -109,7 +136,7 @@ describe("AgentConnectionsPage", () => {
     expect(within(activeRow).getByText("Active")).toBeInTheDocument();
     expect(within(expiredRow).getByText("Expired")).toBeInTheDocument();
     expect(within(revokedRow).getByText("Revoked")).toBeInTheDocument();
-    expect(within(activeRow).getByText("Acme / Production")).toBeInTheDocument();
+    expect(within(activeRow).getByText("Acme")).toBeInTheDocument();
     expect(within(activeRow).getByText("Read checks")).toBeInTheDocument();
     expect(within(activeRow).getByText("Manage checks")).toBeInTheDocument();
     expect(within(activeRow).getByText("Never")).toBeInTheDocument();
@@ -120,11 +147,12 @@ describe("AgentConnectionsPage", () => {
     expect(within(revokedRow).queryByRole("button", { name: /revoke/i })).toBeNull();
   });
 
-  it("shows deleted-project scoped credentials as inactive history without changing legacy tokens", async () => {
+  it("uses neutral deleted-workspace copy without exposing a legacy project name", async () => {
     const legacy = {
       ...active,
       id: "legacy",
       name: "Legacy account token",
+      organizationId: null,
       projectId: null,
       projectName: null,
       organizationName: null,
@@ -139,7 +167,10 @@ describe("AgentConnectionsPage", () => {
       name: /legacy account token/i,
     });
     expect(within(deletedRow).getByText("Inactive")).toBeInTheDocument();
-    expect(within(deletedRow).getByText(/deleted project/i)).toBeInTheDocument();
+    expect(
+      within(deletedRow).getByText("Workspace unavailable"),
+    ).toBeInTheDocument();
+    expect(within(deletedRow).queryByText("Retired production")).toBeNull();
     expect(within(deletedRow).queryByText("Active")).not.toBeInTheDocument();
     expect(
       within(deletedRow).getByRole("button", {
@@ -147,7 +178,18 @@ describe("AgentConnectionsPage", () => {
       }),
     ).toBeEnabled();
     expect(within(legacyRow).getByText("Active")).toBeInTheDocument();
-    expect(within(legacyRow).getByText("All projects")).toBeInTheDocument();
+    expect(within(legacyRow).getByText("All organizations")).toBeInTheDocument();
+  });
+
+  it("filters canonical connection history to the active organization", async () => {
+    renderPage([queryMock([active, otherOrganization])]);
+
+    expect(
+      await screen.findByRole("listitem", { name: /codex — production/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("listitem", { name: /other organization agent/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("revokes an expired credential that has not already been revoked", async () => {
@@ -189,14 +231,16 @@ describe("AgentConnectionsPage", () => {
     expect(await screen.findByRole("listitem", { name: /codex — production/i })).toBeInTheDocument();
   });
 
-  it("directs an empty account to a project's Connect agent action", async () => {
+  it("directs an empty organization to its Connect agent action", async () => {
     renderPage([queryMock([])]);
     expect(await screen.findByText(/no agent connections yet/i)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /go to dashboard/i })).toHaveAttribute(
       "href",
       "/dashboard",
     );
-    expect(screen.getByText(/open a project and choose connect agent/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/open an organization and choose connect agent/i),
+    ).toBeInTheDocument();
   });
 
   it("cancels revocation without mutating", async () => {
