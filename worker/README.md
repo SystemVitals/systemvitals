@@ -26,6 +26,12 @@ channel.
 The worker emits exactly two notification events: an immediate alert on a DOWN
 transition and a recovery notification on the following DOWN-to-UP transition.
 
+Telegram DOWN and recovery alerts use HTML formatting with a canonical check
+link, project and cadence context, successful-ping count and recency,
+sibling-check health, and measured downtime on recovery. User-controlled names
+are HTML-escaped and link previews are disabled. Email, Slack, and webhook
+message formats remain independent.
+
 ## Queues
 
 The active queues are `probe` for scheduled checks, `alert` for transition
