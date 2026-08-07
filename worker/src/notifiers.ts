@@ -5,6 +5,7 @@ import { assertTargetAllowed } from "./ssrf.js";
 export interface NotifyMessage {
   subject: string;
   text: string;
+  telegramText?: string;
   kind: "down" | "recovery";
   check: { id: string; name: string; status: string };
 }
@@ -170,10 +171,16 @@ export async function dispatchChannel(
         chat_id: string;
         text: string;
         message_thread_id?: number;
+        parse_mode?: "HTML";
+        link_preview_options?: { is_disabled: true };
       } = {
         chat_id: chatId,
-        text: `${subject}\n${text}`,
+        text: msg.telegramText ?? `${subject}\n${text}`,
       };
+      if (msg.telegramText !== undefined) {
+        body.parse_mode = "HTML";
+        body.link_preview_options = { is_disabled: true };
+      }
       if (messageThreadId !== undefined) {
         if (
           typeof messageThreadId !== "number" ||

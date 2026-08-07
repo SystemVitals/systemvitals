@@ -11,12 +11,14 @@ import { PrismaClient, CheckStatus, ChannelType } from "@systemvitals/database";
 import { handleAlert } from "../src/alert-handler.js";
 import type { NotifierDeps } from "../src/notifiers.js";
 import { CollectingMailer } from "../src/mailer.js";
+import { config } from "../src/config.js";
 
 const prisma = new PrismaClient();
 
 // IDs scoped to this test file
 let userId: string;
 let orgId: string;
+let telegramOrganizationSlug: string;
 let projectId: string;
 let checkWithChannelId: string;
 let checkNoChannelId: string;
@@ -33,6 +35,7 @@ let dynamicCheckId: string;
 let telegramProjectId: string;
 let telegramCheckId: string;
 let telegramChannelId: string;
+let telegramSiblingCheckId: string;
 
 const TEST_EMAIL = `alert-handler-test-${Date.now()}@test.invalid`;
 const OPS_EMAIL = "ops@example.com";
@@ -185,20 +188,49 @@ beforeAll(async () => {
   });
   dynamicCheckId = dynamicCheck.id;
 
-  const telegramProject =
-    await createProjectInOwnOrganization("telegram");
+  const telegramOrganization = await prisma.organization.create({
+    data: {
+      name: "Example Workspace",
+      slug: `example-workspace-${Date.now()}`,
+      creatorUserId: userId,
+      memberships: {
+        create: { userId, role: "OWNER" },
+      },
+    },
+  });
+  telegramOrganizationSlug = telegramOrganization.slug;
+  const telegramProject = await prisma.project.create({
+    data: {
+      name: "Example Project",
+      slug: "example-project",
+      organizationId: telegramOrganization.id,
+    },
+  });
   telegramProjectId = telegramProject.id;
 
   const telegramCheck = await prisma.check.create({
     data: {
-      name: "Managed Telegram Check",
-      slug: "managed-telegram-check",
+      name: "Dashboard Sync",
+      slug: "dashboard-sync",
       type: "HEARTBEAT",
       status: "DOWN",
+      periodSeconds: 86_400,
+      graceSeconds: 3_600,
       projectId: telegramProjectId,
     },
   });
   telegramCheckId = telegramCheck.id;
+
+  const telegramSiblingCheck = await prisma.check.create({
+    data: {
+      name: "Another healthy check",
+      slug: "another-healthy-check",
+      type: "HEARTBEAT",
+      status: "UP",
+      projectId: telegramProjectId,
+    },
+  });
+  telegramSiblingCheckId = telegramSiblingCheck.id;
 
   const telegramChannel = await prisma.notificationChannel.create({
     data: {
@@ -238,6 +270,7 @@ afterAll(async () => {
           selectedCheckId,
           dynamicCheckId,
           telegramCheckId,
+          telegramSiblingCheckId,
         ],
       },
     },
@@ -251,6 +284,7 @@ afterAll(async () => {
           selectedCheckId,
           dynamicCheckId,
           telegramCheckId,
+          telegramSiblingCheckId,
         ],
       },
     },
@@ -725,8 +759,31 @@ describe("handleAlert", () => {
     await prisma.alertLog.deleteMany({ where: { checkId: selectedCheckId } });
   });
 
-  it("delivers a managed Telegram row with the environment token and records success", async () => {
+  it("formats a DOWN Telegram alert like a compact check status report", async () => {
     await prisma.alertLog.deleteMany({ where: { checkId: telegramCheckId } });
+    await prisma.checkEvent.deleteMany({ where: { checkId: telegramCheckId } });
+    const now = new Date("2026-08-07T12:00:00.000Z");
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    await prisma.check.update({
+      where: { id: telegramCheckId },
+      data: { status: "DOWN", lastEventAt: now },
+    });
+    await prisma.checkEvent.createMany({
+      data: [
+        {
+          checkId: telegramCheckId,
+          status: "UP",
+          timestamp: new Date("2026-08-05T10:00:00.000Z"),
+        },
+        {
+          checkId: telegramCheckId,
+          status: "UP",
+          timestamp: new Date("2026-08-06T11:00:00.000Z"),
+        },
+        { checkId: telegramCheckId, status: "DOWN", timestamp: now },
+      ],
+    });
     const httpPost = vi.fn().mockResolvedValue({ ok: true, status: 200 });
     const telegramPost = vi.fn().mockResolvedValue({
       ok: true,
@@ -740,26 +797,45 @@ describe("handleAlert", () => {
       telegramBotToken: "managed-test-token",
     };
 
-    const sent = await handleAlert(prisma, deps, {
-      checkId: telegramCheckId,
-      kind: "down",
-    });
+    let sent = 0;
+    try {
+      sent = await handleAlert(prisma, deps, {
+        checkId: telegramCheckId,
+        kind: "down",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
 
     expect(sent).toBe(1);
     expect(httpPost).not.toHaveBeenCalled();
     expect(telegramPost).toHaveBeenCalledOnce();
     const [url, body] = telegramPost.mock.calls[0] as [
       string,
-      { chat_id: string; text: string },
+      {
+        chat_id: string;
+        text: string;
+        parse_mode: string;
+        link_preview_options: { is_disabled: boolean };
+      },
     ];
     expect(url).toBe(
       "https://api.telegram.org/botmanaged-test-token/sendMessage",
     );
     expect(body).toEqual({
       chat_id: "-1001234567890",
-      text: expect.stringContaining(
-        '[SystemVitals] Managed Telegram Check is DOWN\nALERT: "Managed Telegram Check" is DOWN.',
-      ),
+      parse_mode: "HTML",
+      link_preview_options: { is_disabled: true },
+      text: [
+        `🔴 The check <a href="${config.appUrl}/${telegramOrganizationSlug}/dashboard-sync">Dashboard Sync</a> is <b>DOWN</b> (success signal did not arrive on time, grace time passed).`,
+        "",
+        "<b>Project:</b> Example Project",
+        "<b>Period:</b> 1 day",
+        "<b>Total Pings:</b> 2",
+        "<b>Last Ping:</b> Success, 1 day, 1 hour ago",
+        "",
+        "All the other checks are up.",
+      ].join("\n"),
     });
 
     const logs = await prisma.alertLog.findMany({
@@ -769,6 +845,85 @@ describe("handleAlert", () => {
     expect(logs[0]?.payload).toEqual({ type: "TELEGRAM", ok: true });
 
     await prisma.alertLog.deleteMany({ where: { checkId: telegramCheckId } });
+    await prisma.checkEvent.deleteMany({ where: { checkId: telegramCheckId } });
+  });
+
+  it("formats a recovery Telegram alert with the measured downtime", async () => {
+    await prisma.alertLog.deleteMany({ where: { checkId: telegramCheckId } });
+    await prisma.checkEvent.deleteMany({ where: { checkId: telegramCheckId } });
+    const now = new Date("2026-08-07T12:00:00.000Z");
+    const downAt = new Date("2026-08-06T13:00:00.000Z");
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    await prisma.check.update({
+      where: { id: telegramCheckId },
+      data: { status: "UP", lastEventAt: now },
+    });
+    await prisma.checkEvent.createMany({
+      data: [
+        {
+          checkId: telegramCheckId,
+          status: "UP",
+          timestamp: new Date("2026-08-05T10:00:00.000Z"),
+        },
+        {
+          checkId: telegramCheckId,
+          status: "UP",
+          timestamp: new Date("2026-08-06T11:00:00.000Z"),
+        },
+        { checkId: telegramCheckId, status: "DOWN", timestamp: downAt },
+        { checkId: telegramCheckId, status: "UP", timestamp: now },
+      ],
+    });
+    const telegramPost = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      body: { ok: true, result: { message_id: 457 } },
+    });
+    const deps: NotifierDeps = {
+      mailer: new CollectingMailer(),
+      httpPost: vi.fn().mockResolvedValue({ ok: true, status: 200 }),
+      telegramPost,
+      telegramBotToken: "managed-test-token",
+    };
+
+    try {
+      await handleAlert(prisma, deps, {
+        checkId: telegramCheckId,
+        kind: "recovery",
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+
+    const [, body] = telegramPost.mock.calls[0] as [
+      string,
+      {
+        chat_id: string;
+        text: string;
+        parse_mode: string;
+        link_preview_options: { is_disabled: boolean };
+      },
+    ];
+    expect(body).toEqual({
+      chat_id: "-1001234567890",
+      parse_mode: "HTML",
+      link_preview_options: { is_disabled: true },
+      text: [
+        `🟢 The check <a href="${config.appUrl}/${telegramOrganizationSlug}/dashboard-sync">Dashboard Sync</a> is now <b>UP</b>.`,
+        "The downtime lasted 23 hours, 0 minutes.",
+        "",
+        "<b>Project:</b> Example Project",
+        "<b>Period:</b> 1 day",
+        "<b>Total Pings:</b> 3",
+        "<b>Last Ping:</b> Success, now",
+        "",
+        "All the other checks are up.",
+      ].join("\n"),
+    });
+
+    await prisma.alertLog.deleteMany({ where: { checkId: telegramCheckId } });
+    await prisma.checkEvent.deleteMany({ where: { checkId: telegramCheckId } });
   });
 
   it("persists only a sanitized managed Telegram envelope failure", async () => {

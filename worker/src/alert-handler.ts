@@ -3,6 +3,11 @@ import { CheckStatus } from "@systemvitals/database";
 import type { AlertJob } from "./watchdog.js";
 import type { NotifierDeps } from "./notifiers.js";
 import { dispatchChannel } from "./notifiers.js";
+import { config } from "./config.js";
+import {
+  buildTelegramDownAlertMessage,
+  buildTelegramRecoveryAlertMessage,
+} from "./telegram-alert.js";
 
 /**
  * Process an alert job: dispatch its transition-time channel snapshot, or
@@ -22,7 +27,7 @@ export async function handleAlert(
   // Load the check (include its project for context)
   const check = await prisma.check.findUnique({
     where: { id: checkId },
-    include: { project: true },
+    include: { project: { include: { organization: true } } },
   });
 
   if (check == null) {
@@ -53,9 +58,60 @@ export async function handleAlert(
 
   const alertStatus = kind === "down" ? CheckStatus.DOWN : CheckStatus.UP;
 
+  let telegramText: string | undefined;
+  if (channels.some((channel) => channel.type === "TELEGRAM")) {
+    const [totalPings, lastSuccess, otherChecksNotUp] = await Promise.all([
+      prisma.checkEvent.count({
+        where: { checkId, status: CheckStatus.UP },
+      }),
+      prisma.checkEvent.findFirst({
+        where: { checkId, status: CheckStatus.UP },
+        orderBy: { timestamp: "desc" },
+        select: { timestamp: true },
+      }),
+      prisma.check.count({
+        where: {
+          projectId: check.projectId,
+          id: { not: check.id },
+          status: { not: CheckStatus.UP },
+        },
+      }),
+    ]);
+    const telegramContext = {
+      appUrl: config.appUrl,
+      organizationSlug: check.project.organization.slug,
+      project: check.project,
+      check,
+      totalPings,
+      lastSuccessAt: lastSuccess?.timestamp ?? null,
+      otherChecksNotUp,
+      now: new Date(),
+    };
+    if (kind === "down") {
+      telegramText = buildTelegramDownAlertMessage(telegramContext);
+    } else {
+      const downtimeStart = await prisma.checkEvent.findFirst({
+        where: {
+          checkId,
+          status: CheckStatus.DOWN,
+          ...(lastSuccess == null
+            ? {}
+            : { timestamp: { lt: lastSuccess.timestamp } }),
+        },
+        orderBy: { timestamp: "desc" },
+        select: { timestamp: true },
+      });
+      telegramText = buildTelegramRecoveryAlertMessage({
+        ...telegramContext,
+        downtimeStartedAt: downtimeStart?.timestamp ?? null,
+      });
+    }
+  }
+
   const msg = {
     subject,
     text,
+    telegramText,
     kind,
     check: { id: check.id, name: check.name, status: check.status },
   };
