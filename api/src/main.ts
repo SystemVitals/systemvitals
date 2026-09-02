@@ -190,7 +190,7 @@ export async function startApplicationLifecycle(
 export async function buildApp(): Promise<NestFastifyApplication> {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter(),
+    new FastifyAdapter({ trustProxy: true }),
     { rawBody: true },
   );
   // Register helmet on the underlying Fastify instance

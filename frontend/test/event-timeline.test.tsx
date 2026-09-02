@@ -10,6 +10,7 @@ function event(id: string, timestamp: string, overrides: Partial<TimelineEvent> 
     error: null,
     responseTimeMs: null,
     statusCode: null,
+    sourceIp: null,
     ...overrides,
   };
 }
@@ -81,5 +82,21 @@ describe("EventTimeline", () => {
   it("still renders event detail alongside the gaps", () => {
     render(<EventTimeline events={EVENTS} />);
     expect(screen.getByText("missed heartbeat")).toBeInTheDocument();
+  });
+
+  it("shows the heartbeat origin IP on received pings", () => {
+    render(
+      <EventTimeline
+        events={[event("up", "2026-09-01T16:21:04.000Z", { sourceIp: "203.0.113.40" })]}
+      />,
+    );
+
+    expect(screen.getByText("203.0.113.40")).toBeInTheDocument();
+  });
+
+  it("does not invent an origin IP for a missed heartbeat", () => {
+    render(<EventTimeline events={[EVENTS[0]]} />);
+
+    expect(screen.queryByText(/^\d{1,3}(?:\.\d{1,3}){3}$/)).not.toBeInTheDocument();
   });
 });

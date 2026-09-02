@@ -168,6 +168,7 @@ type CheckEventModel {
   error: String
   id: ID!
   responseTimeMs: Int
+  sourceIp: String
   status: String!
   statusCode: Int
   timestamp: DateTime!

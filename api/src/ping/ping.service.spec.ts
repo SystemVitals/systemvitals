@@ -151,9 +151,34 @@ describe('PingService recordPing', () => {
     });
 
     expect(h.tx.checkEvent.create).toHaveBeenCalledTimes(1);
+    expect(h.tx.checkEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        checkId: initialCheck.id,
+        status: 'UP',
+        sourceIp: null,
+      }) as object,
+    });
     expect(h.tx.check.update).toHaveBeenCalledTimes(1);
     expect(h.tx.notificationChannel.findMany).not.toHaveBeenCalled();
     expect(h.alertQueue.enqueue).not.toHaveBeenCalled();
+  });
+
+  it('stores the heartbeat origin IP on the UP event', async () => {
+    const h = harness();
+    h.tx.check.findUnique.mockResolvedValue({
+      ...h.freshCheck,
+      status: 'UP',
+    });
+
+    await h.service.recordPing(initialCheck.pingSlug, '203.0.113.40');
+
+    expect(h.tx.checkEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        checkId: initialCheck.id,
+        status: 'UP',
+        sourceIp: '203.0.113.40',
+      }) as object,
+    });
   });
 
   it.each([

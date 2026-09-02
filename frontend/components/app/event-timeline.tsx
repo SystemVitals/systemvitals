@@ -9,6 +9,7 @@ export interface TimelineEvent {
   error: string | null;
   responseTimeMs: number | null;
   statusCode: number | null;
+  sourceIp: string | null;
 }
 
 const EVENT_STATUS_LABELS: Record<EventStatus, string> = {
@@ -69,6 +70,9 @@ export function EventTimeline({ events }: { events: TimelineEvent[] }) {
                 {new Date(event.timestamp).toLocaleString()}
               </span>
             </div>
+            {event.sourceIp && (
+              <p className="text-xs font-mono text-muted-foreground mt-0.5">{event.sourceIp}</p>
+            )}
             {event.statusCode !== null && (
               <p className="text-xs text-muted-foreground mt-0.5">HTTP {event.statusCode}</p>
             )}

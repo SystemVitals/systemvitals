@@ -138,6 +138,7 @@ interface CheckEvent {
   responseTimeMs: number | null;
   error: string | null;
   statusCode: number | null;
+  sourceIp: string | null;
 }
 
 interface CheckDetail {
@@ -467,6 +468,7 @@ const getCheck: ToolDef = {
             responseTimeMs
             error
             statusCode
+            sourceIp
           }
         }
       }`,
@@ -501,8 +503,9 @@ const getCheck: ToolDef = {
     const eventLines = check.events.map((e) => {
       const rt = e.responseTimeMs != null ? ` ${e.responseTimeMs}ms` : "";
       const sc = e.statusCode != null ? ` [${e.statusCode}]` : "";
+      const ip = e.sourceIp ? ` from ${e.sourceIp}` : "";
       const err = e.error ? ` error: ${e.error}` : "";
-      return `  [${e.timestamp}] ${e.status}${sc}${rt}${err}`;
+      return `  [${e.timestamp}] ${e.status}${sc}${rt}${ip}${err}`;
     });
 
     return text([header, ...eventLines].join("\n"));

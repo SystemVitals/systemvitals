@@ -44,7 +44,12 @@ interface CheckShape {
   status: string;
   pingSlug: string;
   lastEventAt: string | null;
-  events: Array<{ id: string; status: string; timestamp: string }>;
+  events: Array<{
+    id: string;
+    status: string;
+    timestamp: string;
+    sourceIp: string | null;
+  }>;
 }
 
 interface GqlCreateCheckResponse {
@@ -127,7 +132,7 @@ describe('ping (e2e)', () => {
       `query($id: ID!) {
         check(id: $id) {
           id status lastEventAt
-          events { id status timestamp }
+          events { id status timestamp sourceIp }
         }
       }`,
       { id: checkId },
@@ -139,6 +144,32 @@ describe('ping (e2e)', () => {
     expect(check.lastEventAt).not.toBeNull();
     expect(check.events.length).toBeGreaterThanOrEqual(1);
     expect(check.events.some((e) => e.status === 'UP')).toBe(true);
+  });
+
+  it('records the forwarded client IP on a heartbeat ping', async () => {
+    const r = await app.inject({
+      method: 'GET',
+      url: `/ping/${pingSlug}`,
+      remoteAddress: '127.0.0.1',
+      headers: { 'x-forwarded-for': '203.0.113.40' },
+    });
+    expect(r.statusCode).toBe(200);
+
+    const res = (await gql(
+      app,
+      token,
+      `query($id: ID!) {
+        check(id: $id) {
+          events { status sourceIp }
+        }
+      }`,
+      { id: checkId },
+    )) as GqlCheckResponse;
+
+    expect(res.errors).toBeUndefined();
+    expect(res.data!.check.events[0]).toEqual(
+      expect.objectContaining({ status: 'UP', sourceIp: '203.0.113.40' }),
+    );
   });
 
   it('POST /ping/:slug also returns 200 "OK"', async () => {
