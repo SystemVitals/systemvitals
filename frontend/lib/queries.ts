@@ -54,6 +54,7 @@ export const CHECK = gql`
         error
         responseTimeMs
         statusCode
+        sourceIp
       }
     }
   }
@@ -87,6 +88,7 @@ export const CHECK_BY_ORGANIZATION_SLUG = gql`
         error
         responseTimeMs
         statusCode
+        sourceIp
       }
     }
   }

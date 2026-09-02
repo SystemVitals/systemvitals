@@ -41,6 +41,7 @@ export const CHECK_BY_SLUG = gql`
         error
         responseTimeMs
         statusCode
+        sourceIp
       }
     }
   }

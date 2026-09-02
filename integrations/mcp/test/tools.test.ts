@@ -383,8 +383,8 @@ describe("get_check", () => {
         intervalSeconds: 60,
         notificationChannelIds: ["channel-email", "channel-webhook"],
         events: [
-          { id: "e1", status: "UP", timestamp: "2024-01-01T00:01:00Z", responseTimeMs: 120, error: null, statusCode: 200 },
-          { id: "e2", status: "DOWN", timestamp: "2024-01-01T00:00:00Z", responseTimeMs: null, error: "timeout", statusCode: null },
+          { id: "e1", status: "UP", timestamp: "2024-01-01T00:01:00Z", responseTimeMs: 120, error: null, statusCode: 200, sourceIp: "203.0.113.40" },
+          { id: "e2", status: "DOWN", timestamp: "2024-01-01T00:00:00Z", responseTimeMs: null, error: "timeout", statusCode: null, sourceIp: null },
         ],
       },
     };
@@ -396,6 +396,7 @@ describe("get_check", () => {
     expect(calls[0].variables).toEqual({ id: "c1" });
     expect(calls[0].query).toContain("check");
     expect(calls[0].query).toContain("notificationChannelIds");
+    expect(calls[0].query).toContain("sourceIp");
     expect(result.content[0].text).toContain("UP");
     expect(result.content[0].text).toContain(
       "Notification channels: channel-email, channel-webhook",
@@ -404,6 +405,7 @@ describe("get_check", () => {
     const text = result.content[0].text;
     expect(text).toContain("2024-01-01T00:01:00Z");
     expect(text).toContain("2024-01-01T00:00:00Z");
+    expect(text).toContain("203.0.113.40");
   });
 
   it("accurately exposes an empty notification channel selection", async () => {

@@ -253,6 +253,7 @@ model CheckEvent {
   responseTimeMs Int?        @map("response_time_ms")
   statusCode     Int?        @map("status_code")
   error          String?
+  sourceIp       String?     @map("source_ip")
 
   @@index([checkId, timestamp])
   @@map("check_events")

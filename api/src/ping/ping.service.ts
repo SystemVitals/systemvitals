@@ -19,7 +19,10 @@ export class PingService {
     private readonly alertQueue: AlertQueueService,
   ) {}
 
-  async recordPing(slug: string): Promise<PingResult> {
+  async recordPing(
+    slug: string,
+    sourceIp: string | null = null,
+  ): Promise<PingResult> {
     const check = await this.prisma.check.findUnique({
       where: { pingSlug: slug },
     });
@@ -55,6 +58,7 @@ export class PingService {
               checkId: lockedCheck.id,
               timestamp: now,
               status: 'UP',
+              sourceIp,
             },
           });
           await tx.check.update({

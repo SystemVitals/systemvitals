@@ -69,6 +69,7 @@ const CHECK_DATA: CheckDetailData = {
       error: null,
       responseTimeMs: null,
       statusCode: null,
+      sourceIp: "203.0.113.40",
     },
     {
       id: "e2",
@@ -77,6 +78,7 @@ const CHECK_DATA: CheckDetailData = {
       error: "missed heartbeat",
       responseTimeMs: null,
       statusCode: null,
+      sourceIp: null,
     },
   ],
 };
@@ -162,6 +164,7 @@ describe("CheckDetail", () => {
 
     expect(screen.getByText("Nightly backup")).toBeInTheDocument();
     expect(screen.getByRole("status", { name: "UP" })).toBeInTheDocument();
+    expect(screen.getByText("203.0.113.40")).toBeInTheDocument();
     expect(screen.getByText("missed heartbeat")).toBeInTheDocument();
   });
 
@@ -372,6 +375,7 @@ describe("CheckDetail", () => {
             error: null,
             responseTimeMs: null,
             statusCode: null,
+            sourceIp: "198.51.100.12",
           },
           {
             id: "outage",
@@ -380,6 +384,7 @@ describe("CheckDetail", () => {
             error: "missed heartbeat",
             responseTimeMs: null,
             statusCode: null,
+            sourceIp: null,
           },
         ],
       },

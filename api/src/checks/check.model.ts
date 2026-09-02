@@ -8,6 +8,7 @@ export class CheckEventModel {
   @Field({ nullable: true }) error?: string;
   @Field(() => Int, { nullable: true }) responseTimeMs?: number;
   @Field(() => Int, { nullable: true }) statusCode?: number;
+  @Field({ nullable: true }) sourceIp?: string;
 }
 
 @ObjectType()
