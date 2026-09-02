@@ -156,7 +156,7 @@ describe('PingService recordPing', () => {
         checkId: initialCheck.id,
         status: 'UP',
         sourceIp: null,
-      }),
+      }) as object,
     });
     expect(h.tx.check.update).toHaveBeenCalledTimes(1);
     expect(h.tx.notificationChannel.findMany).not.toHaveBeenCalled();
@@ -177,7 +177,7 @@ describe('PingService recordPing', () => {
         checkId: initialCheck.id,
         status: 'UP',
         sourceIp: '203.0.113.40',
-      }),
+      }) as object,
     });
   });
 
