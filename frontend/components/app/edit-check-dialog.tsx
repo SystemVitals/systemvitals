@@ -7,6 +7,7 @@ import { useOrg } from "@/lib/org-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DurationSliderField } from "@/components/app/duration-slider-field";
 import {
   Dialog,
   DialogContent,
@@ -431,17 +432,15 @@ export function EditCheckDialog({ open, onOpenChange, check, onSaved }: EditChec
                     required
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-check-timeout">Timeout (ms)</Label>
-                  <Input
-                    id="edit-check-timeout"
-                    type="number"
-                    min={1}
-                    value={timeoutMs}
-                    onChange={(e) => setTimeoutMs(e.target.value)}
-                    required
-                  />
-                </div>
+                <DurationSliderField
+                  id="edit-check-timeout"
+                  label="Timeout"
+                  valueMs={parseInt(timeoutMs, 10) || 5000}
+                  onValueMsChange={(ms) => setTimeoutMs(String(ms))}
+                  minMs={1000}
+                  maxMs={60000}
+                  stepMs={500}
+                />
                 {type === "HTTP" && (
                   <>
                     <div className="space-y-2">

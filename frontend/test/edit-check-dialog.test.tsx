@@ -203,6 +203,32 @@ describe("EditCheckDialog", () => {
     expect(screen.queryByLabelText(/period/i)).not.toBeInTheDocument();
   });
 
+  it("lets the user type timeout in seconds or set it with a slider", () => {
+    renderDialog(HTTP);
+
+    const input = screen.getByLabelText("Timeout");
+    expect(input).toHaveValue(5);
+    expect(screen.getByRole("slider", { hidden: true })).toHaveValue("5000");
+
+    fireEvent.change(input, { target: { value: "10" } });
+    expect(input).toHaveValue(10);
+    expect(screen.getByRole("slider", { hidden: true })).toHaveValue("10000");
+  });
+
+  it("submits typed timeout seconds as milliseconds", async () => {
+    const { captured } = renderDialogCapturingVariables(HTTP);
+    await waitForPlan();
+
+    fireEvent.change(screen.getByLabelText("Timeout"), {
+      target: { value: "10" },
+    });
+    submitForm();
+
+    await waitFor(() => expect(captured).toHaveLength(1));
+    const input = captured[0].input as Record<string, unknown>;
+    expect(input.timeoutMs).toBe(10000);
+  });
+
   it("uses the paid plan floor for heartbeat periods and active intervals", async () => {
     const { unmount } = renderDialog(HEARTBEAT);
     await waitFor(() =>

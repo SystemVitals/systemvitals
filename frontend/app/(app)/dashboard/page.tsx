@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/select";
 import { CircleGauge, Plus, Pause, Play } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
+import { DurationSliderField } from "@/components/app/duration-slider-field";
 import { formatDuration } from "@/lib/format";
 import { usePollWhenVisible } from "@/lib/use-poll-when-visible";
 import { CHECK_POLL_INTERVAL_MS } from "@/lib/polling";
@@ -460,15 +461,15 @@ function CreateCheckDialog({
                     value={[parseInt(intervalSeconds || String(floor), 10)]}
                     onValueChange={(v) => setIntervalSeconds(String(Array.isArray(v) ? v[0] : v))} />
                 </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="check-timeout">Timeout</Label>
-                    <span className="text-sm text-muted-foreground font-mono">{Math.round(parseInt(timeoutMs || "0", 10) / 1000)} s</span>
-                  </div>
-                  <Slider id="check-timeout" min={1000} max={60000} step={500}
-                    value={[parseInt(timeoutMs || "1000", 10)]}
-                    onValueChange={(v) => setTimeoutMs(String(Array.isArray(v) ? v[0] : v))} />
-                </div>
+                <DurationSliderField
+                  id="check-timeout"
+                  label="Timeout"
+                  valueMs={parseInt(timeoutMs || "1000", 10)}
+                  onValueMsChange={(ms) => setTimeoutMs(String(ms))}
+                  minMs={1000}
+                  maxMs={60000}
+                  stepMs={500}
+                />
                 {checkType === "HTTP" && (
                   <div className="space-y-2">
                     <Label htmlFor="check-expected-status">
