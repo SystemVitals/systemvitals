@@ -273,6 +273,20 @@ describe("DashboardPage", () => {
     );
   });
 
+  it("lets the user type a timeout when creating an HTTP check", async () => {
+    renderDashboard("SIGNAL");
+
+    fireEvent.click(
+      (await screen.findAllByRole("button", { name: /new check/i }))[0],
+    );
+    fireEvent.click(await screen.findByRole("button", { name: /^http$/i }));
+
+    const timeout = await screen.findByLabelText("Timeout");
+    expect(timeout).toHaveValue(5);
+    fireEvent.change(timeout, { target: { value: "8" } });
+    expect(timeout).toHaveValue(8);
+  });
+
   it("uses the SIGNAL creator floor when a SOLO collaborator creates a check", async () => {
     context.activeOrg.plan = "SIGNAL";
     renderDashboard("SOLO");
