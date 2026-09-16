@@ -1,5 +1,5 @@
 import { beforeEach, describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { MockedProvider } from "@apollo/client/testing/react";
 import { ApolloClient, ApolloLink, InMemoryCache, Observable } from "@apollo/client";
 import { ApolloProvider } from "@apollo/client/react";
@@ -191,15 +191,15 @@ describe("EditCheckDialog", () => {
 
   it("shows heartbeat timing fields for a heartbeat check", () => {
     renderDialog(HEARTBEAT);
-    expect(screen.getByLabelText(/period/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/grace/i)).toBeInTheDocument();
+    expect(screen.getByLabelText("Period")).toBeInTheDocument();
+    expect(screen.getByLabelText("Grace")).toBeInTheDocument();
     expect(screen.queryByLabelText(/target/i)).not.toBeInTheDocument();
   });
 
   it("shows target fields for an active check", () => {
     renderDialog(HTTP);
     expect(screen.getByLabelText(/target/i)).toHaveValue("https://example.com/health");
-    expect(screen.getByLabelText(/interval/i)).toBeInTheDocument();
+    expect(screen.getByLabelText("Interval")).toBeInTheDocument();
     expect(screen.queryByLabelText(/period/i)).not.toBeInTheDocument();
   });
 
@@ -208,11 +208,14 @@ describe("EditCheckDialog", () => {
 
     const input = screen.getByLabelText("Timeout");
     expect(input).toHaveValue(5);
-    expect(screen.getByRole("slider", { hidden: true })).toHaveValue("5000");
+    const timeoutSlider = within(
+      screen.getByRole("group", { name: "Timeout range" }),
+    ).getByRole("slider", { hidden: true });
+    expect(timeoutSlider).toHaveValue("5000");
 
     fireEvent.change(input, { target: { value: "10" } });
     expect(input).toHaveValue(10);
-    expect(screen.getByRole("slider", { hidden: true })).toHaveValue("10000");
+    expect(timeoutSlider).toHaveValue("10000");
   });
 
   it("submits typed timeout seconds as milliseconds", async () => {
@@ -232,13 +235,13 @@ describe("EditCheckDialog", () => {
   it("uses the paid plan floor for heartbeat periods and active intervals", async () => {
     const { unmount } = renderDialog(HEARTBEAT);
     await waitFor(() =>
-      expect(screen.getByLabelText(/period/i)).toHaveAttribute("min", "60")
+      expect(screen.getByLabelText("Period")).toHaveAttribute("min", "1")
     );
 
     unmount();
     renderDialog(HTTP);
     await waitFor(() =>
-      expect(screen.getByLabelText(/interval/i)).toHaveAttribute("min", "60")
+      expect(screen.getByLabelText("Interval")).toHaveAttribute("min", "1")
     );
   });
 
@@ -248,7 +251,7 @@ describe("EditCheckDialog", () => {
 
     await waitForPlan();
     await waitFor(() =>
-      expect(screen.getByLabelText(/period/i)).toHaveAttribute("min", "60")
+      expect(screen.getByLabelText("Period")).toHaveAttribute("min", "1")
     );
   });
 
@@ -258,7 +261,7 @@ describe("EditCheckDialog", () => {
 
     await waitForPlan();
     await waitFor(() =>
-      expect(screen.getByLabelText(/interval/i)).toHaveAttribute("min", "300")
+      expect(screen.getByLabelText("Interval")).toHaveAttribute("min", "5")
     );
   });
 
@@ -267,7 +270,7 @@ describe("EditCheckDialog", () => {
     renderDialog(HEARTBEAT, "SOLO");
 
     await waitForPlan();
-    expect(screen.getByLabelText(/period/i)).toHaveAttribute("min", "60");
+    expect(screen.getByLabelText("Period")).toHaveAttribute("min", "1");
   });
 
   it("allows unrelated edits to an unchanged grandfathered cadence", async () => {
@@ -276,7 +279,7 @@ describe("EditCheckDialog", () => {
 
     await waitForPlan();
     await waitFor(() =>
-      expect(screen.getByLabelText(/interval/i)).toHaveAttribute("min", "30")
+      expect(screen.getByLabelText("Interval")).toHaveAttribute("min", "30")
     );
     fireEvent.change(screen.getByLabelText(/name/i), {
       target: { value: "Renamed health check" },
@@ -294,7 +297,7 @@ describe("EditCheckDialog", () => {
     const { captured } = renderDialogCapturingVariables(grandfathered);
 
     await waitForPlan();
-    fireEvent.change(screen.getByLabelText(/interval/i), {
+    fireEvent.change(screen.getByLabelText("Interval"), {
       target: { value: "45" },
     });
     submitForm();

@@ -296,13 +296,18 @@ describe("DashboardPage", () => {
 
     const period = await screen.findByLabelText("Period");
     const grace = screen.getByLabelText("Grace");
-    expect(period).toHaveValue(300);
-    expect(grace).toHaveValue(60);
+    expect(period).toHaveValue(5);
+    expect(grace).toHaveValue(1);
 
-    fireEvent.change(period, { target: { value: "600" } });
-    fireEvent.change(grace, { target: { value: "120" } });
-    expect(period).toHaveValue(600);
-    expect(grace).toHaveValue(120);
+    expect(screen.getAllByRole("button", { name: "Minutes" })[0]).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+
+    fireEvent.change(period, { target: { value: "10" } });
+    fireEvent.change(grace, { target: { value: "2" } });
+    expect(period).toHaveValue(10);
+    expect(grace).toHaveValue(2);
   });
 
   it("lets the user type an interval when creating an HTTP check", async () => {
@@ -314,9 +319,9 @@ describe("DashboardPage", () => {
     fireEvent.click(await screen.findByRole("button", { name: /^http$/i }));
 
     const interval = await screen.findByLabelText("Interval");
-    expect(interval).toHaveValue(60);
-    fireEvent.change(interval, { target: { value: "180" } });
-    expect(interval).toHaveValue(180);
+    expect(interval).toHaveValue(1);
+    fireEvent.change(interval, { target: { value: "3" } });
+    expect(interval).toHaveValue(3);
   });
 
   it("uses the SIGNAL creator floor when a SOLO collaborator creates a check", async () => {
@@ -329,7 +334,7 @@ describe("DashboardPage", () => {
     fireEvent.click(newCheckButtons[0]);
 
     await waitFor(() =>
-      expect(screen.getByLabelText("Period")).toHaveAttribute("min", "60")
+      expect(screen.getByLabelText("Period")).toHaveAttribute("min", "1")
     );
   });
 
@@ -343,7 +348,7 @@ describe("DashboardPage", () => {
     fireEvent.click(newCheckButtons[0]);
 
     await waitFor(() =>
-      expect(screen.getByLabelText("Period")).toHaveAttribute("min", "300")
+      expect(screen.getByLabelText("Period")).toHaveAttribute("min", "5")
     );
   });
 

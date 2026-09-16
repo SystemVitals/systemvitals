@@ -70,18 +70,59 @@ describe("DurationSliderField", () => {
     expect(screen.getByRole("status")).toHaveTextContent("1000");
   });
 
-  it("lets the user type a value above a high minimum before blur", () => {
-    render(<Harness initialMs={300000} minMs={300000} maxMs={86400000} stepMs={1000} />);
+  it("does not offer minute or hour units for a timeout-scale range", () => {
+    render(<Harness />);
+
+    expect(screen.queryByRole("button", { name: "Minutes" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Hours" })).not.toBeInTheDocument();
+  });
+
+  it("opens a 5-minute value in minutes and converts when the unit changes", () => {
+    render(
+      <Harness initialMs={300000} minMs={60000} maxMs={86400000} stepMs={1000} />,
+    );
 
     const input = screen.getByLabelText("Timeout");
-    expect(input).toHaveValue(300);
+    expect(input).toHaveValue(5);
+    expect(screen.getByRole("button", { name: "Minutes" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
 
-    fireEvent.change(input, { target: { value: "6" } });
-    expect(input).toHaveValue(6);
-    fireEvent.change(input, { target: { value: "600" } });
-    expect(input).toHaveValue(600);
+    fireEvent.click(screen.getByRole("button", { name: "Seconds" }));
+    expect(input).toHaveValue(300);
+    expect(screen.getByRole("status")).toHaveTextContent("300000");
+
+    fireEvent.click(screen.getByRole("button", { name: "Hours" }));
+    expect(input).toHaveValue(300 / 3600);
+    expect(screen.getByRole("status")).toHaveTextContent("300000");
+  });
+
+  it("commits a value typed in minutes", () => {
+    render(
+      <Harness initialMs={300000} minMs={60000} maxMs={86400000} stepMs={1000} />,
+    );
+
+    const input = screen.getByLabelText("Timeout");
+    fireEvent.change(input, { target: { value: "10" } });
+    expect(screen.getByRole("status")).toHaveTextContent("600000");
+  });
+
+  it("lets the user type a value above a high minimum before blur", () => {
+    render(
+      <Harness initialMs={300000} minMs={300000} maxMs={86400000} stepMs={1000} />,
+    );
+
+    const input = screen.getByLabelText("Timeout");
+    expect(input).toHaveValue(5);
+
+    fireEvent.change(input, { target: { value: "1" } });
+    expect(input).toHaveValue(1);
+    expect(screen.getByRole("status")).toHaveTextContent("300000");
+    fireEvent.change(input, { target: { value: "10" } });
+    expect(input).toHaveValue(10);
     fireEvent.blur(input);
-    expect(input).toHaveValue(600);
+    expect(input).toHaveValue(10);
     expect(screen.getByRole("status")).toHaveTextContent("600000");
   });
 });
