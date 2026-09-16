@@ -346,17 +346,15 @@ export function EditCheckDialog({ open, onOpenChange, check, onSaved }: EditChec
                 </div>
 
                 {scheduleType === "simple" ? (
-                  <div className="space-y-2">
-                    <Label htmlFor="edit-check-period">Period (seconds)</Label>
-                    <Input
-                      id="edit-check-period"
-                      type="number"
-                      min={periodMinimum}
-                      value={periodSeconds}
-                      onChange={(e) => setPeriodSeconds(e.target.value)}
-                      required
-                    />
-                  </div>
+                  <DurationSliderField
+                    id="edit-check-period"
+                    label="Period"
+                    valueMs={parseInt(periodSeconds || String(periodMinimum), 10) * 1000}
+                    onValueMsChange={(ms) => setPeriodSeconds(String(Math.round(ms / 1000)))}
+                    minMs={periodMinimum * 1000}
+                    maxMs={86400 * 1000}
+                    stepMs={1000}
+                  />
                 ) : (
                   <>
                     <div className="space-y-2">
@@ -393,17 +391,15 @@ export function EditCheckDialog({ open, onOpenChange, check, onSaved }: EditChec
                   </>
                 )}
 
-                <div className="space-y-2">
-                  <Label htmlFor="edit-check-grace">Grace (seconds)</Label>
-                  <Input
-                    id="edit-check-grace"
-                    type="number"
-                    min={0}
-                    value={graceSeconds}
-                    onChange={(e) => setGraceSeconds(e.target.value)}
-                    required
-                  />
-                </div>
+                <DurationSliderField
+                  id="edit-check-grace"
+                  label="Grace"
+                  valueMs={parseInt(graceSeconds || "0", 10) * 1000}
+                  onValueMsChange={(ms) => setGraceSeconds(String(Math.round(ms / 1000)))}
+                  minMs={0}
+                  maxMs={3600 * 1000}
+                  stepMs={1000}
+                />
               </>
             )}
 
@@ -421,17 +417,15 @@ export function EditCheckDialog({ open, onOpenChange, check, onSaved }: EditChec
                     required
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit-check-interval">Interval (seconds)</Label>
-                  <Input
-                    id="edit-check-interval"
-                    type="number"
-                    min={intervalMinimum}
-                    value={intervalSeconds}
-                    onChange={(e) => setIntervalSeconds(e.target.value)}
-                    required
-                  />
-                </div>
+                <DurationSliderField
+                  id="edit-check-interval"
+                  label="Interval"
+                  valueMs={parseInt(intervalSeconds || String(intervalMinimum), 10) * 1000}
+                  onValueMsChange={(ms) => setIntervalSeconds(String(Math.round(ms / 1000)))}
+                  minMs={intervalMinimum * 1000}
+                  maxMs={3600 * 1000}
+                  stepMs={1000}
+                />
                 <DurationSliderField
                   id="edit-check-timeout"
                   label="Timeout"

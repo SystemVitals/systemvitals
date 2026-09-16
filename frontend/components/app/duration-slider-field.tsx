@@ -1,9 +1,18 @@
 "use client";
 
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
+import {
+  availableDurationUnits,
+  durationUnitToMs,
+  DURATION_UNIT_LABEL,
+  msToDurationUnit,
+  nicestDurationUnit,
+  type DurationUnit,
+} from "@/lib/duration-units";
 
 function clampMs(ms: number, minMs: number, maxMs: number, stepMs: number) {
   const snapped = Math.round(ms / stepMs) * stepMs;
@@ -27,16 +36,29 @@ export function DurationSliderField({
   maxMs: number;
   stepMs: number;
 }) {
+  const units = availableDurationUnits(maxMs);
   const [draft, setDraft] = useState<string | null>(null);
+  const [unit, setUnit] = useState<DurationUnit>(() =>
+    nicestDurationUnit(valueMs, units),
+  );
+  const selectedUnit = units.includes(unit) ? unit : units[0];
+  const displayValue = draft ?? msToDurationUnit(valueMs, selectedUnit);
 
-  function commitSeconds(raw: string) {
-    const seconds = parseFloat(raw);
+  function commit(raw: string) {
+    const amount = parseFloat(raw);
     setDraft(null);
-    if (!Number.isFinite(seconds)) {
+    if (!Number.isFinite(amount)) {
       onValueMsChange(clampMs(valueMs, minMs, maxMs, stepMs));
       return;
     }
-    onValueMsChange(clampMs(Math.round(seconds * 1000), minMs, maxMs, stepMs));
+    onValueMsChange(
+      clampMs(
+        Math.round(durationUnitToMs(amount, selectedUnit)),
+        minMs,
+        maxMs,
+        stepMs,
+      ),
+    );
   }
 
   return (
@@ -47,26 +69,47 @@ export function DurationSliderField({
           <Input
             id={id}
             type="number"
-            min={minMs / 1000}
-            max={maxMs / 1000}
-            step={stepMs / 1000}
+            min={msToDurationUnit(minMs, selectedUnit)}
+            max={msToDurationUnit(maxMs, selectedUnit)}
+            step={msToDurationUnit(stepMs, selectedUnit)}
             className="h-8 w-20 text-right font-mono text-sm"
-            value={draft ?? valueMs / 1000}
+            value={displayValue}
             onChange={(event) => {
               const raw = event.target.value;
               setDraft(raw);
-              const seconds = parseFloat(raw);
-              if (!Number.isFinite(seconds)) {
+              const amount = parseFloat(raw);
+              if (!Number.isFinite(amount)) {
                 return;
               }
-              const nextMs = Math.round(seconds * 1000);
+              const nextMs = Math.round(durationUnitToMs(amount, selectedUnit));
               if (nextMs >= minMs && nextMs <= maxMs) {
                 onValueMsChange(clampMs(nextMs, minMs, maxMs, stepMs));
               }
             }}
-            onBlur={(event) => commitSeconds(event.target.value)}
+            onBlur={(event) => commit(event.target.value)}
           />
-          <span className="text-sm text-muted-foreground font-mono">s</span>
+          {units.length === 1 ? (
+            <span className="text-sm text-muted-foreground font-mono">s</span>
+          ) : (
+            <div role="group" aria-label="Unit" className="flex gap-0.5">
+              {units.map((option) => (
+                <Button
+                  key={option}
+                  type="button"
+                  size="sm"
+                  variant={option === selectedUnit ? "default" : "outline"}
+                  aria-pressed={option === selectedUnit}
+                  aria-label={DURATION_UNIT_LABEL[option]}
+                  onClick={() => {
+                    setDraft(null);
+                    setUnit(option);
+                  }}
+                >
+                  {option}
+                </Button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
       <Slider
@@ -74,6 +117,7 @@ export function DurationSliderField({
         max={maxMs}
         step={stepMs}
         value={[valueMs]}
+        aria-label={`${label} range`}
         onValueChange={(value) => {
           setDraft(null);
           const next = Array.isArray(value) ? value[0] : value;
