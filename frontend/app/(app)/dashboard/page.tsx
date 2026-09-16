@@ -33,9 +33,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { CircleGauge, Plus, Pause, Play } from "lucide-react";
-import { Slider } from "@/components/ui/slider";
 import { DurationSliderField } from "@/components/app/duration-slider-field";
-import { formatDuration } from "@/lib/format";
 import { usePollWhenVisible } from "@/lib/use-poll-when-visible";
 import { CHECK_POLL_INTERVAL_MS } from "@/lib/polling";
 import { planIntervalFloor } from "@/lib/plan-limits";
@@ -361,24 +359,24 @@ function CreateCheckDialog({
 
                 {scheduleType === "simple" ? (
                   <>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Label htmlFor="check-period">Period</Label>
-                        <span className="text-sm text-muted-foreground font-mono">{formatDuration(parseInt(periodSeconds || "0", 10))}</span>
-                      </div>
-                      <Slider id="check-period" min={floor} max={86400} step={1}
-                        value={[parseInt(periodSeconds || String(floor), 10)]}
-                        onValueChange={(v) => setPeriodSeconds(String(Array.isArray(v) ? v[0] : v))} />
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Label htmlFor="check-grace">Grace</Label>
-                        <span className="text-sm text-muted-foreground font-mono">{formatDuration(parseInt(graceSeconds || "0", 10))}</span>
-                      </div>
-                      <Slider id="check-grace" min={0} max={3600} step={1}
-                        value={[parseInt(graceSeconds || "0", 10)]}
-                        onValueChange={(v) => setGraceSeconds(String(Array.isArray(v) ? v[0] : v))} />
-                    </div>
+                    <DurationSliderField
+                      id="check-period"
+                      label="Period"
+                      valueMs={parseInt(periodSeconds || String(floor), 10) * 1000}
+                      onValueMsChange={(ms) => setPeriodSeconds(String(Math.round(ms / 1000)))}
+                      minMs={floor * 1000}
+                      maxMs={86400 * 1000}
+                      stepMs={1000}
+                    />
+                    <DurationSliderField
+                      id="check-grace"
+                      label="Grace"
+                      valueMs={parseInt(graceSeconds || "0", 10) * 1000}
+                      onValueMsChange={(ms) => setGraceSeconds(String(Math.round(ms / 1000)))}
+                      minMs={0}
+                      maxMs={3600 * 1000}
+                      stepMs={1000}
+                    />
                   </>
                 ) : (
                   <>
@@ -408,15 +406,15 @@ function CreateCheckDialog({
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <Label htmlFor="check-grace">Grace</Label>
-                        <span className="text-sm text-muted-foreground font-mono">{formatDuration(parseInt(graceSeconds || "0", 10))}</span>
-                      </div>
-                      <Slider id="check-grace" min={0} max={3600} step={1}
-                        value={[parseInt(graceSeconds || "0", 10)]}
-                        onValueChange={(v) => setGraceSeconds(String(Array.isArray(v) ? v[0] : v))} />
-                    </div>
+                    <DurationSliderField
+                      id="check-grace"
+                      label="Grace"
+                      valueMs={parseInt(graceSeconds || "0", 10) * 1000}
+                      onValueMsChange={(ms) => setGraceSeconds(String(Math.round(ms / 1000)))}
+                      minMs={0}
+                      maxMs={3600 * 1000}
+                      stepMs={1000}
+                    />
                     {cronValid ? (
                       <div className="space-y-1">
                         <p className="text-sm text-muted-foreground">Next runs:</p>
@@ -452,15 +450,15 @@ function CreateCheckDialog({
                     required
                   />
                 </div>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label htmlFor="check-interval">Interval</Label>
-                    <span className="text-sm text-muted-foreground font-mono">{formatDuration(parseInt(intervalSeconds || "0", 10))}</span>
-                  </div>
-                  <Slider id="check-interval" min={floor} max={3600} step={1}
-                    value={[parseInt(intervalSeconds || String(floor), 10)]}
-                    onValueChange={(v) => setIntervalSeconds(String(Array.isArray(v) ? v[0] : v))} />
-                </div>
+                <DurationSliderField
+                  id="check-interval"
+                  label="Interval"
+                  valueMs={parseInt(intervalSeconds || String(floor), 10) * 1000}
+                  onValueMsChange={(ms) => setIntervalSeconds(String(Math.round(ms / 1000)))}
+                  minMs={floor * 1000}
+                  maxMs={3600 * 1000}
+                  stepMs={1000}
+                />
                 <DurationSliderField
                   id="check-timeout"
                   label="Timeout"

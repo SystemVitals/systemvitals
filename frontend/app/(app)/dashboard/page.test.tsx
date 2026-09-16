@@ -287,6 +287,38 @@ describe("DashboardPage", () => {
     expect(timeout).toHaveValue(8);
   });
 
+  it("lets the user type period and grace when creating a heartbeat check", async () => {
+    renderDashboard("SIGNAL");
+
+    fireEvent.click(
+      (await screen.findAllByRole("button", { name: /new check/i }))[0],
+    );
+
+    const period = await screen.findByLabelText("Period");
+    const grace = screen.getByLabelText("Grace");
+    expect(period).toHaveValue(300);
+    expect(grace).toHaveValue(60);
+
+    fireEvent.change(period, { target: { value: "600" } });
+    fireEvent.change(grace, { target: { value: "120" } });
+    expect(period).toHaveValue(600);
+    expect(grace).toHaveValue(120);
+  });
+
+  it("lets the user type an interval when creating an HTTP check", async () => {
+    renderDashboard("SIGNAL");
+
+    fireEvent.click(
+      (await screen.findAllByRole("button", { name: /new check/i }))[0],
+    );
+    fireEvent.click(await screen.findByRole("button", { name: /^http$/i }));
+
+    const interval = await screen.findByLabelText("Interval");
+    expect(interval).toHaveValue(60);
+    fireEvent.change(interval, { target: { value: "180" } });
+    expect(interval).toHaveValue(180);
+  });
+
   it("uses the SIGNAL creator floor when a SOLO collaborator creates a check", async () => {
     context.activeOrg.plan = "SIGNAL";
     renderDashboard("SOLO");
@@ -297,7 +329,7 @@ describe("DashboardPage", () => {
     fireEvent.click(newCheckButtons[0]);
 
     await waitFor(() =>
-      expect(document.getElementById("check-period")).toHaveAttribute("data-min", "60")
+      expect(screen.getByLabelText("Period")).toHaveAttribute("min", "60")
     );
   });
 
@@ -311,7 +343,7 @@ describe("DashboardPage", () => {
     fireEvent.click(newCheckButtons[0]);
 
     await waitFor(() =>
-      expect(document.getElementById("check-period")).toHaveAttribute("data-min", "300")
+      expect(screen.getByLabelText("Period")).toHaveAttribute("min", "300")
     );
   });
 
