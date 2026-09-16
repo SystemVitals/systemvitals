@@ -3,7 +3,17 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { DurationSliderField } from "./duration-slider-field";
 
-function Harness({ initialMs = 5000 }: { initialMs?: number }) {
+function Harness({
+  initialMs = 5000,
+  minMs = 1000,
+  maxMs = 60000,
+  stepMs = 500,
+}: {
+  initialMs?: number;
+  minMs?: number;
+  maxMs?: number;
+  stepMs?: number;
+}) {
   const [ms, setMs] = useState(initialMs);
   return (
     <>
@@ -12,9 +22,9 @@ function Harness({ initialMs = 5000 }: { initialMs?: number }) {
         label="Timeout"
         valueMs={ms}
         onValueMsChange={setMs}
-        minMs={1000}
-        maxMs={60000}
-        stepMs={500}
+        minMs={minMs}
+        maxMs={maxMs}
+        stepMs={stepMs}
       />
       <output>{ms}</output>
     </>
@@ -48,13 +58,30 @@ describe("DurationSliderField", () => {
     const input = screen.getByLabelText("Timeout");
 
     fireEvent.change(input, { target: { value: "90" } });
+    expect(input).toHaveValue(90);
     fireEvent.blur(input);
     expect(input).toHaveValue(60);
     expect(screen.getByRole("status")).toHaveTextContent("60000");
 
     fireEvent.change(input, { target: { value: "0" } });
+    expect(input).toHaveValue(0);
     fireEvent.blur(input);
     expect(input).toHaveValue(1);
     expect(screen.getByRole("status")).toHaveTextContent("1000");
+  });
+
+  it("lets the user type a value above a high minimum before blur", () => {
+    render(<Harness initialMs={300000} minMs={300000} maxMs={86400000} stepMs={1000} />);
+
+    const input = screen.getByLabelText("Timeout");
+    expect(input).toHaveValue(300);
+
+    fireEvent.change(input, { target: { value: "6" } });
+    expect(input).toHaveValue(6);
+    fireEvent.change(input, { target: { value: "600" } });
+    expect(input).toHaveValue(600);
+    fireEvent.blur(input);
+    expect(input).toHaveValue(600);
+    expect(screen.getByRole("status")).toHaveTextContent("600000");
   });
 });

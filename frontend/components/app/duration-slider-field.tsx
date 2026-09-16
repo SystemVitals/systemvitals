@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
@@ -26,8 +27,11 @@ export function DurationSliderField({
   maxMs: number;
   stepMs: number;
 }) {
+  const [draft, setDraft] = useState<string | null>(null);
+
   function commitSeconds(raw: string) {
     const seconds = parseFloat(raw);
+    setDraft(null);
     if (!Number.isFinite(seconds)) {
       onValueMsChange(clampMs(valueMs, minMs, maxMs, stepMs));
       return;
@@ -46,9 +50,20 @@ export function DurationSliderField({
             min={minMs / 1000}
             max={maxMs / 1000}
             step={stepMs / 1000}
-            className="h-8 w-16 text-right font-mono text-sm"
-            value={valueMs / 1000}
-            onChange={(event) => commitSeconds(event.target.value)}
+            className="h-8 w-20 text-right font-mono text-sm"
+            value={draft ?? valueMs / 1000}
+            onChange={(event) => {
+              const raw = event.target.value;
+              setDraft(raw);
+              const seconds = parseFloat(raw);
+              if (!Number.isFinite(seconds)) {
+                return;
+              }
+              const nextMs = Math.round(seconds * 1000);
+              if (nextMs >= minMs && nextMs <= maxMs) {
+                onValueMsChange(clampMs(nextMs, minMs, maxMs, stepMs));
+              }
+            }}
             onBlur={(event) => commitSeconds(event.target.value)}
           />
           <span className="text-sm text-muted-foreground font-mono">s</span>
@@ -60,6 +75,7 @@ export function DurationSliderField({
         step={stepMs}
         value={[valueMs]}
         onValueChange={(value) => {
+          setDraft(null);
           const next = Array.isArray(value) ? value[0] : value;
           onValueMsChange(clampMs(next, minMs, maxMs, stepMs));
         }}
