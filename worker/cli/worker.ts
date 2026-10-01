@@ -1,4 +1,4 @@
-import "dotenv/config";
+import { captureWorkerError, flushSentry } from "../src/instrument.js";
 import { program } from "commander";
 import { Queue, Worker } from "bullmq";
 import type { ConnectionOptions } from "bullmq";
@@ -74,6 +74,7 @@ async function startWorker(): Promise<void> {
     try {
       await gracefulShutdown(shutdownResources, config.workerShutdownTimeoutMs);
     } finally {
+      await flushSentry();
       unregisterSignals();
     }
   });
@@ -83,8 +84,10 @@ async function startWorker(): Promise<void> {
     if (!startupAbort.signal.aborted) {
       startupAbort.abort(new Error(`${signal} received during worker startup`));
     }
-    void shutdown().catch((error: unknown) => {
+    void shutdown().catch(async (error: unknown) => {
+      captureWorkerError(error, "shutdown");
       console.error("[worker] Graceful shutdown failed:", error);
+      await flushSentry();
       process.exitCode = 1;
     });
   };
@@ -100,6 +103,7 @@ async function startWorker(): Promise<void> {
       maxRetriesPerRequest: null,
     });
     const onControlRedisError = (error: Error): void => {
+      captureWorkerError(error, "scheduler-redis");
       console.error("[worker] scheduler Redis error:", error);
     };
     controlRedis.on("error", onControlRedisError);
@@ -135,6 +139,7 @@ async function startWorker(): Promise<void> {
       config.schedulerLeaseTtlMs,
     );
     const reportSchedulerError = (error: unknown): void => {
+      captureWorkerError(error, "scheduler");
       console.error("[worker] scheduler run failed:", error);
     };
     const watchdogScheduler = new TrackedScheduler(reportSchedulerError);
@@ -397,12 +402,14 @@ function readyWorker<Data>(
 
 function observeWorker<Data>(worker: Worker<Data, void>, name: string): void {
   worker.on("failed", (job, error) => {
+    captureWorkerError(error, name);
     console.error(
       `[worker] ${name} job ${job?.id ?? "unknown"} failed:`,
       error,
     );
   });
   worker.on("error", (error) => {
+    captureWorkerError(error, name);
     console.error(`[worker] ${name} worker error:`, error);
   });
 }
@@ -412,11 +419,14 @@ function observeQueue<Data, Name extends string>(
   name: string,
 ): void {
   queue.on("error", (error) => {
+    captureWorkerError(error, name);
     console.error(`[worker] ${name} queue error:`, error);
   });
 }
 
-void program.parseAsync().catch((error: unknown) => {
+void program.parseAsync().catch(async (error: unknown) => {
+  captureWorkerError(error, "startup");
   console.error("[worker] Startup failed:", error);
+  await flushSentry();
   process.exitCode = 1;
 });

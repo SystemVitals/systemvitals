@@ -4,6 +4,7 @@ import type { AlertJob } from "./watchdog.js";
 import type { NotifierDeps } from "./notifiers.js";
 import { dispatchChannel } from "./notifiers.js";
 import { config } from "./config.js";
+import { captureWorkerError } from "./instrument.js";
 import {
   buildTelegramDownAlertMessage,
   buildTelegramRecoveryAlertMessage,
@@ -132,6 +133,7 @@ export async function handleAlert(
 
       successes++;
     } catch (e) {
+      captureWorkerError(e, "alert-dispatch");
       const error = e instanceof Error ? e.message : String(e);
       console.error(
         `[alert] channel ${channel.id} (${channel.type}) dispatch failed:`,

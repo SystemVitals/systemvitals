@@ -107,3 +107,11 @@ See [deployment documentation](docs/DEPLOYMENT.md) for Docker Compose and zero-d
 - [Security policy](SECURITY.md)
 - [Support](SUPPORT.md)
 - [Apache-2.0 license](LICENSE)
+
+## Self-hosted Sentry configuration
+
+The production Compose stack accepts `SENTRY_API_DSN`, `SENTRY_WORKER_DSN`,
+and `SENTRY_FRONTEND_DSN`, plus `SENTRY_ENVIRONMENT` (default `production`).
+The frontend DSN/environment are also Docker build arguments, so browser
+configuration changes require rebuilding the image. Source map auth tokens
+are optional build-only secrets and are never placed in Docker image ENV.

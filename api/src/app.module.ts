@@ -1,4 +1,7 @@
 import { Module } from '@nestjs/common';
+import { APP_FILTER } from '@nestjs/core';
+import { SentryModule } from '@sentry/nestjs/setup';
+import { SentryExceptionFilter } from './sentry-exception.filter';
 import { ConfigModule } from '@nestjs/config';
 import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
@@ -49,7 +52,9 @@ export function graphqlSchemaDestination(
 }
 
 @Module({
+  providers: [{ provide: APP_FILTER, useClass: SentryExceptionFilter }],
   imports: [
+    SentryModule.forRoot(),
     ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
     ThrottlerModule.forRoot({
       throttlers: [{ ttl: 60000, limit: 10 }],

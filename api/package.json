@@ -33,6 +33,7 @@
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-fastify": "^11.1.27",
     "@nestjs/throttler": "^6.5.0",
+    "@sentry/nestjs": "10.65.0",
     "@systemvitals/database": "file:../database",
     "argon2": "^0.44.0",
     "bullmq": "^5.79.0",

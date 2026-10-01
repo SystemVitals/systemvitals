@@ -1,3 +1,4 @@
+import { captureServerError, flushSentry } from './instrument';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import {
@@ -121,7 +122,10 @@ async function closeWithDeadline(
   });
   const close = app.close().then(
     () => 'closed' as const,
-    () => 'failed' as const,
+    (error: unknown) => {
+      captureServerError(error);
+      return 'failed' as const;
+    },
   );
   const outcome = await Promise.race([close, timeout]);
   if (timer) clearTimeout(timer);
@@ -155,6 +159,10 @@ export async function startApplicationLifecycle(
       try {
         await wait(drainDelayMs);
         const outcome = await closeWithDeadline(app, shutdownTimeoutMs);
+        if (outcome === 'timeout') {
+          captureServerError(new Error('HTTP shutdown deadline exceeded'));
+        }
+        await flushSentry();
         if (outcome !== 'closed') {
           forceExit(1);
         }
@@ -191,7 +199,8 @@ export async function buildApp(): Promise<NestFastifyApplication> {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter({ trustProxy: true }),
-    { rawBody: true },
+    // Let the bootstrap boundary report and flush initialization failures.
+    { rawBody: true, abortOnError: false },
   );
   // Register helmet on the underlying Fastify instance
   await app.register(helmet, { contentSecurityPolicy: false });
@@ -223,5 +232,10 @@ async function bootstrap() {
 }
 
 if (require.main === module) {
-  void bootstrap();
+  void bootstrap().catch(async (error: unknown) => {
+    captureServerError(error);
+    console.error('API startup failed:', error);
+    await flushSentry();
+    process.exit(1);
+  });
 }

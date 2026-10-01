@@ -58,6 +58,8 @@ services:
     environment:
       NODE_ENV: production
       PORT: "8888"
+      SENTRY_DSN: ${SENTRY_API_DSN:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
       DATABASE_URL: ${DATABASE_URL:-postgresql://systemvitals:${POSTGRES_PASSWORD}@postgres:5432/systemvitals}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       JWT_SECRET: ${JWT_SECRET}
@@ -84,6 +86,8 @@ services:
     restart: unless-stopped
     env_file: .env.production
     environment:
+      SENTRY_DSN: ${SENTRY_WORKER_DSN:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
       DATABASE_URL: ${DATABASE_URL:-postgresql://systemvitals:${POSTGRES_PASSWORD}@postgres:5432/systemvitals}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       QUEUE_ALERT: ${QUEUE_ALERT:-alert}
@@ -110,10 +114,14 @@ services:
         # Baked into the bundle at build time — setting it only under
         # environment: below would NOT make the Google button appear.
         NEXT_PUBLIC_GOOGLE_AUTH_ENABLED: ${NEXT_PUBLIC_GOOGLE_AUTH_ENABLED:-false}
+        NEXT_PUBLIC_SENTRY_DSN: ${SENTRY_FRONTEND_DSN:-}
+        NEXT_PUBLIC_SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
     restart: unless-stopped
     env_file: .env.production
     environment:
       PORT: "9999"
+      SENTRY_DSN: ${SENTRY_FRONTEND_DSN:-}
+      SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-production}
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8888}
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:9999}
       NEXT_PUBLIC_GOOGLE_AUTH_ENABLED: ${NEXT_PUBLIC_GOOGLE_AUTH_ENABLED:-false}

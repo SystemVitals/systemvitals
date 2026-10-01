@@ -1,3 +1,9 @@
+jest.mock('./instrument', () => ({
+  captureServerError: jest.fn(),
+  flushSentry: jest.fn().mockResolvedValue(undefined),
+}));
+
+import { captureServerError, flushSentry } from './instrument';
 import {
   DEFAULT_HTTP_DRAIN_DELAY_MS,
   DEFAULT_HTTP_SHUTDOWN_TIMEOUT_MS,
@@ -68,6 +74,7 @@ function createSignalRegistrar() {
 }
 
 describe('startApplicationLifecycle', () => {
+  beforeEach(() => jest.clearAllMocks());
   afterEach(() => {
     jest.useRealTimers();
   });
@@ -198,6 +205,31 @@ describe('startApplicationLifecycle', () => {
     await jest.advanceTimersByTimeAsync(1);
     await lifecycle.shutdown();
 
+    expect(forceExit).toHaveBeenCalledWith(1);
+    expect(captureServerError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'HTTP shutdown deadline exceeded' }),
+    );
+    expect(flushSentry).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports close failure and flushes before a forced exit', async () => {
+    jest.useFakeTimers();
+    const error = new Error('close failed');
+    const app = createApp({ close: jest.fn().mockRejectedValue(error) });
+    const forceExit = jest.fn(() => {
+      expect(captureServerError).toHaveBeenCalledWith(error);
+      expect(flushSentry).toHaveBeenCalledTimes(1);
+    });
+    const signals = createSignalRegistrar();
+    const lifecycle = await startApplicationLifecycle(app, createReadiness(), {
+      port: 8888,
+      drainDelayMs: 0,
+      registerSignals: signals.registerSignals,
+      forceExit,
+    });
+    const shutdown = lifecycle.shutdown();
+    await jest.advanceTimersByTimeAsync(0);
+    await shutdown;
     expect(forceExit).toHaveBeenCalledWith(1);
   });
 

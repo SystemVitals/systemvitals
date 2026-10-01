@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
   output: "standalone",
@@ -52,4 +53,12 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withSentryConfig(nextConfig, {
+  sentryUrl: process.env.SENTRY_URL || "https://sentry.nihey.org",
+  org: process.env.SENTRY_ORG || "nexus",
+  project: process.env.SENTRY_PROJECT || "systemvitals-frontend",
+  authToken: process.env.SENTRY_SELF_HOSTED_AUTH_TOKEN || '',
+  silent: true,
+  sourcemaps: { disable: !process.env.SENTRY_SELF_HOSTED_AUTH_TOKEN },
+  telemetry: false,
+});

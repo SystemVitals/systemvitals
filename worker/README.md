@@ -49,3 +49,12 @@ npm test
 ```
 
 Database-backed tests require a PostgreSQL database with all migrations applied.
+
+## Error monitoring
+
+Sentry project: `nexus/systemvitals-worker` at https://sentry.nihey.org. Set
+`SENTRY_DSN` and `SENTRY_ENVIRONMENT` in the deployment environment. A blank
+DSN disables monitoring; tests never send events. Error events omit request
+data, user identity, and breadcrumbs. Tracing and SDK logs are disabled.
+
+Error payloads omit extra data and replace exception messages (including causes) with a generic value; stack frames and error types remain available. Node services retain fatal unhandled rejections and flush before controlled exits.

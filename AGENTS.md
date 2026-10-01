@@ -29,3 +29,10 @@ data.
 Never commit credentials, production data, generated keys, or local `.env` files. Keep `.env.example` files limited to safe placeholders. The `docker-compose.infrastructure.yml` file is a generic stateful infrastructure template and must never contain production values, identifiers, hosts, or credentials.
 
 Keep pull requests focused, add tests for behavior changes, and update public documentation when a user-visible workflow, deployment contract, or API changes.
+
+Error monitoring is optional and environment-driven. Keep Sentry initialization
+before framework startup; preserve request/user/breadcrumb omission because
+monitoring URLs and jobs can contain bearer credentials. The worker captures
+failed jobs and queue/scheduler errors without attaching job payloads.
+
+Sentry captures HttpException 5xx (including GraphQL) and swallowed alert-provider failures while preserving expected 4xx responses and per-channel success behavior. Node startup remains fatal after flushing; shutdown failures are reported before exit. Exception messages/causes and extra data are scrubbed.
