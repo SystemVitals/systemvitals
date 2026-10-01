@@ -5,6 +5,10 @@
 # ── Builder stage ────────────────────────────────────────────
 FROM node:22-slim AS builder
 
+# Native build tools (including sentry-cli) use the system TLS trust store.
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /build
 
 # Install dependencies first (layer cache)

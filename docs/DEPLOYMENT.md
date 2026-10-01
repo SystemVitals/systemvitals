@@ -99,3 +99,11 @@ Before and after every deployment:
 4. Confirm the worker readiness health check is healthy and that a test check can be processed.
 
 Use least-privilege deployment credentials and rotate any credential that may have been exposed.
+
+## Sentry source-map uploads
+
+The frontend builder installs the system CA bundle so the native Sentry CLI can
+verify HTTPS when uploading source maps. Pass the upload token only through the
+`SENTRY_SELF_HOSTED_AUTH_TOKEN` BuildKit secret; never add it to image environment
+variables or disable TLS verification. A successful Next.js build alone does not
+confirm an upload: check the project artifact-bundle inventory after deployment.
