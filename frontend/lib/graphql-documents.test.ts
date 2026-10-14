@@ -72,11 +72,11 @@ const CANONICAL_TOKEN_SOURCE_FILES = [
   ["queries", resolve(__dirname, "queries.ts")],
   [
     "agent connections page",
-    resolve(__dirname, "../app/(app)/account/agent-connections/page.tsx"),
+    resolve(__dirname, "../components/app/personal-access-tokens.tsx"),
   ],
   [
     "agent connections fixtures",
-    resolve(__dirname, "../app/(app)/account/agent-connections/page.test.tsx"),
+    resolve(__dirname, "../components/app/personal-access-tokens.test.tsx"),
   ],
   [
     "connect agent fixtures",

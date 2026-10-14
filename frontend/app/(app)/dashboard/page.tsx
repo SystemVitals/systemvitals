@@ -40,7 +40,6 @@ import { planIntervalFloor } from "@/lib/plan-limits";
 import { isValidCron, nextCronFires } from "@/lib/cron";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CopyField } from "@/components/app/copy-field";
-import { ConnectAgentDialog } from "@/components/app/connect-agent-dialog";
 import {
   CheckNotificationChannels,
   type NotificationChannelOption,
@@ -516,13 +515,11 @@ function CreateCheckDialog({
 
 interface ChecksListProps {
   organizationId: string;
-  organizationName: string;
   organizationSlug: string;
 }
 
 function ChecksList({
   organizationId,
-  organizationName,
   organizationSlug,
 }: ChecksListProps) {
   const [showCreate, setShowCreate] = useState(false);
@@ -608,10 +605,6 @@ function ChecksList({
           {allowance && <CheckAllowanceMeter allowance={allowance} />}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <ConnectAgentDialog
-            organizationId={organizationId}
-            organizationName={organizationName}
-          />
           <Button
             size="sm"
             disabled={limitReached}
@@ -652,11 +645,6 @@ function ChecksList({
                 <Plus className="h-4 w-4 mr-1" />
                 New check
               </Button>
-              <ConnectAgentDialog
-                organizationId={organizationId}
-                organizationName={organizationName}
-                secondary
-              />
             </div>
           </CardContent>
         </Card>
@@ -819,7 +807,6 @@ export default function DashboardPage() {
         <ChecksList
           key={activeOrg.id}
           organizationId={activeOrg.id}
-          organizationName={activeOrg.name}
           organizationSlug={activeOrg.slug}
         />
       )}

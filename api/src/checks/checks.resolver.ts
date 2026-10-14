@@ -10,7 +10,7 @@ import {
 } from '@nestjs/graphql';
 import { UseGuards } from '@nestjs/common';
 import { ApiAuthGuard } from '../tokens/api-auth.guard';
-import { AccountSessionOnly } from '../auth/account-session.guard';
+import { AccountAccess } from '../tokens/account-access.guard';
 import { CurrentUser } from '../common/current-user.decorator';
 import type { ApiPrincipal } from '../tokens/api-principal';
 import { requireCheckAccess } from '../tokens/token-policy';
@@ -234,7 +234,7 @@ export class ChecksResolver {
   }
 
   @Mutation(() => CheckModel)
-  @AccountSessionOnly()
+  @AccountAccess()
   async moveCheck(
     @CurrentUser() principal: ApiPrincipal,
     @Args('checkId', { type: () => ID }) checkId: string,

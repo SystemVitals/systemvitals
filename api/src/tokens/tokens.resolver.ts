@@ -1,4 +1,4 @@
-import { Args, ID, Mutation, Query, Resolver } from '@nestjs/graphql';
+import { Args, ID, Int, Mutation, Query, Resolver } from '@nestjs/graphql';
 import { UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../common/current-user.decorator';
@@ -13,6 +13,8 @@ import {
   ApiTokenModel,
 } from './token.model';
 import { CreateApiTokenInput } from './create-api-token.input';
+import { isAccountToken } from './token-policy';
+import { AccountSessionOnly } from '../auth/account-session.guard';
 
 @Resolver()
 export class ApiCredentialResolver {
@@ -36,6 +38,17 @@ export class ApiCredentialResolver {
     }
 
     const capabilities = new Set(principal.apiToken.capabilities);
+    if (isAccountToken(principal)) {
+      return {
+        authKind: 'api-token',
+        credentialMode: 'ACCOUNT',
+        capabilities: ['account:manage', 'checks:read', 'checks:write'],
+        organizationId: null,
+        organizationName: null,
+        projectId: null,
+        projectName: null,
+      };
+    }
     if (principal.apiToken.legacyScopes.includes('read')) {
       capabilities.add('checks:read');
     }
@@ -81,6 +94,21 @@ export class ApiCredentialResolver {
 @UseGuards(JwtAuthGuard)
 export class TokensResolver {
   constructor(private readonly tokens: TokensService) {}
+
+  @Mutation(() => ApiTokenCreateResult)
+  @AccountSessionOnly()
+  createPersonalAccessToken(
+    @CurrentUser() user: JwtUser,
+    @Args('name') name: string,
+    @Args('expirationDays', { type: () => Int, nullable: true })
+    expirationDays?: number | null,
+  ) {
+    return this.tokens.createPersonal(
+      user.userId,
+      name,
+      expirationDays ?? undefined,
+    );
+  }
 
   @Query(() => [ApiTokenModel])
   apiTokens(@CurrentUser() user: JwtUser) {

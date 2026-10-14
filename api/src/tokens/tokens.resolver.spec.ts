@@ -24,6 +24,19 @@ function apiTokenPrincipal(projectId: string | null): ApiTokenPrincipal {
   };
 }
 
+it('describes an account token without workspace identity', async () => {
+  const { resolver, findUnique } = setup(null);
+  const principal = apiTokenPrincipal(null);
+  principal.apiToken.capabilities = ['account:manage'];
+  await expect(resolver.apiCredential(principal)).resolves.toMatchObject({
+    credentialMode: 'ACCOUNT',
+    capabilities: ['account:manage', 'checks:read', 'checks:write'],
+    organizationId: null,
+    projectId: null,
+  });
+  expect(findUnique).not.toHaveBeenCalled();
+});
+
 describe('ApiCredentialResolver', () => {
   it('returns canonical organization identity for a live scoped credential', async () => {
     const { resolver, findUnique } = setup({

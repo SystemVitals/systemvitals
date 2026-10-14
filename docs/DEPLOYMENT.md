@@ -89,6 +89,17 @@ never copy it into this checkout, print its values, add its values to tests or
 logs, or commit it. Other installations should use their own equivalently
 protected external environment source.
 
+## Account PAT rollout
+
+Deploy the API's `createPersonalAccessToken`, `ACCOUNT` credential discovery and
+GraphQL billing-link operations before deploying the account-token frontend.
+Publish the updated `@systemvitals/mcp` package before exposing its `npx` setup;
+the package is currently prepared for publication but unpublished. Source-checkout
+MCP and direct GraphQL access do not depend on publication. This feature reuses
+existing token storage and requires no database migration or worker change.
+Older API versions reject account PATs instead of treating them as legacy broad
+tokens; existing scoped and legacy tokens remain compatible with the new API.
+
 ## Operational checks
 
 Before and after every deployment:

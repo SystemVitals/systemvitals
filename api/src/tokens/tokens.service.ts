@@ -58,6 +58,39 @@ export class TokensService {
     private readonly workspaces: WorkspacesService,
   ) {}
 
+  async createPersonal(userId: string, name: string, expirationDays?: number) {
+    const trimmedName = name.trim();
+    if (!trimmedName) throw new BadRequestException('Token name is required');
+    if (
+      expirationDays !== undefined &&
+      (!Number.isInteger(expirationDays) ||
+        expirationDays < 1 ||
+        expirationDays > 3650)
+    ) {
+      throw new BadRequestException(
+        'expirationDays must be an integer from 1 to 3650',
+      );
+    }
+    const expiresAt =
+      expirationDays === undefined
+        ? null
+        : new Date(Date.now() + expirationDays * 86400000);
+    const { plaintext, prefix, hash } = generateToken();
+    const token = await this.prisma.apiToken.create({
+      data: {
+        userId,
+        name: trimmedName,
+        prefix,
+        tokenHash: hash,
+        scopes: ['account:manage'],
+        projectId: null,
+        expiresAt,
+      },
+      select: TOKEN_SELECT,
+    });
+    return { ...this.toModel(token), plaintext };
+  }
+
   async create(userId: string, name: string, scopes: string[]) {
     if (
       scopes.some((scope) =>

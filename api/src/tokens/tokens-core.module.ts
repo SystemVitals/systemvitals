@@ -5,6 +5,7 @@ import { ApiAuthGuard } from './api-auth.guard';
 import { ApiTokenStrategy } from './api-token.strategy';
 import { TokensService } from './tokens.service';
 import { WorkspacesModule } from '../workspaces/workspaces.module';
+import { AccountAccessGuard } from './account-access.guard';
 
 @Module({
   imports: [
@@ -16,7 +17,12 @@ import { WorkspacesModule } from '../workspaces/workspaces.module';
       }),
     }),
   ],
-  providers: [TokensService, ApiTokenStrategy, ApiAuthGuard],
-  exports: [TokensService, ApiAuthGuard],
+  providers: [
+    TokensService,
+    ApiTokenStrategy,
+    ApiAuthGuard,
+    AccountAccessGuard,
+  ],
+  exports: [TokensService, ApiAuthGuard, AccountAccessGuard],
 })
 export class TokensCoreModule {}

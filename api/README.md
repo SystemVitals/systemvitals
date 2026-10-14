@@ -16,6 +16,30 @@ npm run test:e2e
 
 Run `npm run start:dev` to start the API locally on port 8888. The API requires PostgreSQL and Redis; `../dev.sh` starts the local infrastructure.
 
+## Account personal access tokens
+
+With a non-impersonated session JWT, call
+`createPersonalAccessToken(name: String!, expirationDays: Int)` and save its
+`plaintext` field from that one response. Omit expirationDays (or pass null) for
+no expiration; supplied values must be integers from 1 to 3650. Only the hash and
+identifying prefix are stored. List metadata with `apiTokens` and revoke with
+`revokeApiToken`, both session-only.
+
+Use the returned secret as `Authorization: Bearer svt_...` on `/graphql`.
+`apiCredential` reports mode `ACCOUNT`, `account:manage`, and effective check
+capabilities with no organization binding. Current membership, roles, ownership,
+plan limits and handshake requirements still apply. Account tokens can manage
+public product resources, move checks and query allowance. Password changes,
+token administration and `/admin/graphql` remain excluded, even for admin issuers.
+Expired, revoked, suspended-account and malformed credentials are rejected.
+
+`createBillingCheckout(plan: String!, interval: String)` accepts SIGNAL/FLEET
+and month/year (default month); `createBillingPortal` returns the account's
+hosted billing portal. Both return `{ url }`, require a non-impersonated session
+or account PAT, and reuse BillingService. The user completes changes on Stripe's
+hosted pages. Existing session-only REST billing endpoints remain compatible.
+Scoped and legacy credentials do not gain account permissions.
+
 ## Per-check notification routing
 
 `CheckModel.notificationChannelIds` lists the enabled notification channels

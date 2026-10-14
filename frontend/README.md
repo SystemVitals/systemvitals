@@ -16,6 +16,22 @@ npm run dev   # starts on port 9999
 
 Copy `.env.example` to `.env.local` and set `NEXT_PUBLIC_API_URL` to point at the api.
 
+## Agent credentials
+
+Account > Personal access tokens creates and revokes account-wide personal access
+tokens. The shared connection wizard uses a GraphQL mutation with Apollo's
+`no-cache` policy, displays the secret once, and protects uncopied results on
+navigation. If creation has an unknown outcome, reviewing connections explicitly
+refreshes history so a potentially active token can be revoked.
+
+Account tokens manage product resources across current organization permissions
+and obtain hosted billing links. Password and token administration stay with the
+login session. The organization Connect agent buttons and separate navigation entry are
+retired; the old URL redirects to `/account#personal-access-tokens`. Existing
+scoped credentials remain available in account-wide history for revocation. Deploy API support and publish the updated MCP package before rolling out
+the account wizard's `npx` setup; source-checkout MCP and GraphQL access work without
+package publication.
+
 ## Error monitoring
 
 Sentry project: `nexus/systemvitals-frontend` at https://sentry.nihey.org. Set

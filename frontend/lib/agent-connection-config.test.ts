@@ -15,12 +15,18 @@ const input = {
 };
 
 describe("generateAgentConnectionConfig", () => {
+  it.each(['SystemVitals account', 'Produção principal', 'workspace', '東京', ''])
+  ('uses a valid Claude MCP server name for %s', (organizationName) => {
+    const result = generateAgentConnectionConfig({ ...input, organizationName, client: 'claude-code' });
+    const serverName = result.split('\n').find(line => line.startsWith('claude mcp add '))!.split(' ')[3].replaceAll("'", '');
+    expect(serverName).toMatch(/^systemvitals(?:-[a-z0-9_-]+)?$/);
+  });
   it.each<[AgentClient, string]>([
     [
       "claude-code",
       `read -rsp 'SystemVitals API token: ' SYSTEMVITALS_API_TOKEN
 printf '\\n'
-claude mcp add 'Production checks' --env 'SYSTEMVITALS_API_URL=https://api.systemvitals.example/graphql' --env "SYSTEMVITALS_API_TOKEN=$SYSTEMVITALS_API_TOKEN" -- npx -y @systemvitals/mcp
+claude mcp add 'systemvitals-production-checks' --env 'SYSTEMVITALS_API_URL=https://api.systemvitals.example/graphql' --env "SYSTEMVITALS_API_TOKEN=$SYSTEMVITALS_API_TOKEN" -- npx -y @systemvitals/mcp
 unset SYSTEMVITALS_API_TOKEN`,
     ],
     [
@@ -236,7 +242,7 @@ printf 'token-after=%s' "\${SYSTEMVITALS_API_TOKEN-unset}"`,
         expect(argumentsOutput.replace(/^\n/, "").split("\0").slice(0, -1)).toEqual([
           "mcp",
           "add",
-          adversarial.organizationName,
+          "systemvitals-agent-touch-tmp-systemvitals-injected-echo",
           "--env",
           `SYSTEMVITALS_API_URL=${adversarial.apiUrl}`,
           "--env",

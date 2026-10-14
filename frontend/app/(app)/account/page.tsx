@@ -1,11 +1,10 @@
 "use client";
 import { useState } from "react";
-import Link from "next/link";
 import { useMutation } from "@apollo/client/react";
-import { Check, KeyRound, X } from "lucide-react";
+import { Check, X } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { SET_PASSWORD } from "@/lib/queries";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -22,6 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { PersonalAccessTokensSection } from "@/components/app/personal-access-tokens";
 import { GoogleMark } from "@/components/brand/google-mark";
 
 export default function AccountPage() {
@@ -132,29 +132,7 @@ export default function AccountPage() {
         </CardContent>
       </Card>
 
-      <Card className="max-w-xl">
-        <CardHeader>
-          <div className="flex items-start gap-3">
-            <div className="rounded-lg bg-primary/10 p-2 text-primary">
-              <KeyRound className="h-4 w-4" aria-hidden="true" />
-            </div>
-            <div>
-              <CardTitle>Agent connections</CardTitle>
-              <CardDescription className="mt-1">
-                Review connection history and revoke agent credentials.
-              </CardDescription>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <Link
-            href="/account/agent-connections"
-            className={buttonVariants({ variant: "outline" })}
-          >
-            Manage agent connections
-          </Link>
-        </CardContent>
-      </Card>
+      <PersonalAccessTokensSection />
 
       <Dialog open={!!errorMessage} onOpenChange={() => setErrorMessage(null)}>
         <DialogContent>

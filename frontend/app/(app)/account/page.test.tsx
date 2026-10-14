@@ -1,6 +1,10 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, it, expect, vi } from "vitest";
 
+vi.mock("@/components/app/personal-access-tokens", () => ({
+  PersonalAccessTokensSection: () => <section aria-label="Personal access tokens"><button>Create personal access token</button></section>,
+}));
+
 const setPassword = vi.fn().mockResolvedValue({ data: { setPassword: true } });
 vi.mock("@apollo/client/react", () => ({
   useMutation: () => [setPassword, { loading: false }],
@@ -31,10 +35,8 @@ describe("AccountPage", () => {
     expect(screen.queryByLabelText(/current password/i)).toBeNull();
     expect(screen.getByLabelText(/new password/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /set password/i })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /manage agent connections/i })).toHaveAttribute(
-      "href",
-      "/account/agent-connections",
-    );
+    expect(screen.getByRole("button", { name: "Create personal access token" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /manage agent connections/i })).not.toBeInTheDocument();
   });
 
   it("asks for the current password once one is set", () => {
