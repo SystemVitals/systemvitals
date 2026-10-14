@@ -19,8 +19,21 @@ let checkCronOverdueId: string;
 let checkCronFreshId: string;
 let emailChannelId: string;
 let slackChannelId: string;
+let cleanupNeighborUserId: string;
+let cleanupNeighborOrgId: string;
 
 beforeAll(async () => {
+  // An unrelated suite can own an account in the same test-email domain.
+  // Keep its organization present to exercise the creator FK during cleanup.
+  const neighbor = await prisma.user.create({
+    data: { email: `watchdog-cleanup-neighbor-${Date.now()}@test.invalid`, passwordHash: "testhash" },
+  });
+  cleanupNeighborUserId = neighbor.id;
+  const neighborOrg = await prisma.organization.create({
+    data: { name: "Cleanup neighbor", slug: `cleanup-neighbor-${neighbor.id}`, creatorUserId: neighbor.id },
+  });
+  cleanupNeighborOrgId = neighborOrg.id;
+
   // Clean up any stale test artifacts from prior failed runs
   const staleProjects = await prisma.project.findMany({
     where: { name: "Watchdog Test Project" },
@@ -48,7 +61,9 @@ beforeAll(async () => {
     await prisma.membership.deleteMany({ where: { organizationId: { in: staleOrgIds } } });
     await prisma.organization.deleteMany({ where: { id: { in: staleOrgIds } } });
   }
-  await prisma.user.deleteMany({ where: { email: { endsWith: "@test.invalid" } } });
+  await prisma.user.deleteMany({
+    where: { email: { startsWith: "watchdog-test-", endsWith: "@test.invalid" } },
+  });
 
   // Create user
   const user = await prisma.user.create({
@@ -205,6 +220,8 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  if (cleanupNeighborOrgId) await prisma.organization.delete({ where: { id: cleanupNeighborOrgId } });
+  if (cleanupNeighborUserId) await prisma.user.delete({ where: { id: cleanupNeighborUserId } });
   // Clean up in dependency order
   const allCheckIds = [checkOverdueId, checkFreshId, checkPausedId, checkCronOverdueId, checkCronFreshId];
   await prisma.checkEvent.deleteMany({ where: { checkId: { in: allCheckIds } } });
@@ -220,6 +237,12 @@ afterAll(async () => {
 });
 
 describe("sweepOverdue", () => {
+  it("preserves unrelated test accounts during watchdog fixture cleanup", async () => {
+    const neighbor = await prisma.user.findUnique({ where: { id: cleanupNeighborUserId } });
+    const organization = await prisma.organization.findUnique({ where: { id: cleanupNeighborOrgId } });
+    expect(neighbor?.id).toBe(cleanupNeighborUserId);
+    expect(organization?.creatorUserId).toBe(cleanupNeighborUserId);
+  });
   it("marks the overdue UP check as DOWN, writes a CheckEvent, enqueues alert, returns 1", async () => {
     const enqueuedJobs: AlertJob[] = [];
     const fakeEnqueue = async (job: AlertJob) => {

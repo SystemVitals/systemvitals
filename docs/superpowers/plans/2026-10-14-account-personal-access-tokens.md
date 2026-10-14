@@ -103,3 +103,10 @@ dashboard scoped-token entry points and the separate navigation item. Regression
 tests were observed failing before these layout changes. Fixed Claude CLI name
 validation: an isolated CLI test rejected `SystemVitals account` and accepted the
 normalized generated name. npm confirms the MCP package is unpublished (E404).
+
+CI follow-up: all API e2e tests passed, but watchdog fixture cleanup selected every
+`@test.invalid` user, colliding with parallel alert-handler fixtures. Restricted
+cleanup to the watchdog-test prefix and added an unrelated-account fixture that
+reproduced the failure before the fix. Worker TypeScript and all 252 tests pass
+against the isolated test database. The user explicitly confirmed token controls
+belong directly in Account settings with the old agent page removed.
