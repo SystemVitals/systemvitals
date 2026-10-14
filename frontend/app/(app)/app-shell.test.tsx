@@ -52,7 +52,7 @@ describe("App shell", () => {
     expect(screen.getByText("content")).toBeTruthy();
   });
 
-  it("marks only Agent connections active in the mobile drawer on its nested route", () => {
+  it("marks Account active on the retired agent URL without a separate navigation entry", () => {
     pathname = "/account/agent-connections";
     render(
       <MockedProvider>
@@ -64,12 +64,8 @@ describe("App shell", () => {
     const drawer = screen.getByRole("dialog", { name: "Navigation menu" });
     expect(drawer).toHaveClass("max-h-[calc(100dvh-2rem)]", "overflow-y-auto");
     const account = within(drawer).getByRole("link", { name: "Account" });
-    const agentConnections = within(drawer).getByRole("link", {
-      name: "Agent connections",
-    });
-
-    expect(account).not.toHaveClass("text-primary");
-    expect(agentConnections).toHaveClass("text-primary");
+    expect(within(drawer).queryByRole("link", { name: "Agent connections" })).not.toBeInTheDocument();
+    expect(account).toHaveClass("text-primary");
   });
 
   it("redirects an unauthenticated dashboard visit through login with an encoded next path", async () => {

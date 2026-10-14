@@ -9,9 +9,11 @@ import { AccountEntitlementsService } from './account-entitlements.service';
 import { SubscriptionReconciliationService } from './subscription-reconciliation.service';
 import { ReconciliationRunLock } from './subscription-reconciliation-lock';
 import { AuthModule } from '../auth/auth.module';
+import { TokensCoreModule } from '../tokens/tokens-core.module';
+import { BillingActionsResolver } from './billing-actions.resolver';
 
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, TokensCoreModule],
   controllers: [BillingController],
   providers: [
     stripeClientFactory,
@@ -19,6 +21,7 @@ import { AuthModule } from '../auth/auth.module';
     StripePlanBootstrapService,
     BillingService,
     BillingResolver,
+    BillingActionsResolver,
     AccountEntitlementsService,
     SubscriptionReconciliationService,
     ReconciliationRunLock,

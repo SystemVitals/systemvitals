@@ -21,10 +21,20 @@ organization creation provisions the workspace. The next cleanup release
 removes the deprecated public project surface, but physical removal of the
 internal project table requires a separate approved design.
 
-Authenticated account-session organization members can query
+Authenticated account-session and account-PAT organization members can query
 `organizationCheckAllowance` for the creator account's aggregate check usage,
 limit, and remaining allowance; the response never exposes creator identity
 data.
+
+Personal access tokens use the explicit `account:manage` scope, no workspace
+binding, and `ACCOUNT` credential discovery mode. They delegate public product
+operations across the issuer's current organization memberships plus GraphQL
+billing checkout/portal links. Keep the public operation allowlist explicit;
+password changes, token administration, and platform administration are excluded.
+Only non-impersonated sessions may issue PATs. Reject workspace-bound or mixed-scope
+account credentials. Scoped and legacy token access stays compatible. MCP account
+tools are registered only for ACCOUNT credentials; hosted Stripe pages complete
+billing changes. Token secrets bypass Apollo caching and are displayed only once.
 
 Never commit credentials, production data, generated keys, or local `.env` files. Keep `.env.example` files limited to safe placeholders. The `docker-compose.infrastructure.yml` file is a generic stateful infrastructure template and must never contain production values, identifiers, hosts, or credentials.
 

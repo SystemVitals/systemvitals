@@ -255,22 +255,10 @@ describe("DashboardPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("restores Connect agent entry points for the active organization", async () => {
+  it("retires organization Connect agent entry points", async () => {
     renderDashboard("SIGNAL");
-
     await screen.findByText("No checks yet. Start monitoring your first service.");
-    const entryPoints = screen.getAllByRole("button", {
-      name: "Connect agent",
-    });
-    expect(entryPoints).toHaveLength(2);
-
-    fireEvent.click(entryPoints[0]);
-    const dialog = await screen.findByRole("dialog", {
-      name: "Connect agent",
-    });
-    expect(dialog).toHaveTextContent(
-      "Create an organization-scoped connection for Signal org.",
-    );
+    expect(screen.queryByRole("button", { name: "Connect agent" })).not.toBeInTheDocument();
   });
 
   it("lets the user type a timeout when creating an HTTP check", async () => {

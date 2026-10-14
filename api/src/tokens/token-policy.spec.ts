@@ -27,6 +27,58 @@ function apiTokenPrincipal(
   };
 }
 
+describe('account personal access policy', () => {
+  const account = () =>
+    apiTokenPrincipal({
+      projectId: null,
+      capabilities: ['account:manage'],
+      legacyScopes: [],
+    });
+  it.each([
+    'me',
+    'createOrganization',
+    'deleteOrganization',
+    'createChannel',
+    'createStatusPage',
+    'organizationMembers',
+    'inviteMember',
+    'acceptInvite',
+    'moveCheck',
+    'organizationCheckAllowance',
+    'telegramConnectionPreview',
+    'connectTelegramChannel',
+    'createBillingCheckout',
+    'createBillingPortal',
+  ])('allows product account operation %s', (operation) => {
+    expect(() => requireOperationAccess(account(), operation)).not.toThrow();
+  });
+  it.each([
+    'setPassword',
+    'apiTokens',
+    'createApiToken',
+    'createScopedApiToken',
+    'createPersonalAccessToken',
+    'revokeApiToken',
+    'adminPing',
+    'adminImpersonate',
+    'unknownFutureOperation',
+  ])('denies privileged operation %s', (operation) => {
+    expect(() => requireOperationAccess(account(), operation)).toThrow(
+      ForbiddenException,
+    );
+  });
+  it('allows check reads and writes in different workspaces', () => {
+    for (const project of ['project-1', 'project-2']) {
+      expect(() =>
+        requireCheckAccess(account(), 'checks:read', project),
+      ).not.toThrow();
+      expect(() =>
+        requireCheckAccess(account(), 'checks:write', project),
+      ).not.toThrow();
+    }
+  });
+});
+
 describe('requireCheckAccess', () => {
   it('allows session principals without scope or project checks', () => {
     expect(() =>

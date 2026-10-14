@@ -1,7 +1,8 @@
 # SystemVitals MCP Server
 
 Drive [SystemVitals](../../README.md) from Claude Code or any MCP-compatible
-client. Session and legacy broad credentials expose the 26 tools listed below;
+client. Account-wide personal access tokens expose 42 tools. Session and legacy
+broad credentials expose the 26 tools listed below;
 organization-scoped connections expose only their authorized check tools.
 
 > **This package is prepared for public publication, but is not currently
@@ -14,9 +15,9 @@ organization-scoped connections expose only their authorized check tools.
 
 - Node.js 22+
 - A running SystemVitals API (default: `http://localhost:8888/graphql`)
-- A SystemVitals agent connection secret (`svt_...`) — open an organization and
-  choose **Connect agent**. Existing connections and revocation history live
-  under **Account > Agent connections**.
+- A SystemVitals personal access token (`svt_...`) — choose **Account > Personal access tokens > Create personal access token** for account management. Existing organization-scoped
+  connections remain limited to their original check permissions. Revocation
+  history lives under **Account > Personal access tokens**. Existing connections remain valid.
 
 ---
 
@@ -33,7 +34,7 @@ Both are required. The server exits with a clear error if either is missing.
 
 ## Registering in Claude Code
 
-After the package has been published, the Connect agent wizard generates setup
+After the package has been published, the personal-token wizard generates setup
 for Claude Code, Codex, Cursor, Universal JSON, and GraphQL/cURL. Claude Code
 setup prompts for the token so the literal secret is not written into shell
 history:
@@ -85,6 +86,10 @@ The server introspects the credential before registering tools:
 
 - Session JWTs and legacy broad `read`/`write` tokens retain all **26** tools
   below for compatibility.
+- Account PATs (`ACCOUNT`, explicit `account:manage`) expose **42** tools: the
+  existing 26 plus the account catalog below, across current organization
+  memberships and roles. They cannot change passwords, administer tokens, or
+  access platform administration.
 - A full organization-scoped agent connection exposes **9** check tools: two
   reads and seven mutations.
 - A read-only scoped credential exposes only **2** tools: `list_checks` and
@@ -175,12 +180,34 @@ across all organizations attributed to one creator account. The previous
 creator remains an owner after transfer, and deleting an organization never
 changes account billing.
 
-> **Not exposed:** status-page list/create/update/delete is currently absent
-> from MCP even though that management surface exists in the API/frontend.
-> API-token administration (creation, listing/history, and revocation) requires
-> a session JWT and cannot be called with an ApiToken. Account password
-> management, account billing, checkout, portal, and Stripe actions also remain
-> outside MCP.
+## Account PAT tool catalog (16 additional tools)
+
+| Tool | Description |
+|---|---|
+| `get_account` | Read account identity and accessible organizations |
+| `get_subscription` | Read subscription, plan and aggregate usage |
+| `get_organization_check_allowance` | Read the workspace creator's shared check allowance |
+| `move_check` | Move a check between accessible organizations |
+| `list_status_pages` | List organization status-page configurations |
+| `create_status_page` | Create a public status page |
+| `update_status_page` | Edit its title, checks or branding |
+| `delete_status_page` | Delete a public status page |
+| `list_invites` | List pending invitations without acceptance secrets |
+| `preview_invite` | Inspect a supplied invitation token |
+| `accept_invite` | Accept an invitation for this account |
+| `get_telegram_bot` | Discover the managed bot for a normal Telegram handshake |
+| `preview_telegram_connection` | Inspect a supplied Telegram handshake token |
+| `connect_telegram_channel` | Complete a valid Telegram handshake in an organization |
+| `create_billing_checkout` | Return a hosted checkout URL for SIGNAL/FLEET, month/year |
+| `create_billing_portal` | Return the account's hosted billing portal URL |
+
+Billing changes require completing the returned Stripe-hosted flow. These tools
+do not independently charge a card or cancel a subscription. Account password
+management and API-token administration (creation, listing/history, revocation)
+require a session JWT and remain outside MCP. The account PAT shares the issuer's
+current product permissions, including organizations joined later. Removing its
+issuer's membership immediately removes that organization's access on subsequent
+requests. Revoking or expiring the token rejects subsequent authenticated calls.
 
 Email create/list results include `verificationStatus`,
 `verificationDeliveryStatus`, and `verificationExpiresAt`. Pending channels
@@ -191,7 +218,7 @@ expire after 24 hours and resend has a 60-second cooldown.
 
 Agent secrets are shown once at creation. They must never be logged, persisted
 by SystemVitals, placed in URLs, or sent to analytics. Revoke an exposed
-connection from **Account > Agent connections**.
+connection from **Account > Personal access tokens**.
 
 ## Credential errors
 
@@ -230,3 +257,13 @@ npm start
 
 See the repository [contributor guide](../../AGENTS.md) for validation and
 contribution guidance.
+
+## Claude setup names and package availability
+
+The wizard converts organization/account display names into a Claude-compatible
+`systemvitals-...` server name. Claude rejects spaces and punctuation in server
+names even when shell-quoted. Other clients retain correctly escaped display names.
+
+`@systemvitals/mcp` currently returns npm E404 because it has not been published.
+Until publication, use the source-checkout instructions above or select GraphQL/cURL
+in the token wizard. Token creation and GraphQL access do not depend on npm.

@@ -45,6 +45,7 @@ const TOKEN_QUERIES = ['apiCredential', 'apiTokens'];
 const TOKEN_MUTATIONS = [
   'createApiToken',
   'createScopedApiToken',
+  'createPersonalAccessToken',
   'revokeApiToken',
 ];
 const TELEGRAM_QUERIES = ['managedTelegramBot', 'telegramConnectionPreview'];
@@ -101,6 +102,26 @@ describe('token GraphQL schema isolation (e2e)', () => {
     });
     return JSON.parse(response.body) as SchemaResponse;
   }
+
+  it('keeps billing actions and link metadata out of the admin schema', async () => {
+    const [publicSchema, adminSchema] = await Promise.all([
+      schemaAt('/graphql'),
+      schemaAt('/admin/graphql'),
+    ]);
+    const publicMutations = publicSchema.data!.__schema.mutationType.fields.map(
+      ({ name }) => name,
+    );
+    const adminMutations = adminSchema.data!.__schema.mutationType.fields.map(
+      ({ name }) => name,
+    );
+    for (const name of ['createBillingCheckout', 'createBillingPortal']) {
+      expect(publicMutations).toContain(name);
+      expect(adminMutations).not.toContain(name);
+    }
+    expect(
+      adminSchema.data!.__schema.types.map(({ name }) => name),
+    ).not.toContain('BillingLink');
+  });
 
   it('registers token management only on the public GraphQL schema', async () => {
     const [publicSchema, adminSchema] = await Promise.all([

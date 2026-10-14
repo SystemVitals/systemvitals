@@ -7,7 +7,6 @@ import {
   Building2,
   CreditCard,
   Globe,
-  KeyRound,
   LayoutDashboard,
   LogOut,
   Shield,
@@ -28,11 +27,6 @@ export const APP_NAV = [
   { label: "Organizations", href: "/organizations", icon: Building2 },
   { label: "Billing", href: "/billing", icon: CreditCard },
   { label: "Account", href: "/account", icon: UserCog },
-  {
-    label: "Agent connections",
-    href: "/account/agent-connections",
-    icon: KeyRound,
-  },
 ];
 
 export function AppSidebar() {
@@ -57,7 +51,7 @@ export function AppSidebar() {
           {APP_NAV.map(({ label, href, icon: Icon }) => {
             const active =
               pathname === href ||
-              (href !== "/account" && pathname.startsWith(href + "/"));
+              pathname.startsWith(href + "/");
             return (
               <li key={href}>
                 <Link

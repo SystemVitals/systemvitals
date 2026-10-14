@@ -533,6 +533,19 @@ export const CREATE_API_TOKEN = gql`
   }
 `;
 
+export const CREATE_PERSONAL_ACCESS_TOKEN = gql`
+  mutation CreatePersonalAccessToken($name: String!, $expirationDays: Int) {
+    createPersonalAccessToken(name: $name, expirationDays: $expirationDays) {
+      id
+      name
+      scopes
+      organizationId
+      expiresAt
+      plaintext
+    }
+  }
+`;
+
 export const API_TOKENS = gql`
   query ApiTokens {
     apiTokens {

@@ -1,9 +1,10 @@
 import type { Gql } from "./gql.js";
 import { tools, type ToolDef } from "./tools.js";
+import { accountTools } from './account-tools.js';
 
 export type Credential = {
   authKind: "session" | "api-token";
-  credentialMode: "SESSION" | "LEGACY_BROAD" | "PROJECT_SCOPED";
+  credentialMode: "SESSION" | "LEGACY_BROAD" | "PROJECT_SCOPED" | "ACCOUNT";
   capabilities: readonly string[];
   organizationId: string | null;
   organizationName: string | null;
@@ -84,6 +85,14 @@ export async function fetchCredential(gql: Gql): Promise<Credential> {
 export function toolsForCredential(
   credential: Credential,
 ): readonly ToolDef[] {
+  if (credential.credentialMode === 'ACCOUNT') {
+    if (credential.authKind !== 'api-token' ||
+      !credential.capabilities.includes('account:manage') ||
+      credential.organizationId !== null || credential.projectId !== null) {
+      throw new Error('Invalid account API credential metadata.');
+    }
+    return [...tools, ...accountTools];
+  }
   if (
     credential.credentialMode === "SESSION" ||
     credential.credentialMode === "LEGACY_BROAD"

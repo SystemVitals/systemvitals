@@ -10,6 +10,7 @@ import type { ApiPrincipal, TokenCapability } from './api-principal';
 import type { Prisma } from '@systemvitals/database';
 
 const TOKEN_CAPABILITIES: readonly TokenCapability[] = [
+  'account:manage',
   'checks:read',
   'checks:write',
 ];
@@ -98,17 +99,35 @@ export class ApiTokenStrategy extends PassportStrategy(Strategy, 'api') {
         if (token.user.suspendedAt) {
           throw new UnauthorizedException('Credential owner account suspended');
         }
+        const isAccount = token.scopes.includes('account:manage');
+        if (
+          isAccount &&
+          (token.scopes.length !== 1 ||
+            token.projectId !== null ||
+            token.projectNameSnapshot !== null ||
+            token.organizationNameSnapshot !== null)
+        ) {
+          throw new UnauthorizedException('Invalid account credential');
+        }
         if (token.projectId === null && token.projectNameSnapshot !== null) {
           throw new UnauthorizedException(
             'Credential project no longer exists',
           );
         }
-        if (token.projectId === null && token.scopes.some(isTokenCapability)) {
+        if (
+          !isAccount &&
+          token.projectId === null &&
+          token.scopes.some(isTokenCapability)
+        ) {
           throw new UnauthorizedException(
             'Scoped credential is missing a project binding',
           );
         }
-        if (token.projectId === null && !token.scopes.some(isLegacyScope)) {
+        if (
+          !isAccount &&
+          token.projectId === null &&
+          !token.scopes.some(isLegacyScope)
+        ) {
           throw new UnauthorizedException('Credential has no supported scope');
         }
         if (

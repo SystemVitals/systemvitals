@@ -1,6 +1,6 @@
 import { UseGuards } from '@nestjs/common';
 import { Args, ID, Mutation, Query, Resolver } from '@nestjs/graphql';
-import { AccountSessionOnly } from '../auth/account-session.guard';
+import { AccountAccess } from '../tokens/account-access.guard';
 import type { JwtUser } from '../auth/jwt.strategy';
 import { CurrentUser } from '../common/current-user.decorator';
 import { ChannelModel } from '../channels/channel.model';
@@ -29,13 +29,13 @@ export class TelegramResolver {
   }
 
   @Query(() => TelegramConnectionPreviewModel)
-  @AccountSessionOnly()
+  @AccountAccess()
   telegramConnectionPreview(@Args('token') token: string) {
     return this.telegramConnections.preview(token);
   }
 
   @Mutation(() => ChannelModel)
-  @AccountSessionOnly()
+  @AccountAccess()
   async connectTelegramChannel(
     @CurrentUser() user: JwtUser,
     @Args('token') token: string,

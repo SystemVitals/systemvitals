@@ -97,6 +97,48 @@ function setup(token: TokenRecord | null = tokenRecord()) {
   };
 }
 
+describe('account personal access authentication', () => {
+  it('authenticates an unbound account token with explicit capabilities', async () => {
+    const { strategy } = setup(
+      tokenRecord({
+        projectId: null,
+        projectNameSnapshot: null,
+        organizationNameSnapshot: null,
+        scopes: ['account:manage'],
+      }),
+    );
+    await expect(
+      strategy.validate(bearer('svt_account')),
+    ).resolves.toMatchObject({
+      authKind: 'api-token',
+      userId: 'user-1',
+      apiToken: {
+        projectId: null,
+        capabilities: ['account:manage'],
+        legacyScopes: [],
+      },
+    });
+  });
+  it.each([
+    { projectId: 'project-1', scopes: ['account:manage'] },
+    { projectId: null, scopes: ['account:manage', 'write'] },
+    { projectId: null, scopes: ['account:manage', 'checks:write'] },
+    { projectId: null, scopes: ['account:manage', 'unknown'] },
+  ])('rejects malformed account credentials %#', async (overrides) => {
+    const { strategy, updateMany } = setup(
+      tokenRecord({
+        projectNameSnapshot: null,
+        organizationNameSnapshot: null,
+        ...overrides,
+      }),
+    );
+    await expect(strategy.validate(bearer('svt_invalid'))).rejects.toThrow(
+      UnauthorizedException,
+    );
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+});
+
 describe('ApiTokenStrategy', () => {
   beforeEach(() => {
     jest.spyOn(Date, 'now').mockReturnValue(NOW.getTime());

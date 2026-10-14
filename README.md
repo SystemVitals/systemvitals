@@ -73,6 +73,28 @@ check. The dashboard and check detail page let users turn individual channels
 on or off, including turning every channel off with a clear
 `Notifications off` warning.
 
+## Personal access tokens for agents
+
+Open **Account > Personal access tokens > Create personal access token** to delegate
+account management to an agent. Save the secret when it is displayed: it is shown
+only once. The setup wizard provides Claude Code, Codex, Cursor, universal MCP,
+and GraphQL/cURL configurations. Account tokens default to 30 days; choose another
+expiration or no expiration as needed. Revoke them from the same page.
+
+A personal access token manages organizations, checks, notification channels,
+members, invitations, status pages, and check moves across every organization
+you can currently access. It follows your current organization roles, membership
+and plan limits, including organizations you join later. It can read account
+subscription/usage and obtain hosted billing checkout or portal links; billing
+changes are completed on Stripe's hosted pages. Password changes, token
+administration, and platform administration require your login session.
+
+Existing organization-scoped credentials stay valid and can be revoked from
+Account. The former Agent connections URL redirects to Account's personal-token
+section; token history includes credentials from all organizations. See the
+[MCP guide](integrations/mcp/README.md) for tool coverage, source-checkout usage
+and the MCP package publication requirement.
+
 ## Organization workspace compatibility
 
 This compatibility release makes the organization the only public workspace.

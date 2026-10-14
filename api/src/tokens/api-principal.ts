@@ -1,6 +1,6 @@
 import type { JwtUser } from '../auth/jwt.strategy';
 
-export type TokenCapability = 'checks:read' | 'checks:write';
+export type TokenCapability = 'checks:read' | 'checks:write' | 'account:manage';
 
 export interface ApiTokenMetadata {
   id: string;

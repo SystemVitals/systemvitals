@@ -6,13 +6,62 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import Link from "next/link";
 import { StrictMode } from "react";
 
-import { API_TOKENS, CREATE_API_TOKEN } from "@/lib/queries";
+import { API_TOKENS, CREATE_API_TOKEN, CREATE_PERSONAL_ACCESS_TOKEN } from "@/lib/queries";
 import { ConnectAgentDialog } from "./connect-agent-dialog";
-import { AgentConnectionsPage } from "@/app/(app)/account/agent-connections/page";
+import { PersonalAccessTokensSection } from "./personal-access-tokens";
 
 const plaintext = "svt_once_only_secret";
 const organization = { organizationId: "org_123", organizationName: "Production" };
 const mockRouterPush = vi.fn();
+
+describe('account personal access wizard', () => {
+  beforeEach(() => {
+    history.replaceState(null, '', '/account#personal-access-tokens');
+    Object.defineProperty(navigator, 'clipboard', { configurable: true,
+      value: {writeText: vi.fn().mockResolvedValue(undefined)} });
+  });
+  it('creates an account credential without organization or capability inputs', async () => {
+    const cache = new InMemoryCache();
+    render(<MockedProvider cache={cache} mocks={[{
+      request: {query: CREATE_PERSONAL_ACCESS_TOKEN, variables: {name:'Claude Code — SystemVitals account',expirationDays:30}},
+      result: {data:{createPersonalAccessToken:{id:'account-token',name:'Claude Code — SystemVitals account',
+        scopes:['account:manage'],organizationId:null,expiresAt:'2026-11-13T12:00:00Z',plaintext}}},
+    }]}><ConnectAgentDialog scope="account" /></MockedProvider>);
+    fireEvent.click(screen.getByRole('button',{name:'Create personal access token'}));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText(/all organizations you can access/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/password changes and token administration/i)).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole('button',{name:'Create connection'}));
+    await screen.findByText(plaintext);
+    expect(JSON.stringify(cache.extract())).not.toContain(plaintext);
+    fireEvent.click(screen.getByRole('button',{name:/copy token/i}));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(plaintext));
+  });
+  it('offers account creation from account connection history', async () => {
+    render(<MockedProvider mocks={[{request:{query:API_TOKENS},result:{data:{apiTokens:[]}}}]}>
+      <PersonalAccessTokensSection />
+    </MockedProvider>);
+    expect(screen.getByRole('button',{name:'Create personal access token'})).toBeInTheDocument();
+  });
+  it('refreshes same-page history after an uncertain account creation', async () => {
+    const recovered = {id:'lost-token',name:'Lost response agent',prefix:'svt_lost',scopes:['account:manage'],
+      organizationId:null,projectName:null,organizationName:null,createdAt:'2026-10-14T12:00:00Z',
+      expiresAt:null,lastUsedAt:null,revokedAt:null};
+    render(<MockedProvider mocks={[
+      {request:{query:API_TOKENS},result:{data:{apiTokens:[]}}},
+      {request:{query:API_TOKENS},result:{data:{apiTokens:[recovered]}}},
+      {request:{query:CREATE_PERSONAL_ACCESS_TOKEN,variables:{name:'Claude Code — SystemVitals account',expirationDays:30}},
+        error:new Error('Response lost')},
+    ]}><PersonalAccessTokensSection /></MockedProvider>);
+    await screen.findByText('No access tokens yet');
+    fireEvent.click(screen.getByRole('button',{name:'Create personal access token'}));
+    fireEvent.click(await screen.findByRole('button',{name:'Create connection'}));
+    await screen.findByRole('alert',{name:'Connection status unknown'});
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('button',{name:'Review Access tokens'}));
+    await screen.findByRole('listitem',{name:'Lost response agent'});
+  });
+});
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockRouterPush }),
@@ -465,7 +514,7 @@ describe("ConnectAgentDialog", () => {
     });
     expect(warning).toHaveTextContent(/connection may have been created/i);
     expect(warning).toHaveTextContent(/one-time secret was not received/i);
-    expect(warning).toHaveTextContent(/agent connections/i);
+    expect(warning).toHaveTextContent(/access tokens/i);
     expect(warning).not.toHaveTextContent(/failed to fetch|could not be created/i);
     expect(dispatchBeforeUnload()).toBe(true);
 
@@ -495,7 +544,7 @@ describe("ConnectAgentDialog", () => {
     expect(mockRouterPush).not.toHaveBeenCalled();
   });
 
-  it("routes to Agent connections only after acknowledging a potentially created credential", async () => {
+  it("routes to Access tokens only after acknowledging a potentially created credential", async () => {
     renderDialog([transportFailureMock()]);
     const dialog = await openDialog();
     fireEvent.click(
@@ -506,13 +555,13 @@ describe("ConnectAgentDialog", () => {
       name: /connection status unknown/i,
     });
     const reviewConnections = screen.getByRole("button", {
-      name: /review agent connections/i,
+      name: /review access tokens/i,
     });
     expect(reviewConnections).toBeDisabled();
 
     fireEvent.click(
       screen.getByRole("checkbox", {
-        name: /i understand.*connection may have been created.*review agent connections/i,
+        name: /i understand.*connection may have been created.*review access tokens/i,
       }),
     );
     expect(reviewConnections).toBeEnabled();
@@ -520,7 +569,7 @@ describe("ConnectAgentDialog", () => {
 
     fireEvent.click(reviewConnections);
     expect(mockRouterPush).toHaveBeenCalledWith(
-      "/account/agent-connections",
+      "/account#personal-access-tokens",
     );
     expect(
       screen.queryByRole("dialog", { name: /connect agent/i }),
@@ -601,7 +650,7 @@ describe("ConnectAgentDialog", () => {
         ]}
         cache={cache}
       >
-        <AgentConnectionsPage />
+        <PersonalAccessTokensSection />
       </MockedProvider>,
     );
     expect(

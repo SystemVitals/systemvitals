@@ -34,7 +34,7 @@ function MobileDrawer({ open, onClose }: { open: boolean; onClose: () => void })
           {APP_NAV.map(({ label, href, icon: Icon }) => {
             const active =
               pathname === href ||
-              (href !== "/account" && pathname.startsWith(href + "/"));
+              pathname.startsWith(href + "/");
             return (
               <Link
                 key={href}

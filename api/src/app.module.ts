@@ -32,6 +32,7 @@ const PUBLIC_ONLY_SCHEMA_TYPES = new Set([
   'ApiCredential',
   'ManagedTelegramBotModel',
   'TelegramConnectionPreviewModel',
+  'BillingLink',
 ]);
 
 function isolateAdminSchema(schema: GraphQLSchema): GraphQLSchema {

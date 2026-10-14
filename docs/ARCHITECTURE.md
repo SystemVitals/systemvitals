@@ -114,6 +114,23 @@ depend on those retired database tables. Recovering that data requires
 restoring a pre-Release 3 database backup together with a matching application
 release.
 
+## Account personal access tokens
+
+Account PATs reuse the ApiToken hash, expiration, revocation and last-used
+lifecycle with the explicit `account:manage` scope and no workspace binding.
+Credential discovery reports `ACCOUNT`. Authentication rejects mixed scopes,
+workspace bindings and deleted-workspace snapshots for this credential mode.
+A public GraphQL operation allowlist delegates product operations to the existing
+services, which enforce current membership, roles, ownership and quotas.
+Password/token administration and platform administration remain excluded.
+
+Non-impersonated sessions issue PATs. A shared account-access guard admits a
+non-impersonated session or a valid PAT to check moves, Telegram handshake
+operations and GraphQL billing links. Billing mutations call the existing
+BillingService and return hosted Stripe URLs; they do not directly complete
+payment or subscription changes. Legacy and scoped credential permissions stay
+compatible. MCP registers its additional account catalog only for ACCOUNT mode.
+
 ## Deployment boundaries
 
 The API and worker share PostgreSQL and Redis but are deployed separately from the frontend. The API and worker Dockerfiles use the repository root as their build context because both consume the database package. The frontend Dockerfile uses `frontend/` as its build context. See [deployment](DEPLOYMENT.md) for the supported self-hosting and zero-downtime topologies.

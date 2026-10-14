@@ -11,7 +11,7 @@ import {
   type AgentClient,
   generateAgentConnectionConfig,
 } from "@/lib/agent-connection-config";
-import { CREATE_API_TOKEN } from "@/lib/queries";
+import { CREATE_API_TOKEN, CREATE_PERSONAL_ACCESS_TOKEN } from "@/lib/queries";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -90,8 +90,18 @@ type CreatedConnection = {
 };
 
 type CreateTokenData = {
-  createScopedApiToken: CreatedConnection;
+  createScopedApiToken?: CreatedConnection;
+  createPersonalAccessToken?: CreatedConnection;
 };
+
+type ConnectionProps = {
+  secondary?: boolean;
+  onCreated?: () => void;
+  onReviewConnections?: () => void;
+} & (
+  | { scope: "account"; organizationId?: never; organizationName?: never }
+  | { scope?: "organization"; organizationId: string; organizationName: string }
+);
 
 type PendingExit =
   | { kind: "close" }
@@ -102,20 +112,20 @@ const HISTORY_GUARD_KEY = "__systemVitalsAgentSecretGuard";
 let fallbackGuardSequence = 0;
 
 export function ConnectAgentDialog({
-  organizationId,
-  organizationName,
+  organizationId = "",
+  organizationName = "SystemVitals account",
+  scope = "organization",
+  onCreated,
+  onReviewConnections,
   secondary = false,
-}: {
-  organizationId: string;
-  organizationName: string;
-  secondary?: boolean;
-}) {
+}: ConnectionProps) {
+  const isAccount = scope === "account";
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pendingExit, setPendingExit] = useState<PendingExit | null>(null);
   const [name, setName] = useState(() => `Claude Code — ${organizationName}`);
   const [nameEdited, setNameEdited] = useState(false);
-  const [expiration, setExpiration] = useState<Expiration>("never");
+  const [expiration, setExpiration] = useState<Expiration>(isAccount ? "30" : "never");
   const [customDays, setCustomDays] = useState("");
   const [created, setCreated] = useState<CreatedConnection | null>(null);
   const [creationAtRisk, setCreationAtRisk] = useState(false);
@@ -134,7 +144,8 @@ export function ConnectAgentDialog({
   const submitInFlightRef = useRef(false);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const guardIdRef = useRef<string | null>(null);
-  const [createToken, { loading }] = useMutation<CreateTokenData>(CREATE_API_TOKEN, {
+  const [createToken, { loading }] = useMutation<CreateTokenData>(
+    isAccount ? CREATE_PERSONAL_ACCESS_TOKEN : CREATE_API_TOKEN, {
     fetchPolicy: "no-cache",
     update(cache) {
       cache.evict({ id: "ROOT_QUERY", fieldName: "apiTokens" });
@@ -158,6 +169,7 @@ export function ConnectAgentDialog({
         apiUrl,
         token: created.plaintext,
         organizationId,
+        scope,
       })
     : "";
   const secretSecured = secretCopied || tokenAcknowledged;
@@ -321,7 +333,7 @@ export function ConnectAgentDialog({
       setClient("claude-code");
       setName(`Claude Code — ${organizationName}`);
       setNameEdited(false);
-      setExpiration("never");
+      setExpiration(isAccount ? "30" : "never");
       setCustomDays("");
       setCreated(null);
       setCreationAtRisk(false);
@@ -372,10 +384,19 @@ export function ConnectAgentDialog({
     };
 
     try {
-      const result = await createToken({ variables: { input } });
-      const connection = result.data?.createScopedApiToken;
+      const variables = isAccount
+        ? {
+            name: input.name,
+            ...(expiration === "never" ? {} : { expirationDays: selectedDays }),
+          }
+        : { input };
+      const result = await createToken({ variables });
+      const connection = isAccount
+        ? result.data?.createPersonalAccessToken
+        : result.data?.createScopedApiToken;
       if (!connection) throw new Error("Connection could not be created.");
       setCreated({ plaintext: connection.plaintext, name: connection.name });
+      onCreated?.();
     } catch {
       setCreationUncertain(true);
     } finally {
@@ -459,7 +480,8 @@ export function ConnectAgentDialog({
       );
     }
     flushSync(clearSecretAndClose);
-    router.push("/account/agent-connections");
+    onReviewConnections?.();
+    router.push("/account#personal-access-tokens");
   }
 
   return (
@@ -470,7 +492,7 @@ export function ConnectAgentDialog({
         onClick={() => handleOpenChange(true)}
       >
         <Plug className="mr-1 size-4" />
-        Connect agent
+        {isAccount ? 'Create personal access token' : 'Connect agent'}
       </Button>
 
       <Dialog
@@ -501,7 +523,7 @@ export function ConnectAgentDialog({
                   {creationPending
                     ? "Creation may finish after you leave, resulting in an active token that has never been shown. Keep this setup open unless you accept losing the one-time secret."
                     : creationUncertain
-                      ? "A connection may be active even though its one-time secret was not received. Keep this warning open, acknowledge the risk, then review Agent connections and revoke any potentially created credential."
+                      ? "A connection may be active even though its one-time secret was not received. Keep this warning open, acknowledge the risk, then review Access tokens and revoke any potentially created credential."
                     : "You cannot recover this token after closing the setup result."}
                 </DialogDescription>
               </DialogHeader>
@@ -528,7 +550,7 @@ export function ConnectAgentDialog({
                   The creation request did not return a result. A connection may
                   have been created, and the one-time secret was not received.
                   Treat any matching credential as active until you review and
-                  revoke it from Agent connections.
+                  revoke it from Access tokens.
                 </p>
               </div>
 
@@ -545,7 +567,7 @@ export function ConnectAgentDialog({
                   className="cursor-pointer text-sm font-normal"
                 >
                   I understand a connection may have been created, and I will
-                  review Agent connections to revoke any potentially created
+                  review Access tokens to revoke any potentially created
                   credential.
                 </Label>
               </div>
@@ -564,17 +586,19 @@ export function ConnectAgentDialog({
                   disabled={!uncertaintyAcknowledged}
                   onClick={reviewAgentConnections}
                 >
-                  Review Agent connections
+                  Review Access tokens
                 </Button>
               </DialogFooter>
             </div>
           ) : (
             <>
               <DialogHeader>
-                <DialogTitle>Connect agent</DialogTitle>
+                <DialogTitle>{isAccount ? 'Create personal access token' : 'Connect agent'}</DialogTitle>
                 <DialogDescription>
-                  Create an organization-scoped connection for{" "}
-                  <strong>{organizationName}</strong>.
+                  {isAccount ? 'Give an agent access to manage your SystemVitals account.' : <>
+                    Create an organization-scoped connection for{' '}
+                    <strong>{organizationName}</strong>.
+                  </>}
                 </DialogDescription>
               </DialogHeader>
 
@@ -668,7 +692,7 @@ export function ConnectAgentDialog({
                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   Test prompt
                 </p>
-                <p className="font-mono text-sm">{TEST_PROMPT}</p>
+                <p className="font-mono text-sm">{isAccount ? 'List my organizations and show my account subscription and usage.' : TEST_PROMPT}</p>
               </div>
 
               <DialogFooter>
@@ -734,6 +758,15 @@ export function ConnectAgentDialog({
 
               <div className="space-y-2">
                 <Label>Capabilities</Label>
+                {isAccount ? <div className="space-y-2 text-sm">
+                  <p className="flex gap-2"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" />
+                    Manage all organizations you can access, checks, channels, members, invitations, and status pages.
+                  </p>
+                  <p className="flex gap-2"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" />
+                    View subscription and usage, and create billing checkout and portal links.
+                  </p>
+                  <p className="text-muted-foreground">Uses your current organization permissions, including access to organizations you join later. Password changes and token administration require your login session. Billing changes are completed through Stripe&apos;s hosted pages.</p>
+                </div> : <>
                 <div className="space-y-2 text-sm">
                   <p className="flex gap-2">
                     <ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" />
@@ -749,6 +782,7 @@ export function ConnectAgentDialog({
                   members, billing, notification channels, or other
                   organizations.
                 </p>
+                </>}
               </div>
 
               <div className="space-y-2">

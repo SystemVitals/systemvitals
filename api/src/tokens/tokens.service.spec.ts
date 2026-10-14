@@ -78,6 +78,69 @@ function scopedInput(selector: {
   };
 }
 
+describe('personal token creation', () => {
+  beforeEach(() => {
+    jest.spyOn(Date, 'now').mockReturnValue(NOW.getTime());
+  });
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+  it('creates a hash-only account token without a workspace binding', async () => {
+    const { service, tokenCreate, resolveForUser } = setup();
+    const create = service as TokensService & {
+      createPersonal(
+        userId: string,
+        name: string,
+        expirationDays?: number,
+      ): Promise<{ plaintext: string }>;
+    };
+    const before = Date.now();
+    const result = await create.createPersonal(
+      'user-1',
+      '  Account agent  ',
+      30,
+    );
+    expect(result.plaintext).toMatch(/^svt_[0-9a-f]{40}$/);
+    expect(tokenCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          userId: 'user-1',
+          name: 'Account agent',
+          scopes: ['account:manage'],
+          projectId: null,
+          expiresAt: new Date(before + 30 * 86400000),
+          tokenHash: expect.any(String) as unknown,
+        }) as object,
+      }),
+    );
+    expect(tokenCreate.mock.calls[0][0].data).not.toHaveProperty('plaintext');
+    expect(resolveForUser).not.toHaveBeenCalled();
+  });
+  it.each([0, -1, 1.5, 3651, NaN])(
+    'rejects expiration %s before writing',
+    async (days) => {
+      const { service, tokenCreate } = setup();
+      const create = service as TokensService & {
+        createPersonal(u: string, n: string, d?: number): Promise<unknown>;
+      };
+      await expect(
+        create.createPersonal('user-1', 'Agent', days),
+      ).rejects.toThrow(BadRequestException);
+      expect(tokenCreate).not.toHaveBeenCalled();
+    },
+  );
+  it('rejects an empty name before writing', async () => {
+    const { service, tokenCreate } = setup();
+    const create = service as TokensService & {
+      createPersonal(u: string, n: string): Promise<unknown>;
+    };
+    await expect(create.createPersonal('user-1', '   ')).rejects.toThrow(
+      BadRequestException,
+    );
+    expect(tokenCreate).not.toHaveBeenCalled();
+  });
+});
+
 describe('TokensService', () => {
   beforeEach(() => {
     jest.spyOn(Date, 'now').mockReturnValue(NOW.getTime());

@@ -11,6 +11,7 @@ export interface AgentConnectionConfigInput {
   organizationName: string;
   apiUrl: string;
   token: string;
+  scope?: 'account' | 'organization';
 }
 
 type McpConfigInput = Omit<
@@ -92,13 +93,22 @@ function mcpServer(input: McpConfigInput) {
 function generateClaudeCode(input: McpConfigInput): string {
   assertShellSafe(input.organizationName, "organizationName");
   assertShellSafe(input.apiUrl, "apiUrl");
+  // Claude rejects display names with spaces or punctuation even when quoted.
+  // Prefix the slug so arbitrary organization names cannot select reserved names.
+  const slug = input.organizationName
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  const serverName = slug ? `systemvitals-${slug}` : "systemvitals";
 
   return [
     "read -rsp 'SystemVitals API token: ' SYSTEMVITALS_API_TOKEN",
     "printf '\\n'",
     [
     "claude mcp add",
-    shellQuote(input.organizationName),
+    shellQuote(serverName),
     "--env",
     shellQuote(`SYSTEMVITALS_API_URL=${input.apiUrl}`),
     "--env",
@@ -141,13 +151,15 @@ function generateUniversal(input: McpConfigInput): string {
 function generateGraphql(
   input: Pick<
     AgentConnectionConfigInput,
-    "apiUrl" | "token" | "organizationId"
+    "apiUrl" | "token" | "organizationId" | "scope"
   >,
 ): string {
   assertShellSafe(input.apiUrl, "apiUrl");
   assertShellSafe(input.organizationId, "organizationId");
 
-  const body = JSON.stringify({
+  const body = JSON.stringify(input.scope === 'account' ? {
+    query: 'query { me { id email organizations { id name slug role } } mySubscription { plan status maxChecks checkCount organizationCount } }',
+  } : {
     query:
       'mutation CreateHeartbeat($organizationId: ID!) { createCheck(organizationId: $organizationId, name: "agent-heartbeat", periodSeconds: 300, graceSeconds: 60) { id } }',
     variables: { organizationId: input.organizationId },
