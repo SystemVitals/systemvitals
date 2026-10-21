@@ -71,27 +71,64 @@ describe('EmailVerificationQueueService', () => {
       rawToken: 'opaque-token',
     });
 
-    expect(QueueMock).toHaveBeenCalledWith('verification-delivery', {
-      connection: {
-        host: 'redis.example.test',
-        port: 6380,
-        password: 'secret',
-        db: 2,
-        maxRetriesPerRequest: 1,
-        enableOfflineQueue: false,
-        connectTimeout: 1000,
-      },
-      defaultJobOptions: {
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 5000 },
-        removeOnComplete: true,
-        removeOnFail: true,
-      },
-      skipWaitingForReady: true,
+    expect(QueueMock).toHaveBeenCalledTimes(1);
+    const [name, options] = QueueMock.mock.calls[0];
+    const { retryStrategy, ...connection } = options!.connection as {
+      retryStrategy: (times: number) => unknown;
+    };
+    expect(name).toBe('verification-delivery');
+    expect(connection).toEqual({
+      host: 'redis.example.test',
+      port: 6380,
+      password: 'secret',
+      db: 2,
+      maxRetriesPerRequest: 1,
+      enableOfflineQueue: false,
+      connectTimeout: 1000,
     });
+    // No background reconnects: a failed connection ends, so readiness waits stay bounded.
+    expect(retryStrategy(1)).toBeNull();
+    expect(options!.defaultJobOptions).toEqual({
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 5000 },
+      removeOnComplete: true,
+      removeOnFail: true,
+    });
+    // Waiting for readiness is what lets the first command reach Redis at all.
+    expect(options).not.toHaveProperty('skipWaitingForReady');
     expect(add).toHaveBeenCalledWith('email-verification', {
       channelId: 'channel_123',
       rawToken: 'opaque-token',
+    });
+  });
+
+  it('retries once on a fresh connection after the cached one failed', async () => {
+    const service = new EmailVerificationQueueService(new ConfigService());
+    add.mockRejectedValueOnce(new Error('Connection is closed.'));
+
+    await service.enqueue({ channelId: 'channel_1', rawToken: 'token-1' });
+
+    expect(QueueMock).toHaveBeenCalledTimes(2);
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(add).toHaveBeenCalledTimes(2);
+  });
+
+  it('gives up after the fresh connection also fails, then reconnects on the next request', async () => {
+    const service = new EmailVerificationQueueService(new ConfigService());
+    add
+      .mockRejectedValueOnce(new Error('Redis unavailable'))
+      .mockRejectedValueOnce(new Error('Redis unavailable'));
+
+    await expect(
+      service.enqueue({ channelId: 'channel_1', rawToken: 'token-1' }),
+    ).rejects.toThrow('Redis unavailable');
+    expect(close).toHaveBeenCalledTimes(2);
+
+    await service.enqueue({ channelId: 'channel_2', rawToken: 'token-2' });
+    expect(QueueMock).toHaveBeenCalledTimes(3);
+    expect(add).toHaveBeenLastCalledWith('email-verification', {
+      channelId: 'channel_2',
+      rawToken: 'token-2',
     });
   });
 
@@ -136,6 +173,8 @@ describe('EmailVerificationQueueService Redis lifecycle', () => {
   let redisAvailable = false;
 
   beforeAll(async () => {
+    // Wait for readiness: with skipWaitingForReady and no offline queue, the first
+    // command races the socket, so the probe always failed and these tests never ran.
     const probe = createRealQueue(`${queueName}-probe`, {
       connection: {
         ...parseRedisUrl(redisUrl),
@@ -143,7 +182,6 @@ describe('EmailVerificationQueueService Redis lifecycle', () => {
         enableOfflineQueue: false,
         connectTimeout: 1000,
       },
-      skipWaitingForReady: true,
     });
 
     try {
@@ -246,20 +284,26 @@ describe('EmailVerificationQueueService Redis lifecycle', () => {
     try {
       let timeout: NodeJS.Timeout | undefined;
       try {
-        await expect(
-          Promise.race([
-            service.enqueue({
-              channelId: 'channel_outage',
-              rawToken: 'raw-token-outage',
-            }),
-            new Promise<never>((_, reject) => {
-              timeout = setTimeout(
-                () => reject(new Error('Queue producer did not fail in time')),
-                3000,
-              );
-            }),
-          ]),
-        ).rejects.toThrow();
+        // The producer itself must reject; the race's own timeout must not be what fails.
+        const outcome = await Promise.race([
+          service.enqueue({
+            channelId: 'channel_outage',
+            rawToken: 'raw-token-outage',
+          }),
+          new Promise<never>((_, reject) => {
+            timeout = setTimeout(
+              () => reject(new Error('Queue producer did not fail in time')),
+              3000,
+            );
+          }),
+        ]).then(
+          () => new Error('Queue producer accepted a job during an outage'),
+          (error: unknown) => error,
+        );
+        // Redis client errors come from another module registry, so avoid instanceof.
+        const message = (outcome as { message?: unknown }).message;
+        expect(typeof message).toBe('string');
+        expect(message).not.toMatch(/did not fail in time|accepted a job/);
       } finally {
         if (timeout) clearTimeout(timeout);
       }

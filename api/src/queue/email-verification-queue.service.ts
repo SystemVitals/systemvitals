@@ -35,20 +35,36 @@ export class EmailVerificationQueueService implements OnModuleDestroy {
       maxRetriesPerRequest: 1,
       enableOfflineQueue: false,
       connectTimeout: 1000,
+      // Never reconnect in the background: a failed connection ends quickly, so
+      // readiness waits stay bounded during an outage. `enqueue` reconnects instead.
+      retryStrategy: () => null,
     };
   }
 
   private getQueue(): Queue<EmailVerificationJobData> {
+    // BullMQ must wait for the socket before its first command: with the offline queue
+    // disabled, skipping that wait made every enqueue fail. Readiness still fails fast.
     this.queue ??= new Queue<EmailVerificationJobData>(this.queueName, {
       connection: this.connection,
       defaultJobOptions: EMAIL_VERIFICATION_JOB_OPTIONS,
-      skipWaitingForReady: true,
     });
     return this.queue;
   }
 
   async enqueue(data: EmailVerificationJobData): Promise<void> {
-    await this.getQueue().add('email-verification', data);
+    // A failed or dropped connection is never reused; retry once on a fresh one, which
+    // covers a Redis restart after the cached connection was established.
+    for (let attempt = 1; ; attempt++) {
+      const queue = this.getQueue();
+      try {
+        await queue.add('email-verification', data);
+        return;
+      } catch (error) {
+        if (this.queue === queue) this.queue = undefined;
+        await queue.close().catch(() => undefined);
+        if (attempt >= 2) throw error;
+      }
+    }
   }
 
   async onModuleDestroy(): Promise<void> {
