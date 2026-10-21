@@ -71,32 +71,31 @@ describe('EmailVerificationQueueService', () => {
       rawToken: 'opaque-token',
     });
 
-    expect(QueueMock).toHaveBeenCalledWith('verification-delivery', {
-      connection: {
-        host: 'redis.example.test',
-        port: 6380,
-        password: 'secret',
-        db: 2,
-        maxRetriesPerRequest: 1,
-        enableOfflineQueue: false,
-        connectTimeout: 1000,
-        retryStrategy: expect.any(Function),
-      },
-      defaultJobOptions: {
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 5000 },
-        removeOnComplete: true,
-        removeOnFail: true,
-      },
+    expect(QueueMock).toHaveBeenCalledTimes(1);
+    const [name, options] = QueueMock.mock.calls[0];
+    const { retryStrategy, ...connection } = options!.connection as {
+      retryStrategy: (times: number) => unknown;
+    };
+    expect(name).toBe('verification-delivery');
+    expect(connection).toEqual({
+      host: 'redis.example.test',
+      port: 6380,
+      password: 'secret',
+      db: 2,
+      maxRetriesPerRequest: 1,
+      enableOfflineQueue: false,
+      connectTimeout: 1000,
     });
-    const options = QueueMock.mock.calls[0][1]!;
+    // No background reconnects: a failed connection ends, so readiness waits stay bounded.
+    expect(retryStrategy(1)).toBeNull();
+    expect(options!.defaultJobOptions).toEqual({
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 5000 },
+      removeOnComplete: true,
+      removeOnFail: true,
+    });
     // Waiting for readiness is what lets the first command reach Redis at all.
     expect(options).not.toHaveProperty('skipWaitingForReady');
-    expect(
-      (
-        options.connection as { retryStrategy: (times: number) => unknown }
-      ).retryStrategy(1),
-    ).toBeNull();
     expect(add).toHaveBeenCalledWith('email-verification', {
       channelId: 'channel_123',
       rawToken: 'opaque-token',
@@ -302,12 +301,9 @@ describe('EmailVerificationQueueService Redis lifecycle', () => {
           (error: unknown) => error,
         );
         // Redis client errors come from another module registry, so avoid instanceof.
-        expect(outcome).toEqual(
-          expect.objectContaining({ message: expect.any(String) }),
-        );
-        expect((outcome as Error).message).not.toMatch(
-          /did not fail in time|accepted a job/,
-        );
+        const message = (outcome as { message?: unknown }).message;
+        expect(typeof message).toBe('string');
+        expect(message).not.toMatch(/did not fail in time|accepted a job/);
       } finally {
         if (timeout) clearTimeout(timeout);
       }
