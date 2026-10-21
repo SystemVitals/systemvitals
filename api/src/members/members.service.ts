@@ -38,11 +38,7 @@ export interface InviteRow {
 }
 
 export type InviteStatus =
-  | 'PENDING'
-  | 'ACCEPTED'
-  | 'REVOKED'
-  | 'EXPIRED'
-  | 'NOT_FOUND';
+  'PENDING' | 'ACCEPTED' | 'REVOKED' | 'EXPIRED' | 'NOT_FOUND';
 
 export interface InvitePreview {
   organizationName: string;

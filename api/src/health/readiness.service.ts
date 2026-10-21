@@ -7,9 +7,7 @@ export const POSTGRES_READINESS_PROBE = Symbol('POSTGRES_READINESS_PROBE');
 export const REDIS_READINESS_PROBE = Symbol('REDIS_READINESS_PROBE');
 
 export type ReadinessReason =
-  | 'starting'
-  | 'postgres_unavailable'
-  | 'redis_unavailable';
+  'starting' | 'postgres_unavailable' | 'redis_unavailable';
 
 export interface ReadinessResult {
   ready: boolean;

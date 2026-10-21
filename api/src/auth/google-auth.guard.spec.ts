@@ -40,8 +40,7 @@ function makeGuard(env: Partial<Record<string, string>>) {
  *  `{ header: jest.fn() }` (callback-leg shape), never both. */
 function makeContext(
   handlerName:
-    | typeof GOOGLE_AUTH_HANDLER_NAME
-    | typeof GOOGLE_CALLBACK_HANDLER_NAME,
+    typeof GOOGLE_AUTH_HANDLER_NAME | typeof GOOGLE_CALLBACK_HANDLER_NAME,
   req: unknown,
   res: unknown,
 ): ExecutionContext {

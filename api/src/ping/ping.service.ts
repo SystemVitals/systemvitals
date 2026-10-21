@@ -9,8 +9,7 @@ export interface PingResult {
 }
 
 type PingTransition =
-  | { recovered: false }
-  | { recovered: true; channelIds: string[] };
+  { recovered: false } | { recovered: true; channelIds: string[] };
 
 @Injectable()
 export class PingService {

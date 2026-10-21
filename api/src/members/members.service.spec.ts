@@ -759,8 +759,7 @@ describe('MembersService member management', () => {
 
       const countOrder = prisma.tx.membership.count.mock.invocationCallOrder[0];
       const lockOrder = prisma.tx.$queryRaw.mock.invocationCallOrder[0] as
-        | number
-        | undefined;
+        number | undefined;
       expect(lockOrder).toBeDefined();
       expect(lockOrder as number).toBeLessThan(countOrder);
     });
@@ -783,8 +782,7 @@ describe('MembersService member management', () => {
 
       expect(prisma.tx.$queryRaw).toHaveBeenCalledTimes(1);
       const lockOrder = prisma.tx.$queryRaw.mock.invocationCallOrder[0] as
-        | number
-        | undefined;
+        number | undefined;
       const countOrder = prisma.tx.membership.count.mock.invocationCallOrder[0];
       expect(lockOrder).toBeDefined();
       expect(lockOrder as number).toBeLessThan(countOrder);
@@ -817,8 +815,7 @@ describe('MembersService member management', () => {
 
       expect(prisma.tx.$queryRaw).toHaveBeenCalledTimes(1);
       const lockOrder = prisma.tx.$queryRaw.mock.invocationCallOrder[0] as
-        | number
-        | undefined;
+        number | undefined;
       const countOrder = prisma.tx.membership.count.mock.invocationCallOrder[0];
       expect(lockOrder).toBeDefined();
       expect(lockOrder as number).toBeLessThan(countOrder);
