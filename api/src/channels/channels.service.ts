@@ -247,8 +247,7 @@ export class ChannelsService {
 
     let config = this.parseAndValidateConfig(type, configJson);
     let verification:
-      | ReturnType<typeof createEmailVerificationToken>
-      | undefined;
+      ReturnType<typeof createEmailVerificationToken> | undefined;
     if (type === 'EMAIL') {
       const email = toStr(toConfigRecord(config)['email']);
       try {

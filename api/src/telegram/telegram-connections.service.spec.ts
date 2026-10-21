@@ -54,9 +54,7 @@ function deferred<T>(): {
 
 function makeService(
   configuredAppUrl:
-    | string
-    | typeof DEFAULT_APP_URL
-    | typeof MISSING_APP_URL = DEFAULT_APP_URL,
+    string | typeof DEFAULT_APP_URL | typeof MISSING_APP_URL = DEFAULT_APP_URL,
   nodeEnv = 'test',
 ) {
   const appUrl =

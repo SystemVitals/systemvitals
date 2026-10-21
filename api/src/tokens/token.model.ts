@@ -1,10 +1,7 @@
 import { Field, ID, ObjectType } from '@nestjs/graphql';
 
 export type CredentialMode =
-  | 'SESSION'
-  | 'LEGACY_BROAD'
-  | 'PROJECT_SCOPED'
-  | 'ACCOUNT';
+  'SESSION' | 'LEGACY_BROAD' | 'PROJECT_SCOPED' | 'ACCOUNT';
 
 @ObjectType()
 export class ApiTokenModel {

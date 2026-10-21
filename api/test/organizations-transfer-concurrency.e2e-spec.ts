@@ -132,8 +132,7 @@ async function settlesWithin(
 }
 
 type Completion =
-  | { status: 'fulfilled' }
-  | { status: 'rejected'; reason: unknown };
+  { status: 'fulfilled' } | { status: 'rejected'; reason: unknown };
 
 function observe(operation: Promise<unknown>): Promise<Completion> {
   void operation.catch(() => undefined);

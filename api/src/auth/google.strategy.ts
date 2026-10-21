@@ -44,8 +44,7 @@ export class GoogleStrategy extends PassportStrategy(Strategy, 'google') {
   ): GoogleIdentity {
     const primary = profile.emails?.[0];
     const json = profile._json as
-      | { email_verified?: boolean | string }
-      | undefined;
+      { email_verified?: boolean | string } | undefined;
     // Google reports verification on the raw payload as `email_verified`;
     // the normalised profile exposes it as `verified` and stringifies it.
     const emailVerified =
