@@ -46,3 +46,7 @@ monitoring URLs and jobs can contain bearer credentials. The worker captures
 failed jobs and queue/scheduler errors without attaching job payloads.
 
 Sentry captures HttpException 5xx (including GraphQL) and swallowed alert-provider failures while preserving expected 4xx responses and per-channel success behavior. Node startup remains fatal after flushing; shutdown failures are reported before exit. Exception messages/causes and extra data are scrubbed.
+
+## Node runtime security
+
+Container builds use Node.js 22.23.4 or a newer security patch in the same major to address CVE-2026-111497. Keep exact patched image tags and local runtime pins aligned. Rebuild and redeploy every affected image; restarting an existing image does not update Node.

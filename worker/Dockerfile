@@ -4,7 +4,7 @@
 # ============================================================
 
 # ── Builder stage ────────────────────────────────────────────
-FROM node:22-slim AS builder
+FROM node:22.23.4-slim AS builder
 
 # Install OpenSSL for Prisma client generation
 RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
@@ -32,7 +32,7 @@ RUN npm --prefix worker prune --omit=dev && npm --prefix database prune --omit=d
 
 
 # ── Runtime stage ────────────────────────────────────────────
-FROM node:22-slim AS runtime
+FROM node:22.23.4-slim AS runtime
 
 RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 

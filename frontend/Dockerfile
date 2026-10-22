@@ -3,7 +3,7 @@
 # ============================================================
 
 # ── Builder stage ────────────────────────────────────────────
-FROM node:22-slim AS builder
+FROM node:22.23.4-slim AS builder
 
 # Native build tools (including sentry-cli) use the system TLS trust store.
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
@@ -42,7 +42,7 @@ RUN --mount=type=secret,id=SENTRY_SELF_HOSTED_AUTH_TOKEN \
 
 
 # ── Runtime stage ────────────────────────────────────────────
-FROM node:22-slim AS runtime
+FROM node:22.23.4-slim AS runtime
 
 # Create non-root user
 RUN groupadd --gid 1001 appgroup && \
