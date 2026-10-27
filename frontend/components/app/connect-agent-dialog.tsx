@@ -157,12 +157,7 @@ export function ConnectAgentDialog({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pendingExit, setPendingExit] = useState<PendingExit | null>(null);
-  const defaultName = (nextClient: AgentClient) =>
-    isAccount
-      ? CLIENT_LABELS[nextClient]
-      : `${CLIENT_LABELS[nextClient]} — ${organizationName}`;
-  const [name, setName] = useState(() => defaultName("claude-code"));
-  const [nameEdited, setNameEdited] = useState(false);
+  const [name, setName] = useState("");
   const [expiration, setExpiration] = useState<Expiration>(isAccount ? "30" : "never");
   const [customDays, setCustomDays] = useState("");
   const [created, setCreated] = useState<CreatedConnection | null>(null);
@@ -369,8 +364,7 @@ export function ConnectAgentDialog({
   function handleOpenChange(nextOpen: boolean) {
     if (nextOpen) {
       setClient("claude-code");
-      setName(defaultName("claude-code"));
-      setNameEdited(false);
+      setName("");
       setExpiration(isAccount ? "30" : "never");
       setCustomDays("");
       setCreated(null);
@@ -393,9 +387,6 @@ export function ConnectAgentDialog({
     setClient(nextClient);
     setSetupCopied(false);
     setCopyError(null);
-    if (!nameEdited) {
-      setName(defaultName(nextClient));
-    }
   }
 
   async function handleSubmit(event: React.FormEvent) {
@@ -732,6 +723,9 @@ export function ConnectAgentDialog({
                   <div id="agent-setup-step">
                     <StepHeading step={2} title="Connect your agent" optional />
                   </div>
+                  <p className="text-sm text-muted-foreground">
+                    Choose the agent or tool that will use this token to get ready-to-paste setup.
+                  </p>
                   <Tabs.Root
                     value={client}
                     onValueChange={(value) => handleClientChange(value as AgentClient)}
@@ -824,44 +818,18 @@ export function ConnectAgentDialog({
 
             <form onSubmit={handleSubmit} className="space-y-5">
               <div className="space-y-2">
-                <Label htmlFor="agent-client">Agent client</Label>
-                <Select
-                  value={client}
-                  onValueChange={(value) =>
-                    value && handleClientChange(value as AgentClient)
-                  }
-                >
-                  <SelectTrigger id="agent-client" className="w-full">
-                    <SelectValue>{CLIENT_LABELS[client]}</SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CLIENTS.map((item) => (
-                      <SelectItem key={item.value} value={item.value}>
-                        {item.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  You&apos;ll get ready-to-paste setup for it after the token is created.
-                </p>
-              </div>
-
-              <div className="space-y-2">
                 <Label htmlFor="agent-name">Token name</Label>
                 <Input
                   id="agent-name"
                   value={name}
-                  onChange={(event) => {
-                    setName(event.target.value);
-                    setNameEdited(true);
-                  }}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="e.g. Claude Code on work laptop"
                   aria-describedby="agent-name-help"
                   required
                 />
                 <p id="agent-name-help" className="text-xs text-muted-foreground">
-                  Name it after the agent and machine, like &ldquo;Claude Code on work laptop&rdquo;, so you
-                  can recognize it later.
+                  Name it after the agent and machine that will use it so you can recognize it
+                  later. You&apos;ll get setup for your agent after the token is created.
                 </p>
               </div>
 

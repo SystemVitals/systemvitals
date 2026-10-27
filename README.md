@@ -76,10 +76,10 @@ on or off, including turning every channel off with a clear
 ## Personal access tokens for agents
 
 Open **Account > Personal access tokens > Create personal access token** to delegate
-account management to an agent. Name the token, pick the agent client and an
-expiration (account tokens default to 30 days; the form shows the resulting date),
-then create it. The result walks through three steps: copy the token (it is shown
-only once), paste the generated Claude Code, Codex, Cursor, universal MCP, or
+account management to an agent. Name the token and pick an expiration (account
+tokens default to 30 days; the form shows the resulting date), then create it. The
+result walks through three steps: copy the token (it is shown only once), choose
+your agent and paste the generated Claude Code, Codex, Cursor, universal MCP, or
 GraphQL/cURL setup, and try a suggested prompt. Closing without copying asks for
 confirmation because the token stays active; revoke it from the same page if its
 secret was lost. The token list shows active tokens first with relative created,
