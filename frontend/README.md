@@ -20,8 +20,9 @@ Copy `.env.example` to `.env.local` and set `NEXT_PUBLIC_API_URL` to point at th
 
 Account > Personal access tokens creates and revokes account-wide personal access
 tokens. The shared token wizard uses a GraphQL mutation with Apollo's
-`no-cache` policy, displays the secret once in a numbered copy → connect → try
-result, and protects uncopied results on navigation ("Close without saving the
+`no-cache` policy, asks only for a required name and an expiration, displays the
+secret once in a numbered copy → connect → try result (the agent client is chosen
+there, since the token is the same for every client), and protects uncopied results on navigation ("Close without saving the
 token?" — the token stays active). Account-token MCP setups name the server
 `systemvitals`. If creation has an unknown outcome, reviewing connections explicitly
 refreshes history so a potentially active token can be revoked.

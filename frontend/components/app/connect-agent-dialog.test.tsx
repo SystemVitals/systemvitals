@@ -11,6 +11,7 @@ import { ConnectAgentDialog } from "./connect-agent-dialog";
 import { PersonalAccessTokensSection } from "./personal-access-tokens";
 
 const plaintext = "svt_once_only_secret";
+const tokenName = "Claude Code — Production";
 const organization = { organizationId: "org_123", organizationName: "Production" };
 const mockRouterPush = vi.fn();
 
@@ -29,6 +30,8 @@ describe('account personal access wizard', () => {
     }]}><ConnectAgentDialog scope="account" /></MockedProvider>);
     fireEvent.click(screen.getByRole('button',{name:'Create personal access token'}));
     const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).queryByRole('combobox',{name:/agent client/i})).not.toBeInTheDocument();
+    fireEvent.change(within(dialog).getByLabelText(/token name/i),{target:{value:'Claude Code'}});
     expect(within(dialog).getByText(/all organizations you can access/i)).toBeInTheDocument();
     expect(within(dialog).getByText(/password changes and token administration/i)).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole('button',{name:'Create token'}));
@@ -48,6 +51,7 @@ describe('account personal access wizard', () => {
       }]}><ConnectAgentDialog scope="account" /></MockedProvider>);
       fireEvent.click(screen.getByRole('button',{name:'Create personal access token'}));
       const dialog = await screen.findByRole('dialog');
+      fireEvent.change(within(dialog).getByLabelText(/token name/i),{target:{value:'Claude Code'}});
       const expiresOn = new Intl.DateTimeFormat(undefined, {dateStyle:'medium'})
         .format(new Date('2026-11-25T12:00:00Z'));
       expect(within(dialog).getByText(`Expires on ${expiresOn}.`)).toBeInTheDocument();
@@ -78,7 +82,8 @@ describe('account personal access wizard', () => {
     ]}><PersonalAccessTokensSection /></MockedProvider>);
     await screen.findByText('No access tokens yet');
     fireEvent.click(screen.getByRole('button',{name:'Create personal access token'}));
-    fireEvent.click(await screen.findByRole('button',{name:'Create token'}));
+    fireEvent.change(await screen.findByLabelText(/token name/i),{target:{value:'Claude Code'}});
+    fireEvent.click(screen.getByRole('button',{name:'Create token'}));
     await screen.findByRole('alert',{name:'Token status unknown'});
     fireEvent.click(screen.getByRole('checkbox'));
     fireEvent.click(screen.getByRole('button',{name:'Review tokens'}));
@@ -122,7 +127,7 @@ function successResult(name: string) {
 
 function successMock(
   input: Record<string, unknown> = {
-    name: "Claude Code — Production",
+    name: tokenName,
     capabilities: ["checks:read", "checks:write"],
     organizationId: "org_123",
   },
@@ -139,7 +144,7 @@ function transportFailureMock(): MockedResponse {
       query: CREATE_API_TOKEN,
       variables: {
         input: {
-          name: "Claude Code — Production",
+          name: tokenName,
           capabilities: ["checks:read", "checks:write"],
           organizationId: "org_123",
         },
@@ -185,9 +190,17 @@ function renderStrictDialog(mocks: MockedResponse[] = [successMock()]) {
   );
 }
 
-async function openDialog() {
+// Token names start empty and are required, so most flows fill in the name
+// the mocks expect. Pass `null` to inspect the untouched form.
+async function openDialog({ name = tokenName }: { name?: string | null } = {}) {
   fireEvent.click(screen.getByRole("button", { name: /connect agent/i }));
-  return screen.findByRole("dialog", { name: /connect agent/i });
+  const dialog = await screen.findByRole("dialog", { name: /connect agent/i });
+  if (name !== null) {
+    fireEvent.change(within(dialog).getByLabelText(/token name/i), {
+      target: { value: name },
+    });
+  }
+  return dialog;
 }
 
 async function createConnection() {
@@ -216,21 +229,33 @@ describe("ConnectAgentDialog", () => {
     expect(
       within(dialog).getByText(/no access to members, billing, notification channels, or other organizations/i),
     ).toBeInTheDocument();
-    expect(within(dialog).getByLabelText(/token name/i)).toHaveValue("Claude Code — Production");
   });
 
-  it("tracks the selected client in the default name until the user edits it", async () => {
-    const dialog = await openDialogWithRender();
+  it("asks only for a name and expiration, requiring the name before creating", async () => {
+    renderDialog();
+    const dialog = await openDialog({ name: null });
     const name = within(dialog).getByLabelText(/token name/i);
+    const submit = within(dialog).getByRole("button", { name: /create token/i });
 
-    fireEvent.click(within(dialog).getByRole("combobox", { name: /agent client/i }));
-    await chooseOption("Codex");
-    expect(name).toHaveValue("Codex — Production");
+    expect(within(dialog).queryByRole("combobox", { name: /agent client/i })).not.toBeInTheDocument();
+    expect(name).toHaveValue("");
+    expect(submit).toBeDisabled();
+    fireEvent.change(name, { target: { value: "   " } });
+    expect(submit).toBeDisabled();
+    fireEvent.change(name, { target: { value: tokenName } });
+    expect(submit).toBeEnabled();
+  });
 
-    fireEvent.change(name, { target: { value: "My pinned agent" } });
-    fireEvent.click(within(dialog).getByRole("combobox", { name: /agent client/i }));
-    await chooseOption("Cursor");
-    expect(name).toHaveValue("My pinned agent");
+  it("lets the user choose the agent client after the token is created", async () => {
+    renderDialog();
+    await createConnection();
+
+    expect(screen.getByRole("tab", { name: "Claude Code" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("heading", { name: /try it in claude code/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Codex" }));
+    expect(screen.getByRole("tab", { name: "Codex" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("heading", { name: /try it in codex/i })).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toHaveTextContent(`${tokenName} is active`);
   });
 
   it("defaults expiration to Never", async () => {
@@ -266,7 +291,7 @@ describe("ConnectAgentDialog", () => {
   });
 
   it("keeps definitive client validation failures outside the credential-risk state", async () => {
-    const result = vi.fn(() => successResult("Claude Code — Production"));
+    const result = vi.fn(() => successResult(tokenName));
     renderDialog([{ ...successMock(), result }]);
     const dialog = await openDialog();
     fireEvent.click(within(dialog).getByRole("combobox", { name: /expiration/i }));
@@ -452,7 +477,7 @@ describe("ConnectAgentDialog", () => {
   });
 
   it("allows only one mutation during rapid duplicate submission", async () => {
-    const result = vi.fn(() => successResult("Claude Code — Production"));
+    const result = vi.fn(() => successResult(tokenName));
     renderDialog([
       {
         ...successMock(),
@@ -647,7 +672,7 @@ describe("ConnectAgentDialog", () => {
     });
     const createdMetadata = {
       id: "token_123",
-      name: "Claude Code — Production",
+      name: tokenName,
       prefix: "svt_new",
       scopes: ["checks:read", "checks:write"],
       organizationId: "org_123",
