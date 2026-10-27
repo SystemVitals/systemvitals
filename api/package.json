@@ -31,7 +31,7 @@
     "@nestjs/graphql": "^13.4.2",
     "@nestjs/jwt": "^11.0.2",
     "@nestjs/passport": "^11.0.5",
-    "@nestjs/platform-fastify": "^11.2.7",
+    "@nestjs/platform-fastify": "^12.2.0",
     "@nestjs/throttler": "^6.5.0",
     "@sentry/nestjs": "10.65.0",
     "@systemvitals/database": "file:../database",
