@@ -5,6 +5,7 @@ import { useMutation } from "@apollo/client/react";
 import { Pencil, Trash2, LogOut } from "lucide-react";
 import { useAuth, type Org } from "@/lib/auth-context";
 import { useOrg } from "@/lib/org-context";
+import { PageHeader } from "@/components/app/page-header";
 import { CreateTeamDialog } from "@/components/app/create-team-dialog";
 import { TransferCreatorshipDialog } from "@/components/app/transfer-creatorship-dialog";
 import {
@@ -26,6 +27,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
+const PLAN_LABEL: Record<string, string> = {
+  SOLO: "Solo",
+  SIGNAL: "Signal",
+  FLEET: "Fleet",
+};
+
 const ROLE_LABEL: Record<string, string> = {
   OWNER: "Owner",
   ADMIN: "Admin",
@@ -34,7 +41,7 @@ const ROLE_LABEL: Record<string, string> = {
 
 export default function OrganizationsPage() {
   const { user, refetchMe } = useAuth();
-  const { orgs } = useOrg();
+  const { orgs, activeOrgId, setActiveOrgId } = useOrg();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const onError = (e: unknown) =>
@@ -60,16 +67,18 @@ export default function OrganizationsPage() {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold">Organizations</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            SOLO accounts can create or own up to 10 organizations attributed
-            to their account. SIGNAL and FLEET accounts have no limit.
-          </p>
-        </div>
-        <CreateTeamDialog />
-      </div>
+      <PageHeader
+        title="Organizations"
+        description={
+          <>
+            Each organization is a separate workspace with its own checks,
+            channels, status pages, and members. Use the workspace switcher in
+            the sidebar to move between them. Solo accounts can create or own
+            up to 10 organizations; Signal and Fleet accounts have no limit.
+          </>
+        }
+        actions={<CreateTeamDialog />}
+      />
 
       <div className="space-y-3">
         {orgs.map((org) => (
@@ -77,6 +86,8 @@ export default function OrganizationsPage() {
             key={org.id}
             org={org}
             isLast={orgs.length <= 1}
+            isActive={org.id === activeOrgId}
+            onSwitch={() => setActiveOrgId(org.id)}
             currentUserId={user?.id ?? ""}
             onTransferred={refetchMe}
             onRename={(name) =>
@@ -119,6 +130,8 @@ export default function OrganizationsPage() {
 function OrgRow({
   org,
   isLast,
+  isActive,
+  onSwitch,
   currentUserId,
   onTransferred,
   onRename,
@@ -128,6 +141,8 @@ function OrgRow({
 }: {
   org: Org;
   isLast: boolean;
+  isActive: boolean;
+  onSwitch: () => void;
   currentUserId: string;
   onTransferred: () => Promise<unknown>;
   onRename: (name: string) => void;
@@ -151,7 +166,10 @@ function OrgRow({
     <Card>
       <CardHeader className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <CardTitle className="text-base">{org.name}</CardTitle>
+          <CardTitle className="flex flex-wrap items-center gap-2 text-base">
+            {org.name}
+            {isActive && <Badge variant="outline">Current workspace</Badge>}
+          </CardTitle>
           <p className="text-xs text-muted-foreground">
             /{org.slug} · {ROLE_LABEL[org.role] ?? org.role}
           </p>
@@ -161,10 +179,20 @@ function OrgRow({
                 ? "Inherited from your account"
                 : `Inherited from ${org.creatorLabel}`}
             </span>
-            <Badge variant="secondary">{org.plan}</Badge>
+            <Badge variant="secondary">{PLAN_LABEL[org.plan] ?? org.plan} plan</Badge>
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end">
+          {!isActive && (
+            <Button
+              variant="outline"
+              size="sm"
+              aria-label={`Switch to ${org.name}`}
+              onClick={onSwitch}
+            >
+              Switch to
+            </Button>
+          )}
           {isCreator && (
             <TransferCreatorshipDialog
               organization={org}

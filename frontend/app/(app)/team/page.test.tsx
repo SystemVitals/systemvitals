@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, act, within } from "@testing-library/react";
 import { MockedProvider } from "@apollo/client/testing/react";
 import type { MockedResponse } from "@apollo/client/testing";
 import { GraphQLError } from "graphql";
@@ -7,6 +7,7 @@ import TeamPage from "./page";
 import {
   ORGANIZATION_MEMBERS,
   ORGANIZATION_INVITES,
+  REMOVE_MEMBER,
   UPDATE_MEMBER_ROLE,
 } from "@/lib/queries";
 
@@ -23,7 +24,10 @@ vi.mock("@/lib/org-context", () => ({
 
 const mockRefetchMe = vi.fn().mockResolvedValue(undefined);
 vi.mock("@/lib/auth-context", () => ({
-  useAuth: () => ({ refetchMe: mockRefetchMe }),
+  useAuth: () => ({
+    user: { id: "u1", email: "owner@example.com" },
+    refetchMe: mockRefetchMe,
+  }),
 }));
 
 const membersMock = {
@@ -227,5 +231,52 @@ describe("TeamPage query errors", () => {
       await new Promise((resolve) => setTimeout(resolve, 20));
     });
     expect(screen.queryByText("Something went wrong")).not.toBeInTheDocument();
+  });
+
+  it("marks the viewer's own membership", async () => {
+    renderPage();
+    await screen.findByText("owner@example.com");
+    expect(screen.getByText("You")).toBeInTheDocument();
+  });
+
+  it("removes a member only after confirmation", async () => {
+    const removeResult = vi.fn(() => ({ data: { removeMember: true } }));
+    renderPage([
+      membersMock,
+      invitesMock,
+      {
+        request: { query: REMOVE_MEMBER, variables: { membershipId: "m2" } },
+        result: removeResult,
+      },
+      membersMock,
+      invitesMock,
+    ]);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Remove member@example.com" }),
+    );
+    const dialog = await screen.findByRole("dialog", {
+      name: "Remove member@example.com?",
+    });
+    expect(removeResult).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Remove member@example.com?" })).toBeNull(),
+    );
+    expect(removeResult).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Remove member@example.com" }));
+    fireEvent.click(
+      within(
+        await screen.findByRole("dialog", { name: "Remove member@example.com?" }),
+      ).getByRole("button", { name: "Remove member" }),
+    );
+    await waitFor(() => expect(removeResult).toHaveBeenCalledOnce());
+    // Let the post-removal refresh settle before unmounting.
+    await waitFor(() => expect(mockRefetchMe).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Remove member@example.com?" })).toBeNull(),
+    );
   });
 });

@@ -23,19 +23,42 @@ describe('account personal access wizard', () => {
   it('creates an account credential without organization or capability inputs', async () => {
     const cache = new InMemoryCache();
     render(<MockedProvider cache={cache} mocks={[{
-      request: {query: CREATE_PERSONAL_ACCESS_TOKEN, variables: {name:'Claude Code — SystemVitals account',expirationDays:30}},
-      result: {data:{createPersonalAccessToken:{id:'account-token',name:'Claude Code — SystemVitals account',
+      request: {query: CREATE_PERSONAL_ACCESS_TOKEN, variables: {name:'Claude Code',expirationDays:30}},
+      result: {data:{createPersonalAccessToken:{id:'account-token',name:'Claude Code',
         scopes:['account:manage'],organizationId:null,expiresAt:'2026-11-13T12:00:00Z',plaintext}}},
     }]}><ConnectAgentDialog scope="account" /></MockedProvider>);
     fireEvent.click(screen.getByRole('button',{name:'Create personal access token'}));
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText(/all organizations you can access/i)).toBeInTheDocument();
     expect(within(dialog).getByText(/password changes and token administration/i)).toBeInTheDocument();
-    fireEvent.click(within(dialog).getByRole('button',{name:'Create connection'}));
+    fireEvent.click(within(dialog).getByRole('button',{name:'Create token'}));
     await screen.findByText(plaintext);
     expect(JSON.stringify(cache.extract())).not.toContain(plaintext);
     fireEvent.click(screen.getByRole('button',{name:/copy token/i}));
     await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(plaintext));
+  });
+  it('previews the expiration date and confirms the created token', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-26T12:00:00Z'));
+    try {
+      render(<MockedProvider mocks={[{
+        request: {query: CREATE_PERSONAL_ACCESS_TOKEN, variables: {name:'Claude Code', expirationDays:30}},
+        result: {data:{createPersonalAccessToken:{id:'account-token',name:'Claude Code',
+          scopes:['account:manage'],organizationId:null,expiresAt:'2026-11-25T12:00:00Z',plaintext}}},
+      }]}><ConnectAgentDialog scope="account" /></MockedProvider>);
+      fireEvent.click(screen.getByRole('button',{name:'Create personal access token'}));
+      const dialog = await screen.findByRole('dialog');
+      const expiresOn = new Intl.DateTimeFormat(undefined, {dateStyle:'medium'})
+        .format(new Date('2026-11-25T12:00:00Z'));
+      expect(within(dialog).getByText(`Expires on ${expiresOn}.`)).toBeInTheDocument();
+      fireEvent.click(within(dialog).getByRole('button',{name:'Create token'}));
+      expect(await screen.findByRole('heading',{name:'Token created'})).toBeInTheDocument();
+      expect(screen.getByRole('dialog')).toHaveTextContent(`Claude Code is active until ${expiresOn}`);
+      // The MCP server is named after the product, not a placeholder label.
+      expect(screen.getByText(/claude mcp add 'systemvitals' /)).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
   it('offers account creation from account connection history', async () => {
     render(<MockedProvider mocks={[{request:{query:API_TOKENS},result:{data:{apiTokens:[]}}}]}>
@@ -50,15 +73,15 @@ describe('account personal access wizard', () => {
     render(<MockedProvider mocks={[
       {request:{query:API_TOKENS},result:{data:{apiTokens:[]}}},
       {request:{query:API_TOKENS},result:{data:{apiTokens:[recovered]}}},
-      {request:{query:CREATE_PERSONAL_ACCESS_TOKEN,variables:{name:'Claude Code — SystemVitals account',expirationDays:30}},
+      {request:{query:CREATE_PERSONAL_ACCESS_TOKEN,variables:{name:'Claude Code',expirationDays:30}},
         error:new Error('Response lost')},
     ]}><PersonalAccessTokensSection /></MockedProvider>);
     await screen.findByText('No access tokens yet');
     fireEvent.click(screen.getByRole('button',{name:'Create personal access token'}));
-    fireEvent.click(await screen.findByRole('button',{name:'Create connection'}));
-    await screen.findByRole('alert',{name:'Connection status unknown'});
+    fireEvent.click(await screen.findByRole('button',{name:'Create token'}));
+    await screen.findByRole('alert',{name:'Token status unknown'});
     fireEvent.click(screen.getByRole('checkbox'));
-    fireEvent.click(screen.getByRole('button',{name:'Review Access tokens'}));
+    fireEvent.click(screen.getByRole('button',{name:'Review tokens'}));
     await screen.findByRole('listitem',{name:'Lost response agent'});
   });
 });
@@ -169,7 +192,7 @@ async function openDialog() {
 
 async function createConnection() {
   await openDialog();
-  fireEvent.click(screen.getByRole("button", { name: /create connection/i }));
+  fireEvent.click(screen.getByRole("button", { name: /create token/i }));
   await screen.findByText(plaintext);
 }
 
@@ -193,12 +216,12 @@ describe("ConnectAgentDialog", () => {
     expect(
       within(dialog).getByText(/no access to members, billing, notification channels, or other organizations/i),
     ).toBeInTheDocument();
-    expect(within(dialog).getByLabelText(/connection name/i)).toHaveValue("Claude Code — Production");
+    expect(within(dialog).getByLabelText(/token name/i)).toHaveValue("Claude Code — Production");
   });
 
   it("tracks the selected client in the default name until the user edits it", async () => {
     const dialog = await openDialogWithRender();
-    const name = within(dialog).getByLabelText(/connection name/i);
+    const name = within(dialog).getByLabelText(/token name/i);
 
     fireEvent.click(within(dialog).getByRole("combobox", { name: /agent client/i }));
     await chooseOption("Codex");
@@ -233,13 +256,13 @@ describe("ConnectAgentDialog", () => {
         "agent-custom-days-help agent-custom-days-error",
       );
       expect(document.getElementById("agent-custom-days-error")).toBeInTheDocument();
-      expect(within(dialog).getByRole("button", { name: /create connection/i })).toBeDisabled();
+      expect(within(dialog).getByRole("button", { name: /create token/i })).toBeDisabled();
     }
 
     fireEvent.change(custom, { target: { value: "3650" } });
     expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument();
     expect(custom).toHaveAttribute("aria-describedby", "agent-custom-days-help");
-    expect(within(dialog).getByRole("button", { name: /create connection/i })).toBeEnabled();
+    expect(within(dialog).getByRole("button", { name: /create token/i })).toBeEnabled();
   });
 
   it("keeps definitive client validation failures outside the credential-risk state", async () => {
@@ -253,13 +276,13 @@ describe("ConnectAgentDialog", () => {
     });
 
     const submit = within(dialog).getByRole("button", {
-      name: /create connection/i,
+      name: /create token/i,
     });
     fireEvent.submit(submit.closest("form")!);
 
     expect(result).not.toHaveBeenCalled();
     expect(
-      within(dialog).queryByRole("alert", { name: /connection status unknown/i }),
+      within(dialog).queryByRole("alert", { name: /token status unknown/i }),
     ).not.toBeInTheDocument();
     expect(dispatchBeforeUnload()).toBe(false);
   });
@@ -274,12 +297,12 @@ describe("ConnectAgentDialog", () => {
       }),
     ]);
     const dialog = await openDialog();
-    fireEvent.change(within(dialog).getByLabelText(/connection name/i), {
+    fireEvent.change(within(dialog).getByLabelText(/token name/i), {
       target: { value: "Deploy bot" },
     });
     fireEvent.click(within(dialog).getByRole("combobox", { name: /expiration/i }));
     await chooseOption("30 days");
-    fireEvent.click(within(dialog).getByRole("button", { name: /create connection/i }));
+    fireEvent.click(within(dialog).getByRole("button", { name: /create token/i }));
 
     expect(await screen.findByText(plaintext)).toBeInTheDocument();
   });
@@ -291,9 +314,14 @@ describe("ConnectAgentDialog", () => {
     expect(screen.getByText(/cannot be displayed again/i)).toBeInTheDocument();
     expect(screen.getAllByText(/shell history/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/never commit (the )?token or (generated )?config/i)).toBeInTheDocument();
+    expect(screen.getByText(/create a 5-minute heartbeat check named nightly-backup/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /copy your token/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /connect your agent/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /try it in claude code/i })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("tab", { name: "GraphQL/cURL" }));
     expect(screen.getByText(/never commit (the )?token or (generated )?config/i)).toBeVisible();
-    expect(screen.getByText(/create a 5-minute heartbeat check named nightly-backup/i)).toBeInTheDocument();
+    // The cURL example is itself the test, so no agent prompt is suggested.
+    expect(screen.queryByText(/create a 5-minute heartbeat check named nightly-backup/i)).not.toBeInTheDocument();
     expect(screen.getAllByRole("tab")).toHaveLength(5);
     for (const name of ["Claude Code", "Codex", "Cursor", "Universal JSON", "GraphQL/cURL"]) {
       expect(screen.getByRole("tab", { name })).toBeInTheDocument();
@@ -358,11 +386,11 @@ describe("ConnectAgentDialog", () => {
         plaintext,
       );
 
-      fireEvent.click(screen.getByRole("button", { name: /^close$/i }));
+      fireEvent.click(screen.getByRole("button", { name: /^(done|close)$/i }));
       const confirmation = await screen.findByRole("dialog", {
-        name: /discard uncopied token/i,
+        name: /close without saving the token/i,
       });
-      fireEvent.click(within(confirmation).getByRole("button", { name: /keep open/i }));
+      fireEvent.click(within(confirmation).getByRole("button", { name: /go back/i }));
 
       fireEvent.click(screen.getByRole("button", { name: /copy token/i }));
       await waitFor(() =>
@@ -370,9 +398,9 @@ describe("ConnectAgentDialog", () => {
       );
       expect(screen.getByRole("button", { name: /token copied/i })).toBeInTheDocument();
 
-      fireEvent.click(screen.getByRole("button", { name: /^close$/i }));
+      fireEvent.click(screen.getByRole("button", { name: /^(done|close)$/i }));
       expect(
-        screen.queryByRole("dialog", { name: /discard uncopied token/i }),
+        screen.queryByRole("dialog", { name: /close without saving the token/i }),
       ).not.toBeInTheDocument();
       expect(screen.queryByText(plaintext)).not.toBeInTheDocument();
     },
@@ -387,10 +415,10 @@ describe("ConnectAgentDialog", () => {
         name: /i saved this one-time token securely/i,
       }),
     );
-    fireEvent.click(screen.getByRole("button", { name: /^close$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^(done|close)$/i }));
 
     expect(
-      screen.queryByRole("dialog", { name: /discard uncopied token/i }),
+      screen.queryByRole("dialog", { name: /close without saving the token/i }),
     ).not.toBeInTheDocument();
     expect(navigator.clipboard.writeText).not.toHaveBeenCalled();
   });
@@ -433,7 +461,7 @@ describe("ConnectAgentDialog", () => {
       },
     ]);
     await openDialog();
-    const submit = screen.getByRole("button", { name: /create connection/i });
+    const submit = screen.getByRole("button", { name: /create token/i });
     fireEvent.click(submit);
     fireEvent.click(submit);
 
@@ -449,7 +477,7 @@ describe("ConnectAgentDialog", () => {
       },
     ]);
     await openDialog();
-    fireEvent.click(screen.getByRole("button", { name: /create connection/i }));
+    fireEvent.click(screen.getByRole("button", { name: /create token/i }));
 
     const cancel = screen.getByRole("button", { name: /cancel/i });
     expect(cancel).toBeDisabled();
@@ -471,7 +499,7 @@ describe("ConnectAgentDialog", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /copy token/i }));
     await screen.findByRole("button", { name: /token copied/i });
-    fireEvent.click(screen.getByRole("button", { name: /^close$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^(done|close)$/i }));
     expect(screen.queryByText(plaintext)).not.toBeInTheDocument();
     expect(
       screen.queryByRole("dialog", { name: /connect agent/i }),
@@ -481,22 +509,22 @@ describe("ConnectAgentDialog", () => {
   it("requires shadcn discard confirmation before closing an uncopied result", async () => {
     renderDialog();
     await createConnection();
-    fireEvent.click(screen.getByRole("button", { name: /^close$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^(done|close)$/i }));
 
-    const confirmation = await screen.findByRole("dialog", { name: /discard uncopied token/i });
+    const confirmation = await screen.findByRole("dialog", { name: /close without saving the token/i });
     expect(screen.getAllByRole("dialog")).toHaveLength(1);
     expect(screen.queryByText(plaintext)).not.toBeInTheDocument();
-    expect(within(confirmation).getByRole("button", { name: /keep open/i })).toHaveFocus();
-    expect(within(confirmation).getByText(/cannot recover this token/i)).toBeInTheDocument();
-    fireEvent.click(within(confirmation).getByRole("button", { name: /keep open/i }));
+    expect(within(confirmation).getByRole("button", { name: /go back/i })).toHaveFocus();
+    expect(within(confirmation).getByText(/can't be shown again/i)).toBeInTheDocument();
+    fireEvent.click(within(confirmation).getByRole("button", { name: /go back/i }));
     expect(screen.getByText(plaintext)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^close$/i })).toHaveFocus();
+    expect(screen.getByRole("button", { name: /^(done|close)$/i })).toHaveFocus();
 
-    fireEvent.click(screen.getByRole("button", { name: /^close$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^(done|close)$/i }));
     fireEvent.click(
-      within(await screen.findByRole("dialog", { name: /discard uncopied token/i })).getByRole(
+      within(await screen.findByRole("dialog", { name: /close without saving the token/i })).getByRole(
         "button",
-        { name: /discard token/i },
+        { name: /close anyway/i },
       ),
     );
     expect(screen.queryByText(plaintext)).not.toBeInTheDocument();
@@ -506,21 +534,21 @@ describe("ConnectAgentDialog", () => {
     renderDialogWithInternalLink([transportFailureMock()]);
     const dialog = await openDialog();
     fireEvent.click(
-      within(dialog).getByRole("button", { name: /create connection/i }),
+      within(dialog).getByRole("button", { name: /create token/i }),
     );
 
     const warning = await screen.findByRole("alert", {
-      name: /connection status unknown/i,
+      name: /token status unknown/i,
     });
-    expect(warning).toHaveTextContent(/connection may have been created/i);
+    expect(warning).toHaveTextContent(/token may have been created/i);
     expect(warning).toHaveTextContent(/one-time secret was not received/i);
-    expect(warning).toHaveTextContent(/access tokens/i);
+    expect(warning).toHaveTextContent(/token list/i);
     expect(warning).not.toHaveTextContent(/failed to fetch|could not be created/i);
     expect(dispatchBeforeUnload()).toBe(true);
 
-    fireEvent.click(screen.getByRole("button", { name: /^close$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^(done|close)$/i }));
     const closeBlocked = await screen.findByRole("dialog", {
-      name: /acknowledge potential connection/i,
+      name: /acknowledge potential token/i,
     });
     expect(
       within(closeBlocked).queryByRole("button", {
@@ -528,7 +556,7 @@ describe("ConnectAgentDialog", () => {
       }),
     ).not.toBeInTheDocument();
     fireEvent.click(
-      within(closeBlocked).getByRole("button", { name: /keep open/i }),
+      within(closeBlocked).getByRole("button", { name: /go back/i }),
     );
 
     fireEvent.click(
@@ -538,7 +566,7 @@ describe("ConnectAgentDialog", () => {
     );
     expect(
       await screen.findByRole("dialog", {
-        name: /acknowledge potential connection/i,
+        name: /acknowledge potential token/i,
       }),
     ).toBeInTheDocument();
     expect(mockRouterPush).not.toHaveBeenCalled();
@@ -548,20 +576,20 @@ describe("ConnectAgentDialog", () => {
     renderDialog([transportFailureMock()]);
     const dialog = await openDialog();
     fireEvent.click(
-      within(dialog).getByRole("button", { name: /create connection/i }),
+      within(dialog).getByRole("button", { name: /create token/i }),
     );
 
     await screen.findByRole("alert", {
-      name: /connection status unknown/i,
+      name: /token status unknown/i,
     });
     const reviewConnections = screen.getByRole("button", {
-      name: /review access tokens/i,
+      name: /review tokens/i,
     });
     expect(reviewConnections).toBeDisabled();
 
     fireEvent.click(
       screen.getByRole("checkbox", {
-        name: /i understand.*connection may have been created.*review access tokens/i,
+        name: /i understand.*token may have been created.*review my tokens/i,
       }),
     );
     expect(reviewConnections).toBeEnabled();
@@ -583,7 +611,7 @@ describe("ConnectAgentDialog", () => {
     await createConnection();
     fireEvent.click(screen.getByRole("button", { name: /copy token/i }));
     await screen.findByRole("button", { name: /token copied/i });
-    fireEvent.click(screen.getByRole("button", { name: /^close$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^(done|close)$/i }));
 
     expect(screen.queryByText(plaintext)).not.toBeInTheDocument();
     expect(localSet).not.toHaveBeenCalled();
@@ -674,16 +702,16 @@ describe("ConnectAgentDialog", () => {
 
     history.back();
     const confirmation = await screen.findByRole("dialog", {
-      name: /discard uncopied token/i,
+      name: /close without saving the token/i,
     });
-    fireEvent.click(within(confirmation).getByRole("button", { name: /keep open/i }));
+    fireEvent.click(within(confirmation).getByRole("button", { name: /go back/i }));
     expect(screen.getByText(plaintext)).toBeInTheDocument();
 
     history.back();
     fireEvent.click(
       within(
-        await screen.findByRole("dialog", { name: /discard uncopied token/i }),
-      ).getByRole("button", { name: /discard token/i }),
+        await screen.findByRole("dialog", { name: /close without saving the token/i }),
+      ).getByRole("button", { name: /close anyway/i }),
     );
 
     expect(screen.queryByText(plaintext)).not.toBeInTheDocument();
@@ -697,7 +725,7 @@ describe("ConnectAgentDialog", () => {
     await createConnection();
     fireEvent.click(screen.getByRole("button", { name: /copy token/i }));
     await screen.findByRole("button", { name: /token copied/i });
-    fireEvent.click(screen.getByRole("button", { name: /^close$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^(done|close)$/i }));
 
     await createConnection();
     await waitFor(() =>
@@ -708,7 +736,7 @@ describe("ConnectAgentDialog", () => {
     history.back();
 
     expect(
-      await screen.findByRole("dialog", { name: /discard uncopied token/i }),
+      await screen.findByRole("dialog", { name: /close without saving the token/i }),
     ).toBeInTheDocument();
     expect(screen.queryByText(plaintext)).not.toBeInTheDocument();
   });
@@ -723,9 +751,9 @@ describe("ConnectAgentDialog", () => {
 
     fireEvent.click(link!);
     const confirmation = await screen.findByRole("dialog", {
-      name: /discard uncopied token/i,
+      name: /close without saving the token/i,
     });
-    fireEvent.click(within(confirmation).getByRole("button", { name: /keep open/i }));
+    fireEvent.click(within(confirmation).getByRole("button", { name: /go back/i }));
 
     expect(screen.getByText(plaintext)).toBeInTheDocument();
     expect(mockRouterPush).not.toHaveBeenCalled();
@@ -741,11 +769,11 @@ describe("ConnectAgentDialog", () => {
       </MockedProvider>,
     );
     await openDialog();
-    fireEvent.click(screen.getByRole("button", { name: /create connection/i }));
+    fireEvent.click(screen.getByRole("button", { name: /create token/i }));
     fireEvent.click(document.querySelector<HTMLAnchorElement>('a[href="/channels"]')!);
 
     const confirmation = await screen.findByRole("dialog", {
-      name: /leave while connection is being created/i,
+      name: /leave while the token is being created/i,
     });
     expect(
       within(confirmation).getByText(/active token that has never been shown/i),
@@ -758,7 +786,7 @@ describe("ConnectAgentDialog", () => {
     history.pushState(null, "", "/dashboard");
     renderDialog([{ ...successMock(), delay: 200 }]);
     await openDialog();
-    fireEvent.click(screen.getByRole("button", { name: /create connection/i }));
+    fireEvent.click(screen.getByRole("button", { name: /create token/i }));
 
     await waitFor(() =>
       expect(JSON.stringify(history.state)).toContain(
@@ -769,7 +797,7 @@ describe("ConnectAgentDialog", () => {
 
     expect(
       await screen.findByRole("dialog", {
-        name: /leave while connection is being created/i,
+        name: /leave while the token is being created/i,
       }),
     ).toBeInTheDocument();
     expect(window.location.pathname).toBe("/dashboard");
@@ -780,7 +808,7 @@ describe("ConnectAgentDialog", () => {
     await openDialog();
 
     expect(dispatchBeforeUnload()).toBe(false);
-    fireEvent.click(screen.getByRole("button", { name: /create connection/i }));
+    fireEvent.click(screen.getByRole("button", { name: /create token/i }));
     expect(dispatchBeforeUnload()).toBe(true);
 
     await screen.findByText(plaintext);
@@ -801,8 +829,8 @@ describe("ConnectAgentDialog", () => {
     fireEvent.click(link!);
     fireEvent.click(
       within(
-        await screen.findByRole("dialog", { name: /discard uncopied token/i }),
-      ).getByRole("button", { name: /discard token/i }),
+        await screen.findByRole("dialog", { name: /close without saving the token/i }),
+      ).getByRole("button", { name: /close anyway/i }),
     );
 
     expect(screen.queryByText(plaintext)).not.toBeInTheDocument();
@@ -815,14 +843,14 @@ describe("ConnectAgentDialog", () => {
 
     fireEvent.click(document.querySelector<HTMLAnchorElement>('a[href="/team"]')!);
     expect(
-      await screen.findByRole("dialog", { name: /discard uncopied token/i }),
+      await screen.findByRole("dialog", { name: /close without saving the token/i }),
     ).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /keep open/i }));
+    fireEvent.click(screen.getByRole("button", { name: /go back/i }));
 
     for (const href of ["/billing", "/account", "/organizations", "/status-pages"]) {
       fireEvent.click(document.querySelector<HTMLAnchorElement>(`a[href="${href}"]`)!);
       expect(
-        screen.queryByRole("dialog", { name: /discard uncopied token/i }),
+        screen.queryByRole("dialog", { name: /close without saving the token/i }),
       ).not.toBeInTheDocument();
     }
   });
@@ -834,7 +862,7 @@ describe("ConnectAgentDialog", () => {
 
     window.dispatchEvent(new PopStateEvent("popstate"));
     expect(
-      screen.queryByRole("dialog", { name: /discard uncopied token/i }),
+      screen.queryByRole("dialog", { name: /close without saving the token/i }),
     ).not.toBeInTheDocument();
   });
 

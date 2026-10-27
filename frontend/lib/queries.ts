@@ -14,6 +14,7 @@ export const CHECKS = gql`
       type
       status
       pingSlug
+      target
       periodSeconds
       intervalSeconds
       graceSeconds
@@ -131,6 +132,12 @@ export const RESUME_CHECK = gql`
       id
       status
     }
+  }
+`;
+
+export const DELETE_CHECK = gql`
+  mutation deleteCheck($id: ID!) {
+    deleteCheck(id: $id)
   }
 `;
 

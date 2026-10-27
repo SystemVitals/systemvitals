@@ -47,11 +47,11 @@ describe("CreateTeamDialog", () => {
     };
     renderDialog([createMock]);
 
-    fireEvent.click(screen.getByRole("button", { name: /create team/i }));
-    fireEvent.change(await screen.findByLabelText(/team name/i), {
+    fireEvent.click(screen.getByRole("button", { name: /new organization/i }));
+    fireEvent.change(await screen.findByLabelText(/organization name/i), {
       target: { value: "New Team" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /^create$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^create organization$/i }));
 
     await waitFor(() => expect(mockRefetchMe).toHaveBeenCalled());
     expect(mockSetActiveOrgId).toHaveBeenCalledWith("org3");
@@ -64,11 +64,11 @@ describe("CreateTeamDialog", () => {
     };
     renderDialog([failMock]);
 
-    fireEvent.click(screen.getByRole("button", { name: /create team/i }));
-    fireEvent.change(await screen.findByLabelText(/team name/i), {
+    fireEvent.click(screen.getByRole("button", { name: /new organization/i }));
+    fireEvent.change(await screen.findByLabelText(/organization name/i), {
       target: { value: "X" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /^create$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^create organization$/i }));
 
     expect(
       await screen.findByText(/at most 10 free organizations/i),
@@ -94,11 +94,11 @@ describe("CreateTeamDialog", () => {
     };
     renderDialog([createMock]);
 
-    fireEvent.click(screen.getByRole("button", { name: /create team/i }));
-    fireEvent.change(await screen.findByLabelText(/team name/i), {
+    fireEvent.click(screen.getByRole("button", { name: /new organization/i }));
+    fireEvent.change(await screen.findByLabelText(/organization name/i), {
       target: { value: "New Team" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /^create$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^create organization$/i }));
 
     expect(
       await screen.findByText(/could not refresh teams/i),

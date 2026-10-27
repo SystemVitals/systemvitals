@@ -27,9 +27,12 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/app/page-header";
 
 interface Member {
   id: string;
@@ -67,8 +70,9 @@ const MEMBER_ROLE_ITEMS = [
 
 export default function TeamPage() {
   const { activeOrg, activeOrgId } = useOrg();
-  const { refetchMe } = useAuth();
+  const { user, refetchMe } = useAuth();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<Member | null>(null);
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("MEMBER");
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -137,9 +141,16 @@ export default function TeamPage() {
     onCompleted: () => void refetchAll(),
     onError,
   });
-  const [removeMember] = useMutation(REMOVE_MEMBER, {
-    onCompleted: () => void refetchAll(),
-    onError,
+  const [removeMember, removeState] = useMutation(REMOVE_MEMBER, {
+    onCompleted: () => {
+      setRemoving(null);
+      // Query failures surface through the members/invites error effects.
+      void refetchAll().catch(() => undefined);
+    },
+    onError: (e) => {
+      setRemoving(null);
+      onError(e);
+    },
   });
 
   async function copyLink(invite: Invite) {
@@ -150,13 +161,19 @@ export default function TeamPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-semibold">Team</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Everyone with access to {activeOrg?.name ?? "this organization"}.
-          Available on every plan.
-        </p>
-      </div>
+      <PageHeader
+        title="Members"
+        description={
+          <>
+            Everyone with access to{" "}
+            <span className="font-medium text-foreground">
+              {activeOrg?.name ?? "this organization"}
+            </span>
+            . Admins can invite people and remove members; owners can also
+            change roles. Available on every plan.
+          </>
+        }
+      />
 
       {canManage && (
         <Card>
@@ -223,7 +240,10 @@ export default function TeamPage() {
               key={m.id}
               className="flex flex-wrap items-center justify-between gap-3 rounded-md border p-3"
             >
-              <span className="text-sm">{m.email}</span>
+              <span className="flex min-w-0 items-center gap-2 text-sm">
+                <span className="truncate">{m.email}</span>
+                {user?.email === m.email && <Badge variant="secondary">You</Badge>}
+              </span>
               <div className="flex items-center gap-2">
                 {isOwner ? (
                   <Select
@@ -258,9 +278,7 @@ export default function TeamPage() {
                     variant="ghost"
                     size="icon"
                     aria-label={`Remove ${m.email}`}
-                    onClick={() =>
-                      void removeMember({ variables: { membershipId: m.id } })
-                    }
+                    onClick={() => setRemoving(m)}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -314,6 +332,47 @@ export default function TeamPage() {
           </CardContent>
         </Card>
       )}
+
+      <Dialog
+        open={removing !== null}
+        onOpenChange={(open) => {
+          if (!open && !removeState.loading) setRemoving(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {user?.email === removing?.email
+                ? `Leave ${activeOrg?.name ?? "this organization"}?`
+                : `Remove ${removing?.email}?`}
+            </DialogTitle>
+            <DialogDescription>
+              {user?.email === removing?.email
+                ? "You'll immediately lose access to its checks, channels, and status pages, and need a new invitation to return."
+                : `They'll immediately lose access to ${activeOrg?.name ?? "this organization"}'s checks, channels, and status pages. You can invite them again later.`}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={removeState.loading}
+              onClick={() => setRemoving(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={removeState.loading}
+              onClick={() =>
+                removing &&
+                void removeMember({ variables: { membershipId: removing.id } })
+              }
+            >
+              {removeState.loading ? "Removing…" : "Remove member"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!errorMessage} onOpenChange={() => setErrorMessage(null)}>
         <DialogContent>

@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { PersonalAccessTokensSection } from "@/components/app/personal-access-tokens";
 import { GoogleMark } from "@/components/brand/google-mark";
+import { PageHeader } from "@/components/app/page-header";
 
 export default function AccountPage() {
   const { user, refetchMe } = useAuth();
@@ -60,13 +61,17 @@ export default function AccountPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="font-heading text-2xl font-semibold tracking-tight">Account</h1>
-        <p className="text-sm text-muted-foreground">{user?.email}</p>
-      </div>
+    <div className="max-w-3xl space-y-10">
+      <PageHeader
+        title="Account"
+        description={
+          <>
+            Signed in as <span className="font-medium text-foreground">{user?.email}</span>
+          </>
+        }
+      />
 
-      <Card className="max-w-xl">
+      <Card>
         <CardHeader>
           <CardTitle>Security</CardTitle>
           <CardDescription>How you sign in to SystemVitals.</CardDescription>
@@ -98,7 +103,7 @@ export default function AccountPage() {
             </li>
           </ul>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="max-w-md space-y-4">
             {hasPassword && (
               <div className="space-y-2">
                 <Label htmlFor="currentPassword">Current password</Label>

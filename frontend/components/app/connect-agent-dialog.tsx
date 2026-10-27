@@ -5,7 +5,7 @@ import { flushSync } from "react-dom";
 import { useRouter } from "next/navigation";
 import { useMutation } from "@apollo/client/react";
 import { Tabs } from "@base-ui/react/tabs";
-import { Check, Copy, Plug, ShieldCheck } from "lucide-react";
+import { Check, CircleCheck, Copy, KeyRound, Plus, ShieldCheck, ShieldX, TriangleAlert } from "lucide-react";
 
 import {
   type AgentClient,
@@ -43,34 +43,44 @@ const EXPIRATION_LABELS: Record<Expiration, string> = {
   custom: "Custom",
 };
 
-const CLIENTS: { value: AgentClient; label: string; note: string }[] = [
+const CLIENTS: {
+  value: AgentClient;
+  label: string;
+  instruction: string;
+  note: string;
+}[] = [
   {
     value: "claude-code",
     label: "Claude Code",
+    instruction: "Run this in your terminal, then paste the token when prompted.",
     note:
-      "The prompt avoids shell history, but the Claude CLI stores the credential in its MCP config. Keep that config private, never commit it, and revoke the connection when no longer needed.",
+      "The prompt avoids shell history, but the Claude CLI stores the credential in its MCP config. Keep that config private, never commit it, and revoke the token when no longer needed.",
   },
   {
     value: "codex",
     label: "Codex",
+    instruction: "Add this to ~/.codex/config.toml.",
     note:
-      "This config file contains the bearer secret. Use user-only permissions, keep it private, never commit it, and revoke the connection when no longer needed.",
+      "This config file contains the bearer secret. Use user-only permissions, keep it private, never commit it, and revoke the token when no longer needed.",
   },
   {
     value: "cursor",
     label: "Cursor",
+    instruction: "Add this to ~/.cursor/mcp.json.",
     note:
-      "This config file contains the bearer secret. Use user-only permissions, keep it private, never commit it, and revoke the connection when no longer needed.",
+      "This config file contains the bearer secret. Use user-only permissions, keep it private, never commit it, and revoke the token when no longer needed.",
   },
   {
     value: "universal",
     label: "Universal JSON",
+    instruction: "Add this to any MCP client that reads an mcpServers JSON config.",
     note:
-      "This config file contains the bearer secret. Use user-only permissions, keep it private, never commit it, and revoke the connection when no longer needed.",
+      "This config file contains the bearer secret. Use user-only permissions, keep it private, never commit it, and revoke the token when no longer needed.",
   },
   {
     value: "graphql",
     label: "GraphQL/cURL",
+    instruction: "Run this in your terminal, then paste the token when prompted.",
     note:
       "Run this example directly. It prompts for the token without putting it in shell history, uses it only for the request, then unsets the variable.",
   },
@@ -87,12 +97,36 @@ const SETUPS_WITH_EMBEDDED_TOKEN = new Set<AgentClient>([
 type CreatedConnection = {
   plaintext: string;
   name: string;
+  expiresAt?: string | null;
 };
 
 type CreateTokenData = {
   createScopedApiToken?: CreatedConnection;
   createPersonalAccessToken?: CreatedConnection;
 };
+
+function expirationDate(days: number): Date {
+  return new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+}
+
+function formatDay(value: Date | string): string {
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(value));
+}
+
+function StepHeading({ step, title, optional }: { step: number; title: string; optional?: boolean }) {
+  return (
+    <h3 className="flex items-center gap-2 text-sm font-medium">
+      <span
+        aria-hidden="true"
+        className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary"
+      >
+        {step}
+      </span>
+      {title}
+      {optional && <span className="font-normal text-muted-foreground">(optional)</span>}
+    </h3>
+  );
+}
 
 type ConnectionProps = {
   secondary?: boolean;
@@ -123,7 +157,11 @@ export function ConnectAgentDialog({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pendingExit, setPendingExit] = useState<PendingExit | null>(null);
-  const [name, setName] = useState(() => `Claude Code — ${organizationName}`);
+  const defaultName = (nextClient: AgentClient) =>
+    isAccount
+      ? CLIENT_LABELS[nextClient]
+      : `${CLIENT_LABELS[nextClient]} — ${organizationName}`;
+  const [name, setName] = useState(() => defaultName("claude-code"));
   const [nameEdited, setNameEdited] = useState(false);
   const [expiration, setExpiration] = useState<Expiration>(isAccount ? "30" : "never");
   const [customDays, setCustomDays] = useState("");
@@ -331,7 +369,7 @@ export function ConnectAgentDialog({
   function handleOpenChange(nextOpen: boolean) {
     if (nextOpen) {
       setClient("claude-code");
-      setName(`Claude Code — ${organizationName}`);
+      setName(defaultName("claude-code"));
       setNameEdited(false);
       setExpiration(isAccount ? "30" : "never");
       setCustomDays("");
@@ -356,7 +394,7 @@ export function ConnectAgentDialog({
     setSetupCopied(false);
     setCopyError(null);
     if (!nameEdited) {
-      setName(`${CLIENT_LABELS[nextClient]} — ${organizationName}`);
+      setName(defaultName(nextClient));
     }
   }
 
@@ -395,7 +433,11 @@ export function ConnectAgentDialog({
         ? result.data?.createPersonalAccessToken
         : result.data?.createScopedApiToken;
       if (!connection) throw new Error("Connection could not be created.");
-      setCreated({ plaintext: connection.plaintext, name: connection.name });
+      setCreated({
+        plaintext: connection.plaintext,
+        name: connection.name,
+        expiresAt: connection.expiresAt,
+      });
       onCreated?.();
     } catch {
       setCreationUncertain(true);
@@ -484,14 +526,28 @@ export function ConnectAgentDialog({
     router.push("/account#personal-access-tokens");
   }
 
+  const testPrompt = isAccount
+    ? "List my organizations and show my account subscription and usage."
+    : TEST_PROMPT;
+  const clientName =
+    client === "universal" ? "your MCP client" : CLIENT_LABELS[client];
+  const expirationHint =
+    expiration === "never"
+      ? null
+      : customDaysValid && (expiration !== "custom" || customDays !== "")
+        ? `Expires on ${formatDay(
+            expirationDate(expiration === "custom" ? Number(customDays) : Number(expiration)),
+          )}.`
+        : null;
+
   return (
     <>
       <Button
         size="sm"
-        variant={secondary ? "ghost" : "outline"}
+        variant={isAccount ? "default" : secondary ? "ghost" : "outline"}
         onClick={() => handleOpenChange(true)}
       >
-        <Plug className="mr-1 size-4" />
+        <Plus className="mr-1 size-4" />
         {isAccount ? 'Create personal access token' : 'Connect agent'}
       </Button>
 
@@ -514,26 +570,26 @@ export function ConnectAgentDialog({
               <DialogHeader>
                 <DialogTitle>
                   {creationPending
-                    ? "Leave while connection is being created?"
+                    ? "Leave while the token is being created?"
                     : creationUncertain
-                      ? "Acknowledge potential connection"
-                    : "Discard uncopied token?"}
+                      ? "Acknowledge potential token"
+                    : "Close without saving the token?"}
                 </DialogTitle>
                 <DialogDescription>
                   {creationPending
                     ? "Creation may finish after you leave, resulting in an active token that has never been shown. Keep this setup open unless you accept losing the one-time secret."
                     : creationUncertain
-                      ? "A connection may be active even though its one-time secret was not received. Keep this warning open, acknowledge the risk, then review Access tokens and revoke any potentially created credential."
-                    : "You cannot recover this token after closing the setup result."}
+                      ? "A token may be active even though its one-time secret was not received. Keep this warning open, acknowledge the risk, then review your tokens and revoke any potentially created credential."
+                    : "The token stays active, but its secret can't be shown again. If you haven't saved it, revoke it from the token list and create a new one."}
                 </DialogDescription>
               </DialogHeader>
               <DialogFooter>
                 <Button variant="outline" autoFocus onClick={keepResultOpen}>
-                  Keep open
+                  Go back
                 </Button>
                 {!creationUncertain && (
                   <Button variant="destructive" onClick={confirmPendingExit}>
-                    Discard token
+                    Close anyway
                   </Button>
                 )}
               </DialogFooter>
@@ -542,15 +598,15 @@ export function ConnectAgentDialog({
             <div className="space-y-5">
               <div
                 role="alert"
-                aria-label="Connection status unknown"
+                aria-label="Token status unknown"
                 className="rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm"
               >
-                <p className="font-medium">Connection status unknown</p>
+                <p className="font-medium">Token status unknown</p>
                 <p className="mt-1 text-muted-foreground">
-                  The creation request did not return a result. A connection may
-                  have been created, and the one-time secret was not received.
-                  Treat any matching credential as active until you review and
-                  revoke it from Access tokens.
+                  The creation request did not return a result. A token may
+                  have been created, and its one-time secret was not received.
+                  Treat any matching token as active until you review and
+                  revoke it from your token list.
                 </p>
               </div>
 
@@ -566,8 +622,8 @@ export function ConnectAgentDialog({
                   htmlFor="agent-connection-risk-acknowledged"
                   className="cursor-pointer text-sm font-normal"
                 >
-                  I understand a connection may have been created, and I will
-                  review Access tokens to revoke any potentially created
+                  I understand a token may have been created, and I will
+                  review my tokens to revoke any potentially created
                   credential.
                 </Label>
               </div>
@@ -586,137 +642,186 @@ export function ConnectAgentDialog({
                   disabled={!uncertaintyAcknowledged}
                   onClick={reviewAgentConnections}
                 >
-                  Review Access tokens
+                  Review tokens
                 </Button>
               </DialogFooter>
             </div>
+          ) : created ? (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <CircleCheck className="size-5 text-success" aria-hidden="true" />
+                  Token created
+                </DialogTitle>
+                <DialogDescription>
+                  <strong className="font-medium text-foreground">{created.name}</strong> is active
+                  {created.expiresAt
+                    ? ` until ${formatDay(created.expiresAt)}`
+                    : " and never expires"}
+                  . Finish these steps before closing.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-6">
+                <section className="space-y-3" aria-labelledby="agent-token-step">
+                  <div id="agent-token-step">
+                    <StepHeading step={1} title="Copy your token" />
+                  </div>
+                  <div
+                    role="alert"
+                    className="flex gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm"
+                  >
+                    <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden="true" />
+                    <div>
+                      <p className="font-medium">This is the only time you&apos;ll see this token</p>
+                      <p className="mt-1 text-muted-foreground">
+                        It cannot be displayed again. Store it in a password manager or your
+                        agent&apos;s config. Never commit the token or generated config to
+                        source control.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+                    <Label htmlFor="agent-token" className="sr-only">
+                      One-time token
+                    </Label>
+                    <pre
+                      id="agent-token"
+                      className="min-w-0 flex-1 overflow-x-auto rounded-lg border bg-muted px-3 py-2.5 font-mono text-sm select-all"
+                    >
+                      {created.plaintext}
+                    </pre>
+                    <Button
+                      type="button"
+                      variant={tokenCopied ? "outline" : "default"}
+                      className="sm:h-auto"
+                      onClick={handleTokenCopy}
+                    >
+                      {tokenCopied ? (
+                        <Check className="mr-1 size-4" />
+                      ) : (
+                        <Copy className="mr-1 size-4" />
+                      )}
+                      {tokenCopied ? "Token copied" : "Copy token"}
+                    </Button>
+                  </div>
+                  {copyError === "token" && (
+                    <p role="alert" aria-label="Copy failed" className="text-sm text-destructive">
+                      Could not copy the token. Copy it manually from the one-time token above, then confirm that you saved it.
+                    </p>
+                  )}
+                  <div className="flex items-start gap-2">
+                    <Checkbox
+                      id="agent-token-saved"
+                      checked={tokenAcknowledged || tokenCopied}
+                      disabled={tokenCopied}
+                      onCheckedChange={(checked) =>
+                        setTokenAcknowledged(checked === true)
+                      }
+                    />
+                    <Label
+                      htmlFor="agent-token-saved"
+                      className="cursor-pointer text-sm font-normal"
+                    >
+                      I saved this one-time token securely.
+                    </Label>
+                  </div>
+                </section>
+
+                <section className="space-y-3" aria-labelledby="agent-setup-step">
+                  <div id="agent-setup-step">
+                    <StepHeading step={2} title="Connect your agent" optional />
+                  </div>
+                  <Tabs.Root
+                    value={client}
+                    onValueChange={(value) => handleClientChange(value as AgentClient)}
+                  >
+                    <Tabs.List
+                      aria-label="Agent client configuration"
+                      className="flex gap-1 overflow-x-auto border-b"
+                    >
+                      {CLIENTS.map((item) => (
+                        <Tabs.Tab
+                          key={item.value}
+                          value={item.value}
+                          className="shrink-0 border-b-2 border-transparent px-2 py-2 text-xs font-medium text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring data-active:border-primary data-active:text-foreground sm:text-sm"
+                        >
+                          {item.label}
+                        </Tabs.Tab>
+                      ))}
+                    </Tabs.List>
+                    {CLIENTS.map((item) => (
+                      <Tabs.Panel
+                        key={item.value}
+                        value={item.value}
+                        className="space-y-2 pt-3 outline-none"
+                      >
+                        <p className="text-sm">{item.instruction}</p>
+                        <div className="relative">
+                          <pre className="max-h-56 overflow-auto rounded-lg bg-muted p-3 pr-28 font-mono text-xs whitespace-pre-wrap break-all">
+                            {config}
+                          </pre>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="absolute right-2 top-2 bg-background"
+                            onClick={handleSetupCopy}
+                          >
+                            {setupCopied ? <Check className="mr-1 size-4" /> : <Copy className="mr-1 size-4" />}
+                            {setupCopied ? "Setup copied" : "Copy setup"}
+                          </Button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">{item.note}</p>
+                      </Tabs.Panel>
+                    ))}
+                  </Tabs.Root>
+                  {copyError === "setup" && (
+                    <p role="alert" aria-label="Copy failed" className="text-sm text-destructive">
+                      Could not copy the setup. Copy it manually from the configuration above.
+                    </p>
+                  )}
+                </section>
+
+                {client !== "graphql" && (
+                  <section className="space-y-2" aria-labelledby="agent-test-step">
+                    <div id="agent-test-step">
+                      <StepHeading step={3} title={`Try it in ${clientName}`} optional />
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Start a new {clientName} session and ask:
+                    </p>
+                    <p className="rounded-lg border bg-muted/40 px-3 py-2 font-mono text-sm">{testPrompt}</p>
+                  </section>
+                )}
+              </div>
+
+              <DialogFooter>
+                {!secretSecured && (
+                  <p className="mr-auto self-center text-xs text-muted-foreground">
+                    Copy the token or confirm you saved it to finish.
+                  </p>
+                )}
+                <Button ref={closeButtonRef} onClick={requestClose}>
+                  Done
+                </Button>
+              </DialogFooter>
+            </>
           ) : (
             <>
               <DialogHeader>
-                <DialogTitle>{isAccount ? 'Create personal access token' : 'Connect agent'}</DialogTitle>
+                <DialogTitle className="flex items-center gap-2">
+                  <KeyRound className="size-5 text-primary" aria-hidden="true" />
+                  {isAccount ? 'Create personal access token' : 'Connect agent'}
+                </DialogTitle>
                 <DialogDescription>
-                  {isAccount ? 'Give an agent access to manage your SystemVitals account.' : <>
-                    Create an organization-scoped connection for{' '}
+                  {isAccount ? 'Let an AI agent or script manage SystemVitals on your behalf.' : <>
+                    Create an organization-scoped token for{' '}
                     <strong>{organizationName}</strong>.
                   </>}
                 </DialogDescription>
               </DialogHeader>
 
-              {created ? (
-            <div className="space-y-4">
-              <div
-                role="alert"
-                className="rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm"
-              >
-                <p className="font-medium">Save this token now</p>
-                <p className="mt-1 text-muted-foreground">
-                  It cannot be displayed again. The generated setup contains the
-                  secret; avoid commands or workflows that retain it in shell history.
-                  Never commit the token or generated config into source control.
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <Label htmlFor="agent-token">One-time token</Label>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={handleTokenCopy}
-                  >
-                    {tokenCopied ? (
-                      <Check className="mr-1 size-4" />
-                    ) : (
-                      <Copy className="mr-1 size-4" />
-                    )}
-                    {tokenCopied ? "Token copied" : "Copy token"}
-                  </Button>
-                </div>
-                <pre
-                  id="agent-token"
-                  className="overflow-x-auto rounded-lg bg-muted p-3 font-mono text-xs"
-                >
-                  {created.plaintext}
-                </pre>
-                <div className="flex items-start gap-2 pt-1">
-                  <Checkbox
-                    id="agent-token-saved"
-                    checked={tokenAcknowledged}
-                    onCheckedChange={(checked) =>
-                      setTokenAcknowledged(checked === true)
-                    }
-                  />
-                  <Label
-                    htmlFor="agent-token-saved"
-                    className="cursor-pointer text-sm font-normal"
-                  >
-                    I saved this one-time token securely.
-                  </Label>
-                </div>
-              </div>
-
-              <Tabs.Root
-                value={client}
-                onValueChange={(value) => handleClientChange(value as AgentClient)}
-              >
-                <Tabs.List
-                  aria-label="Agent client configuration"
-                  className="flex gap-1 overflow-x-auto border-b"
-                >
-                  {CLIENTS.map((item) => (
-                    <Tabs.Tab
-                      key={item.value}
-                      value={item.value}
-                      className="shrink-0 border-b-2 border-transparent px-2 py-2 text-xs font-medium text-muted-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring data-active:border-primary data-active:text-foreground sm:text-sm"
-                    >
-                      {item.label}
-                    </Tabs.Tab>
-                  ))}
-                </Tabs.List>
-                {CLIENTS.map((item) => (
-                  <Tabs.Panel
-                    key={item.value}
-                    value={item.value}
-                    className="space-y-3 pt-3 outline-none"
-                  >
-                    <p className="text-sm text-muted-foreground">{item.note}</p>
-                    <pre className="max-h-56 overflow-auto rounded-lg bg-muted p-3 font-mono text-xs whitespace-pre-wrap break-all">
-                      {config}
-                    </pre>
-                  </Tabs.Panel>
-                ))}
-              </Tabs.Root>
-
-              <div className="space-y-1">
-                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Test prompt
-                </p>
-                <p className="font-mono text-sm">{isAccount ? 'List my organizations and show my account subscription and usage.' : TEST_PROMPT}</p>
-              </div>
-
-              <DialogFooter>
-                <Button ref={closeButtonRef} variant="outline" onClick={requestClose}>
-                  Close
-                </Button>
-                <Button onClick={handleSetupCopy}>
-                  {setupCopied ? <Check className="mr-1 size-4" /> : <Copy className="mr-1 size-4" />}
-                  {setupCopied ? "Setup copied" : "Copy setup"}
-                </Button>
-              </DialogFooter>
-              {copyError !== null && (
-                <p
-                  role="alert"
-                  aria-label="Copy failed"
-                  className="text-sm text-destructive"
-                >
-                  {copyError === "setup"
-                    ? "Could not copy the setup. Copy it manually from the configuration above."
-                    : "Could not copy the token. Copy it manually from the one-time token above, then confirm that you saved it."}
-                </p>
-              )}
-            </div>
-          ) : (
             <form onSubmit={handleSubmit} className="space-y-5">
               <div className="space-y-2">
                 <Label htmlFor="agent-client">Agent client</Label>
@@ -737,10 +842,13 @@ export function ConnectAgentDialog({
                     ))}
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">
+                  You&apos;ll get ready-to-paste setup for it after the token is created.
+                </p>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="agent-name">Connection name</Label>
+                <Label htmlFor="agent-name">Token name</Label>
                 <Input
                   id="agent-name"
                   value={name}
@@ -752,37 +860,9 @@ export function ConnectAgentDialog({
                   required
                 />
                 <p id="agent-name-help" className="text-xs text-muted-foreground">
-                  Use a name that identifies this agent or environment.
+                  Name it after the agent and machine, like &ldquo;Claude Code on work laptop&rdquo;, so you
+                  can recognize it later.
                 </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Capabilities</Label>
-                {isAccount ? <div className="space-y-2 text-sm">
-                  <p className="flex gap-2"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" />
-                    Manage all organizations you can access, checks, channels, members, invitations, and status pages.
-                  </p>
-                  <p className="flex gap-2"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" />
-                    View subscription and usage, and create billing checkout and portal links.
-                  </p>
-                  <p className="text-muted-foreground">Uses your current organization permissions, including access to organizations you join later. Password changes and token administration require your login session. Billing changes are completed through Stripe&apos;s hosted pages.</p>
-                </div> : <>
-                <div className="space-y-2 text-sm">
-                  <p className="flex gap-2">
-                    <ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" />
-                    View checks and recent status.
-                  </p>
-                  <p className="flex gap-2">
-                    <ShieldCheck className="mt-0.5 size-4 shrink-0 text-primary" />
-                    Create, edit, pause, resume, and delete checks.
-                  </p>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Limited to <strong>{organizationName}</strong>. No access to
-                  members, billing, notification channels, or other
-                  organizations.
-                </p>
-                </>}
               </div>
 
               <div className="space-y-2">
@@ -802,6 +882,16 @@ export function ConnectAgentDialog({
                     <SelectItem value="custom">Custom</SelectItem>
                   </SelectContent>
                 </Select>
+                {expiration === "never" ? (
+                  <p className="text-xs text-warning">
+                    This token will work until you revoke it. Prefer an expiration for agents you
+                    don&apos;t fully control.
+                  </p>
+                ) : (
+                  expirationHint && (
+                    <p className="text-xs text-muted-foreground">{expirationHint}</p>
+                  )
+                )}
               </div>
 
               {expiration === "custom" && (
@@ -834,6 +924,40 @@ export function ConnectAgentDialog({
                 </div>
               )}
 
+              <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
+                <p className="text-sm font-medium">What this token can do</p>
+                {isAccount ? <ul className="space-y-1.5 text-sm">
+                  <li className="flex gap-2"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-success" aria-hidden="true" />
+                    Manage all organizations you can access: checks, channels, members, invitations, and status pages.
+                  </li>
+                  <li className="flex gap-2"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-success" aria-hidden="true" />
+                    View subscription and usage, and create billing checkout and portal links.
+                  </li>
+                  <li className="flex gap-2 text-muted-foreground"><ShieldX className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+                    It can&apos;t change your password or manage tokens — password changes and token administration require your login session.
+                  </li>
+                  <li className="pt-1 text-xs text-muted-foreground">
+                    Uses your current organization roles, including organizations you join later. Billing changes are completed through Stripe&apos;s hosted pages.
+                  </li>
+                </ul> : <>
+                <ul className="space-y-1.5 text-sm">
+                  <li className="flex gap-2">
+                    <ShieldCheck className="mt-0.5 size-4 shrink-0 text-success" aria-hidden="true" />
+                    View checks and recent status.
+                  </li>
+                  <li className="flex gap-2">
+                    <ShieldCheck className="mt-0.5 size-4 shrink-0 text-success" aria-hidden="true" />
+                    Create, edit, pause, resume, and delete checks.
+                  </li>
+                </ul>
+                <p className="text-sm text-muted-foreground">
+                  Limited to <strong>{organizationName}</strong>. No access to
+                  members, billing, notification channels, or other
+                  organizations.
+                </p>
+                </>}
+              </div>
+
               <DialogFooter>
                 <Button
                   type="button"
@@ -844,11 +968,10 @@ export function ConnectAgentDialog({
                   Cancel
                 </Button>
                 <Button type="submit" disabled={!canSubmit}>
-                  {loading ? "Creating…" : "Create connection"}
+                  {loading ? "Creating…" : "Create token"}
                 </Button>
               </DialogFooter>
             </form>
-              )}
             </>
           )}
         </DialogContent>

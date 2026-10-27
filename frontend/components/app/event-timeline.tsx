@@ -56,7 +56,7 @@ export function EventTimeline({ events }: { events: TimelineEvent[] }) {
       {events.map((event, index) => {
         const gap = gapBelow(events, index);
         return (
-          <li key={event.id} className="relative pl-8 pb-4 last:pb-0">
+          <li key={event.id} className="relative pl-8 pb-3 last:pb-0">
             {/* Connector, drawn only where another event follows below. */}
             {gap && <span className="absolute left-[7px] top-5 bottom-0 w-px bg-border" aria-hidden />}
 
@@ -64,29 +64,29 @@ export function EventTimeline({ events }: { events: TimelineEvent[] }) {
               className={`absolute left-0 top-1.5 h-3.5 w-3.5 rounded-full border-2 border-background ${EVENT_DOT_COLORS[event.status]}`}
             />
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
               <span className="text-xs font-semibold">{EVENT_STATUS_LABELS[event.status]}</span>
               <span className="text-sm text-muted-foreground">
                 {new Date(event.timestamp).toLocaleString()}
               </span>
+              {event.statusCode !== null && (
+                <span className="text-xs text-muted-foreground">HTTP {event.statusCode}</span>
+              )}
+              {event.responseTimeMs !== null && (
+                <span className="text-xs tabular-nums text-muted-foreground">{event.responseTimeMs}ms</span>
+              )}
             </div>
             {event.sourceIp && (
               <p className="text-xs font-mono text-muted-foreground mt-0.5">{event.sourceIp}</p>
             )}
-            {event.statusCode !== null && (
-              <p className="text-xs text-muted-foreground mt-0.5">HTTP {event.statusCode}</p>
-            )}
-            {event.responseTimeMs !== null && (
-              <p className="text-xs text-muted-foreground mt-0.5">{event.responseTimeMs}ms</p>
-            )}
             {event.error && (
-              <p className="text-xs text-destructive mt-0.5 truncate">{event.error}</p>
+              <p className="text-xs text-destructive mt-0.5 break-words">{event.error}</p>
             )}
 
             {/* The gap hangs off the connector, so it reads as a property of the
                 interval rather than of either event it sits between. */}
             {gap && (
-              <div className="relative flex items-center pt-3">
+              <div className="relative flex items-center pt-2">
                 <span className="absolute left-[-25px] w-5 h-px bg-border" aria-hidden />
                 <span className="text-[11px] tabular-nums text-muted-foreground">{gap}</span>
               </div>

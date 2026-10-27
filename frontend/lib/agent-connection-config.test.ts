@@ -308,3 +308,28 @@ printf 'token-after=%s' "\${SYSTEMVITALS_API_TOKEN-unset}"`,
     }
   });
 });
+
+describe("account-scope MCP server names", () => {
+  const base = {
+    organizationId: "",
+    organizationName: "SystemVitals account",
+    apiUrl: "https://api.example.com/graphql",
+    token: "svt_account_secret",
+    scope: "account" as const,
+  };
+
+  it("names the Claude Code server after the product", () => {
+    expect(generateAgentConnectionConfig({ ...base, client: "claude-code" })).toContain(
+      "claude mcp add 'systemvitals' ",
+    );
+  });
+
+  it("keys Codex and JSON configs by the product name", () => {
+    expect(generateAgentConnectionConfig({ ...base, client: "codex" })).toContain(
+      '[mcp_servers."systemvitals"]',
+    );
+    expect(
+      JSON.parse(generateAgentConnectionConfig({ ...base, client: "cursor" })).mcpServers,
+    ).toHaveProperty("systemvitals");
+  });
+});

@@ -19,9 +19,11 @@ Copy `.env.example` to `.env.local` and set `NEXT_PUBLIC_API_URL` to point at th
 ## Agent credentials
 
 Account > Personal access tokens creates and revokes account-wide personal access
-tokens. The shared connection wizard uses a GraphQL mutation with Apollo's
-`no-cache` policy, displays the secret once, and protects uncopied results on
-navigation. If creation has an unknown outcome, reviewing connections explicitly
+tokens. The shared token wizard uses a GraphQL mutation with Apollo's
+`no-cache` policy, displays the secret once in a numbered copy → connect → try
+result, and protects uncopied results on navigation ("Close without saving the
+token?" — the token stays active). Account-token MCP setups name the server
+`systemvitals`. If creation has an unknown outcome, reviewing connections explicitly
 refreshes history so a potentially active token can be revoked.
 
 Account tokens manage product resources across current organization permissions
@@ -31,6 +33,25 @@ retired; the old URL redirects to `/account#personal-access-tokens`. Existing
 scoped credentials remain available in account-wide history for revocation. Deploy API support and publish the updated MCP package before rolling out
 the account wizard's `npx` setup; source-checkout MCP and GraphQL access work without
 package publication.
+
+## App shell and UI conventions
+
+- The sidebar always names the current organization ("Workspace") and groups
+  navigation by scope: Monitoring (dashboard, channels, status pages),
+  Organization (members, organizations), and Personal (billing, account). The
+  mobile drawer reuses the same sections and organization switcher.
+- Signed-in pages start with `components/app/page-header.tsx` and rely on the
+  layout's padding rather than adding their own.
+- Check statuses render as plain-language labels (`Up`, `Down`, `Late` for
+  `GRACE`, `Waiting` for `NEW`, `Paused`) via `components/status-badge.tsx`.
+- `lib/format.ts` provides `formatSpan` (exact durations such as "1 min 30 sec")
+  and `formatRelativeTime` ("5 minutes ago", "in 30 days"); pair relative times
+  with an absolute `title`.
+- The dashboard sorts checks by severity (down, late, waiting, up, paused),
+  offers status filters, and adds search at six or more checks. Check pages
+  provide pause/resume and a confirmed delete.
+- Destructive actions (deleting a check, removing a member, revoking a token)
+  always confirm in a shadcn Dialog.
 
 ## Error monitoring
 

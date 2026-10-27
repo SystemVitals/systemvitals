@@ -5,7 +5,13 @@ import { Menu, LogOut, Shield } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/lib/auth-context";
 import { OrgProvider } from "@/lib/org-context";
-import { AppSidebar, APP_NAV } from "@/components/app/sidebar";
+import {
+  AppNavSections,
+  AppSidebar,
+  isNavActive,
+  navLinkClass,
+} from "@/components/app/sidebar";
+import { OrgSwitcher } from "@/components/app/org-switcher";
 import { ImpersonationBanner } from "@/components/app/impersonation-banner";
 import { Wordmark } from "@/components/brand/wordmark";
 import { Button } from "@/components/ui/button";
@@ -14,7 +20,6 @@ import {
   DialogContent,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { cn } from "@/lib/utils";
 
 function MobileDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const pathname = usePathname();
@@ -30,38 +35,18 @@ function MobileDrawer({ open, onClose }: { open: boolean; onClose: () => void })
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
       <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col gap-4 overflow-y-auto">
         <DialogTitle className="sr-only">Navigation menu</DialogTitle>
-        <nav className="flex flex-col gap-1">
-          {APP_NAV.map(({ label, href, icon: Icon }) => {
-            const active =
-              pathname === href ||
-              pathname.startsWith(href + "/");
-            return (
-              <Link
-                key={href}
-                href={href}
-                onClick={onClose}
-                className={cn(
-                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-primary/10 hover:text-primary",
-                  active && "bg-primary/10 text-primary"
-                )}
-              >
-                <Icon className="h-4 w-4 shrink-0" />
-                {label}
-              </Link>
-            );
-          })}
+        <div className="-mx-2 border-b pb-3">
+          <OrgSwitcher />
+        </div>
+        <nav aria-label="Main">
+          <AppNavSections onNavigate={onClose} />
         </nav>
         {isAdmin && (
           <div className="border-t pt-3">
             <Link
               href="/admin"
               onClick={onClose}
-              className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-primary/10 hover:text-primary",
-                pathname === "/admin" || pathname.startsWith("/admin/")
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground"
-              )}
+              className={navLinkClass(isNavActive(pathname, "/admin"))}
             >
               <Shield className="h-4 w-4 shrink-0" />
               Admin
@@ -104,7 +89,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <p className="text-muted-foreground">Loading…</p>
+        <p role="status" className="text-sm text-muted-foreground">Loading…</p>
       </div>
     );
   }
@@ -126,7 +111,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <div className="flex flex-1 flex-col lg:ml-56">
         {/* Mobile top bar */}
         <header className="flex h-14 items-center justify-between border-b px-4 lg:hidden">
-          <Wordmark />
+          <Wordmark href="/dashboard" />
           <Button
             variant="ghost"
             size="icon"

@@ -10,6 +10,7 @@ import {
   DELETE_STATUS_PAGE,
   CHECKS,
 } from "@/lib/queries";
+import { PageHeader } from "@/components/app/page-header";
 import { statusPagePublicPath } from "@/lib/status-page";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -71,12 +72,23 @@ function CopyButton({ text }: CopyButtonProps) {
   );
 }
 
+function slugify(value: string): string {
+  return value
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+}
+
 interface StatusPagesManagerProps {
   organizationId: string;
 }
 
 function StatusPagesManager({ organizationId }: StatusPagesManagerProps) {
   const [slug, setSlug] = useState("");
+  const [slugEdited, setSlugEdited] = useState(false);
   const [title, setTitle] = useState("");
   const [selectedCheckIds, setSelectedCheckIds] = useState<string[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -97,6 +109,7 @@ function StatusPagesManager({ organizationId }: StatusPagesManagerProps) {
     {
       onCompleted: () => {
         setSlug("");
+        setSlugEdited(false);
         setTitle("");
         setSelectedCheckIds([]);
         refetchPages();
@@ -165,7 +178,9 @@ function StatusPagesManager({ organizationId }: StatusPagesManagerProps) {
       )}
 
       {!pagesLoading && pages.length === 0 && (
-        <p className="text-sm text-muted-foreground">No status pages yet.</p>
+        <p className="rounded-xl border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
+          No status pages yet. Create one below.
+        </p>
       )}
 
       {pages.length > 0 && (
@@ -225,18 +240,7 @@ function StatusPagesManager({ organizationId }: StatusPagesManagerProps) {
         </CardHeader>
         <CardContent>
           <form onSubmit={handleCreate} className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label htmlFor="page-slug">Slug</Label>
-                <Input
-                  id="page-slug"
-                  type="text"
-                  placeholder="acme-status"
-                  value={slug}
-                  onChange={(e) => setSlug(e.target.value)}
-                  required
-                />
-              </div>
+            <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1">
                 <Label htmlFor="page-title">Title</Label>
                 <Input
@@ -244,14 +248,41 @@ function StatusPagesManager({ organizationId }: StatusPagesManagerProps) {
                   type="text"
                   placeholder="Acme Status"
                   value={title}
-                  onChange={(e) => setTitle(e.target.value)}
+                  onChange={(e) => {
+                    setTitle(e.target.value);
+                    if (!slugEdited) setSlug(slugify(e.target.value));
+                  }}
                   required
                 />
+                <p className="text-xs text-muted-foreground">Shown at the top of the public page.</p>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="page-slug">Slug</Label>
+                <Input
+                  id="page-slug"
+                  type="text"
+                  placeholder="acme-status"
+                  value={slug}
+                  onChange={(e) => {
+                    setSlug(e.target.value);
+                    setSlugEdited(true);
+                  }}
+                  aria-describedby="page-slug-preview"
+                  required
+                />
+                <p id="page-slug-preview" className="truncate text-xs text-muted-foreground">
+                  Public URL: {origin}
+                  {statusPagePublicPath(slug || "your-slug")}
+                </p>
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label>Checks to include</Label>
+              <Label>Checks to show</Label>
+              <p className="text-xs text-muted-foreground">
+                Visitors see each selected check&apos;s name and current status, never its URL or
+                configuration.
+              </p>
               {checksLoading && (
                 <p className="text-xs text-muted-foreground">Loading checks…</p>
               )}
@@ -343,13 +374,11 @@ export default function StatusPagesPage() {
   if (!user) return null;
 
   return (
-    <div className="px-4 py-6 sm:px-6 space-y-6">
-      <div className="mb-6">
-        <h1 className="font-heading text-2xl font-semibold tracking-tight">Status Pages</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Public status pages for your services and checks.
-        </p>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Status pages"
+        description="Public pages that show visitors whether your services are up. Share the link with customers or add it to your site's footer."
+      />
 
       {!activeOrg ? (
         <p className="text-muted-foreground">No organizations found.</p>

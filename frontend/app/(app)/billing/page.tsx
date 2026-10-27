@@ -13,6 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { PageHeader } from "@/components/app/page-header";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { CreditCard, Zap, Users, CheckCircle } from "lucide-react";
@@ -122,20 +123,18 @@ export default function BillingPage() {
   }
 
   return (
-    <div className="px-4 py-6 sm:px-6 space-y-6">
-      <div className="mb-6">
-        <h1 className="font-heading text-2xl font-semibold tracking-tight">Billing</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Manage your account plan and subscription.
-        </p>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Billing"
+        description="Your plan applies to your whole account: checks in every organization you created count toward one shared limit."
+      />
 
       {/* Current Plan Card */}
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2">
             <CreditCard className="h-4 w-4" />
-            Current Plan
+            Current plan
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -161,6 +160,20 @@ export default function BillingPage() {
                   {usageLabel} across {organizationCount}{" "}
                   {organizationCount === 1 ? "organization" : "organizations"}
                 </p>
+                <div
+                  aria-hidden="true"
+                  className="h-1.5 max-w-sm overflow-hidden rounded-full bg-foreground/10"
+                >
+                  <div
+                    className={cn(
+                      "h-full rounded-full",
+                      remainingChecks === 0 ? "bg-destructive" : "bg-primary",
+                    )}
+                    style={{
+                      width: `${maxChecks > 0 ? Math.min(100, Math.round((checkCount / maxChecks) * 100)) : 100}%`,
+                    }}
+                  />
+                </div>
                 <p className="font-medium text-foreground">
                   {remainingChecks} {remainingChecks === 1 ? "check" : "checks"} left
                 </p>
@@ -230,6 +243,13 @@ export default function BillingPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
+            <div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-2xl font-semibold">$0</span>
+                <span className="text-xs text-muted-foreground">/mo</span>
+              </div>
+              <p className="text-xs text-muted-foreground h-4">Free</p>
+            </div>
             <ul className="text-sm text-muted-foreground space-y-1">
               <li>Up to 5 checks</li>
               <li>5 min min interval</li>

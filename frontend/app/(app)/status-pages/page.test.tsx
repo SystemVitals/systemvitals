@@ -181,7 +181,7 @@ describe("StatusPagesPage", () => {
     ];
     const view = renderPage(mocks);
 
-    expect(await screen.findByText("No status pages yet.")).toBeInTheDocument();
+    expect(await screen.findByText("No status pages yet. Create one below.")).toBeInTheDocument();
     activeOrg = {
       ...activeOrg!,
       id: "org-2",
@@ -205,5 +205,22 @@ describe("StatusPagesPage", () => {
     renderPage([]);
 
     expect(screen.getByText("No organizations found.")).toBeInTheDocument();
+  });
+
+  it("suggests a slug from the title and previews the public URL until the slug is edited", async () => {
+    renderPage([statusPagesMock("org-1"), checksMock("org-1")]);
+
+    fireEvent.change(await screen.findByLabelText("Title"), {
+      target: { value: "Acme Café Status" },
+    });
+    const slug = screen.getByLabelText("Slug");
+    expect(slug).toHaveValue("acme-cafe-status");
+    expect(screen.getByText(/Public URL: .*\/status\/acme-cafe-status$/)).toBeInTheDocument();
+
+    fireEvent.change(slug, { target: { value: "custom" } });
+    fireEvent.change(screen.getByLabelText("Title"), {
+      target: { value: "Renamed" },
+    });
+    expect(slug).toHaveValue("custom");
   });
 });
