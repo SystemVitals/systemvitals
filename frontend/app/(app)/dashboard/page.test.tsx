@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MockedProvider } from "@apollo/client/testing/react";
 import { print } from "graphql";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -118,7 +118,7 @@ function check({
 }: {
   id: string;
   name: string;
-  status?: "UP" | "PAUSED";
+  status?: "UP" | "DOWN" | "GRACE" | "NEW" | "PAUSED";
   notificationChannelIds?: string[];
 }) {
   return {
@@ -129,6 +129,7 @@ function check({
     type: "HTTP",
     status,
     pingSlug: null,
+    target: `https://${id}.example.com/health`,
     periodSeconds: null,
     intervalSeconds: 60,
     graceSeconds: 0,
@@ -786,5 +787,109 @@ describe("DashboardPage", () => {
       expect(pauseResult).toHaveBeenCalledTimes(1);
       expect(resumeResult).toHaveBeenCalledTimes(1);
     });
+  });
+
+  function checksResult(checks: ReturnType<typeof check>[]) {
+    return {
+      request: {
+        query: CHECKS,
+        variables: { organizationId: "org-signal" },
+      },
+      result: {
+        data: {
+          checks,
+          organizationCheckAllowance: {
+            __typename: "OrganizationCheckAllowance",
+            used: checks.length,
+            limit: 100,
+            remaining: 100 - checks.length,
+          },
+        },
+      },
+      maxUsageCount: 3,
+    };
+  }
+
+  function checkNamesInOrder(names: string[]) {
+    const pattern = new RegExp(`^(${names.join("|")})$`);
+    return screen.getAllByRole("link", { name: pattern }).map((link) => link.textContent);
+  }
+
+  it("lists problems first and summarizes and filters by status", async () => {
+    renderDashboard("SIGNAL", [
+      checksResult([
+        check({ id: "api", name: "API", status: "UP" }),
+        check({ id: "worker", name: "Worker", status: "PAUSED" }),
+        check({ id: "billing", name: "Billing", status: "DOWN" }),
+        check({ id: "cron", name: "Cron", status: "GRACE" }),
+      ]),
+      channelsMock,
+      subscriptionMock("SIGNAL"),
+    ]);
+
+    await screen.findByRole("link", { name: "Billing" });
+    expect(checkNamesInOrder(["API", "Worker", "Billing", "Cron"])).toEqual([
+      "Billing",
+      "Cron",
+      "API",
+      "Worker",
+    ]);
+    expect(screen.getByText("2 of 4 checks need attention")).toBeInTheDocument();
+    expect(screen.getAllByText("Every 1 min")).toHaveLength(4);
+    expect(screen.getByText("https://api.example.com/health")).toBeInTheDocument();
+
+    const filters = screen.getByRole("group", { name: "Filter checks by status" });
+    const down = within(filters).getByRole("button", { name: /^Down/ });
+    fireEvent.click(down);
+    expect(down).toHaveAttribute("aria-pressed", "true");
+    expect(checkNamesInOrder(["API", "Worker", "Billing", "Cron"])).toEqual(["Billing"]);
+
+    fireEvent.click(within(filters).getByRole("button", { name: /^All/ }));
+    expect(checkNamesInOrder(["API", "Worker", "Billing", "Cron"])).toHaveLength(4);
+  });
+
+  it("offers search once there are enough checks and can clear filters", async () => {
+    const names = ["Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot"];
+    renderDashboard("SIGNAL", [
+      checksResult(names.map((name) => check({ id: name.toLowerCase(), name }))),
+      channelsMock,
+      subscriptionMock("SIGNAL"),
+    ]);
+
+    const search = await screen.findByRole("searchbox", { name: "Search checks" });
+    fireEvent.change(search, { target: { value: "ech" } });
+    expect(checkNamesInOrder(names)).toEqual(["Echo"]);
+
+    fireEvent.change(search, { target: { value: "nothing-matches" } });
+    expect(screen.getByText("No checks match your filters.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect(checkNamesInOrder(names)).toHaveLength(6);
+  });
+
+  it("explains how to free up room when the check limit is reached", async () => {
+    renderDashboard("SIGNAL", [
+      {
+        ...checksResult([check({ id: "api", name: "API" })]),
+        result: {
+          data: {
+            checks: [check({ id: "api", name: "API" })],
+            organizationCheckAllowance: {
+              __typename: "OrganizationCheckAllowance",
+              used: 5,
+              limit: 5,
+              remaining: 0,
+            },
+          },
+        },
+      },
+      channelsMock,
+      subscriptionMock("SIGNAL"),
+    ]);
+
+    expect(await screen.findByRole("link", { name: "upgrade your plan" })).toHaveAttribute(
+      "href",
+      "/billing",
+    );
+    expect(screen.getByRole("button", { name: /new check/i })).toBeDisabled();
   });
 });

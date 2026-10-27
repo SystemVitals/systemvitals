@@ -19,6 +19,10 @@ type McpConfigInput = Omit<
   "client" | "organizationId"
 >;
 
+// Account tokens are not tied to one organization, so their MCP server gets
+// the plain product name instead of a slug of a placeholder label.
+const ACCOUNT_SERVER_NAME = "systemvitals";
+
 const MCP_COMMAND = "npx";
 const MCP_ARGS = ["-y", "@systemvitals/mcp"] as const;
 
@@ -90,6 +94,10 @@ function mcpServer(input: McpConfigInput) {
   };
 }
 
+function mcpServerKey(input: McpConfigInput): string {
+  return input.scope === "account" ? ACCOUNT_SERVER_NAME : input.organizationName;
+}
+
 function generateClaudeCode(input: McpConfigInput): string {
   assertShellSafe(input.organizationName, "organizationName");
   assertShellSafe(input.apiUrl, "apiUrl");
@@ -101,7 +109,12 @@ function generateClaudeCode(input: McpConfigInput): string {
     .toLowerCase()
     .replace(/[^a-z0-9_-]+/g, "-")
     .replace(/^-+|-+$/g, "");
-  const serverName = slug ? `systemvitals-${slug}` : "systemvitals";
+  const serverName =
+    input.scope === "account"
+      ? ACCOUNT_SERVER_NAME
+      : slug
+        ? `systemvitals-${slug}`
+        : "systemvitals";
 
   return [
     "read -rsp 'SystemVitals API token: ' SYSTEMVITALS_API_TOKEN",
@@ -122,7 +135,7 @@ function generateClaudeCode(input: McpConfigInput): string {
 }
 
 function generateCodex(input: McpConfigInput): string {
-  return `[mcp_servers.${tomlString(input.organizationName)}]
+  return `[mcp_servers.${tomlString(mcpServerKey(input))}]
 command = ${tomlString(MCP_COMMAND)}
 args = [${MCP_ARGS.map(tomlString).join(", ")}]
 env = { SYSTEMVITALS_API_URL = ${tomlString(input.apiUrl)}, SYSTEMVITALS_API_TOKEN = ${tomlString(input.token)} }`;
@@ -132,7 +145,7 @@ function generateMcpJson(input: McpConfigInput): string {
   return JSON.stringify(
     {
       mcpServers: {
-        [input.organizationName]: mcpServer(input),
+        [mcpServerKey(input)]: mcpServer(input),
       },
     },
     null,

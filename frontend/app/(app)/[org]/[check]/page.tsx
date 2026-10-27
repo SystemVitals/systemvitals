@@ -51,6 +51,7 @@ export default function CheckDetailByOrganizationSlugPage({
       check={data?.checkByOrganizationSlug}
       loading={loading}
       error={error}
+      onDeleted={() => router.push("/dashboard")}
       onMoved={(destination) => {
         setActiveOrgId(destination.organizationId);
         router.replace(

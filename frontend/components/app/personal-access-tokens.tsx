@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@apollo/client/react";
-import { KeyRound, RotateCcw, ShieldCheck } from "lucide-react";
+import { KeyRound, RotateCcw } from "lucide-react";
 
 import { API_TOKENS, REVOKE_API_TOKEN } from "@/lib/queries";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +17,8 @@ import {
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ConnectAgentDialog } from "@/components/app/connect-agent-dialog";
+import { formatDateTime, formatRelativeTime } from "@/lib/format";
+import { cn } from "@/lib/utils";
 
 interface ApiToken {
   id: string;
@@ -65,11 +67,49 @@ function isDeletedWorkspaceConnection(token: ApiToken) {
   return token.organizationId === null && token.projectName !== null;
 }
 
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
+const EXPIRING_SOON_MS = 7 * 24 * 60 * 60 * 1000;
+
+function formatDay(value: string) {
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(new Date(value));
+}
+
+function isAccountToken(token: ApiToken) {
+  return token.scopes.includes("account:manage");
+}
+
+/** What the token can reach, in words rather than raw scope strings. */
+function accessSummary(token: ApiToken): string {
+  if (isDeletedWorkspaceConnection(token)) return "Workspace unavailable";
+  if (isAccountToken(token)) return "Account-wide · all your organizations";
+  if (token.organizationName) return `Checks in ${token.organizationName}`;
+  return "All organizations";
+}
+
+function TokenMeta({
+  label,
+  value,
+  title,
+  tone,
+}: {
+  label: string;
+  value: string;
+  title?: string;
+  tone?: "warning" | "muted";
+}) {
+  return (
+    <div title={title}>
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd
+        className={cn(
+          "mt-0.5",
+          tone === "warning" && "font-medium text-warning",
+          tone === "muted" && "text-muted-foreground",
+        )}
+      >
+        {value}
+      </dd>
+    </div>
+  );
 }
 
 function StatusBadge({ status }: { status: ConnectionStatus }) {
@@ -219,19 +259,128 @@ export function PersonalAccessTokensSection({ now = systemNow }: { now?: () => D
     }
   }
 
-  return (
-    <section id="personal-access-tokens" aria-label="Personal access tokens" className="max-w-4xl scroll-mt-6 space-y-4">
-      <header className="space-y-1">
-        <div className="flex items-center gap-2">
-          <KeyRound className="h-5 w-5 text-primary" aria-hidden="true" />
-          <h2 className="font-heading text-lg font-semibold tracking-tight">
-            Personal access tokens
-          </h2>
+  const activeTokens = connections.filter(
+    (token) => connectionStatus(token, currentTime) === "Active",
+  );
+  const inactiveTokens = connections.filter(
+    (token) => connectionStatus(token, currentTime) !== "Active",
+  );
+
+  function renderToken(token: ApiToken) {
+    const status = connectionStatus(token, currentTime);
+    const expiresAt = token.expiresAt ? new Date(token.expiresAt) : null;
+    const expiringSoon =
+      status === "Active" &&
+      expiresAt !== null &&
+      expiresAt.getTime() - currentTime.getTime() <= EXPIRING_SOON_MS;
+    return (
+      <li
+        key={token.id}
+        aria-label={token.name}
+        className={cn("py-4 first:pt-0 last:pb-0", status !== "Active" && "opacity-70")}
+      >
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="truncate font-heading font-medium">{token.name}</h3>
+              <StatusBadge status={status} />
+            </div>
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+              <code
+                className="rounded bg-muted px-1.5 py-0.5 text-xs text-foreground/80"
+                title="Token prefix. The full secret is only shown when the token is created."
+              >
+                {token.prefix}…
+              </code>
+              <span>{accessSummary(token)}</span>
+            </p>
+            {!isAccountToken(token) && token.scopes.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {token.scopes.map((scope) => (
+                  <Badge key={scope} variant="outline">
+                    {scopeLabels[scope] ?? scope}
+                  </Badge>
+                ))}
+              </div>
+            )}
+            <dl className="grid grid-cols-2 gap-x-8 gap-y-2 text-xs sm:grid-cols-3">
+              <TokenMeta
+                label="Created"
+                value={formatRelativeTime(token.createdAt, currentTime)}
+                title={formatDateTime(token.createdAt)}
+              />
+              <TokenMeta
+                label="Last used"
+                value={
+                  token.lastUsedAt
+                    ? formatRelativeTime(token.lastUsedAt, currentTime)
+                    : "Never used"
+                }
+                title={token.lastUsedAt ? formatDateTime(token.lastUsedAt) : undefined}
+                tone={token.lastUsedAt ? undefined : "muted"}
+              />
+              {token.revokedAt ? (
+                <TokenMeta
+                  label="Revoked on"
+                  value={formatDay(token.revokedAt)}
+                  title={formatDateTime(token.revokedAt)}
+                />
+              ) : status === "Expired" && token.expiresAt ? (
+                <TokenMeta
+                  label="Expired on"
+                  value={formatDay(token.expiresAt)}
+                  title={formatDateTime(token.expiresAt)}
+                />
+              ) : (
+                <TokenMeta
+                  label="Expires"
+                  value={
+                    token.expiresAt
+                      ? formatRelativeTime(token.expiresAt, currentTime)
+                      : "Never"
+                  }
+                  title={token.expiresAt ? formatDateTime(token.expiresAt) : undefined}
+                  tone={expiringSoon ? "warning" : undefined}
+                />
+              )}
+            </dl>
+          </div>
+          {!token.revokedAt && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full text-destructive hover:bg-destructive/10 hover:text-destructive sm:w-auto"
+              onClick={() => {
+                setRevokeError(null);
+                setSelected(token);
+              }}
+              aria-label={`Revoke ${token.name}`}
+            >
+              Revoke
+            </Button>
+          )}
         </div>
-        <p className="text-sm text-muted-foreground">
-          Create account-wide credentials for agents and automation, and revoke them when needed.
-        </p>
-        <div className="pt-3">
+      </li>
+    );
+  }
+
+  return (
+    <section id="personal-access-tokens" aria-label="Personal access tokens" className="scroll-mt-6 space-y-4">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <KeyRound className="h-5 w-5 text-primary" aria-hidden="true" />
+            <h2 className="font-heading text-lg font-semibold tracking-tight">
+              Personal access tokens
+            </h2>
+          </div>
+          <p className="max-w-2xl text-sm text-muted-foreground">
+            Let AI agents like Claude Code, Codex, and Cursor, or your own scripts, manage
+            SystemVitals for you. A token acts as you across every organization you belong to,
+            with your current roles. Each secret is shown only once, when you create it.
+          </p>
+        </div>
+        <div className="sm:shrink-0">
           <ConnectAgentDialog
             scope="account"
             onCreated={refreshConnections}
@@ -253,17 +402,16 @@ export function PersonalAccessTokensSection({ now = systemNow }: { now?: () => D
         aria-labelledby="connection-history-heading"
         className="rounded-xl border bg-card p-4 shadow-xs sm:p-6"
       >
-        <div className="mb-5 flex items-start justify-between gap-4">
-          <div>
-            <h2 id="connection-history-heading" className="font-heading font-medium">
-              Token history
-            </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Expired, revoked, and unavailable-workspace credentials remain here for your
-              records.
+        <div className="mb-4 flex items-baseline justify-between gap-4">
+          <h2 id="connection-history-heading" className="font-heading font-medium">
+            Your tokens
+          </h2>
+          {connections.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              {activeTokens.length} active
+              {inactiveTokens.length > 0 && ` · ${inactiveTokens.length} revoked or expired`}
             </p>
-          </div>
-          <ShieldCheck className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden="true" />
+          )}
         </div>
 
         {loading && !data ? (
@@ -287,76 +435,14 @@ export function PersonalAccessTokensSection({ now = systemNow }: { now?: () => D
             <KeyRound className="mx-auto h-7 w-7 text-muted-foreground" aria-hidden="true" />
             <h3 className="mt-3 font-heading font-medium">No access tokens yet</h3>
             <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
-              Create a personal access token to let an agent manage your account.
+              Create a personal access token to let an agent manage your account. You&apos;ll get
+              copy-and-paste setup for Claude Code, Codex, Cursor, or cURL.
             </p>
           </div>
         ) : (
-          <ul className="divide-y">
-            {connections.map((token) => {
-              const status = connectionStatus(token, currentTime);
-              const location = isDeletedWorkspaceConnection(token)
-                ? "Workspace unavailable"
-                : token.scopes.includes('account:manage') ? 'Personal access token · Account-wide access'
-                : token.organizationName ?? "All organizations";
-              return (
-                <li
-                  key={token.id}
-                  aria-label={token.name}
-                  className="py-5 first:pt-0 last:pb-0"
-                >
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="min-w-0 space-y-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <h3 className="truncate font-heading font-medium">{token.name}</h3>
-                        <StatusBadge status={status} />
-                        <code className="text-xs text-muted-foreground">{token.prefix}…</code>
-                      </div>
-                      <p className="text-sm text-muted-foreground">{location}</p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {token.scopes.map((scope) => (
-                          <Badge key={scope} variant="outline">
-                            {scopeLabels[scope] ?? scope}
-                          </Badge>
-                        ))}
-                      </div>
-                      <dl className="grid gap-x-8 gap-y-2 text-xs sm:grid-cols-3">
-                        <div>
-                          <dt className="text-muted-foreground">Created</dt>
-                          <dd className="mt-0.5">{formatDate(token.createdAt)}</dd>
-                        </div>
-                        <div>
-                          <dt className="text-muted-foreground">Expires</dt>
-                          <dd className="mt-0.5">
-                            {token.expiresAt ? formatDate(token.expiresAt) : "Never"}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt className="text-muted-foreground">Last used</dt>
-                          <dd className="mt-0.5">
-                            {token.lastUsedAt ? formatDate(token.lastUsedAt) : "Never used"}
-                          </dd>
-                        </div>
-                      </dl>
-                    </div>
-                    {!token.revokedAt && (
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        className="w-full sm:w-auto"
-                        onClick={() => {
-                          setRevokeError(null);
-                          setSelected(token);
-                        }}
-                        aria-label={`Revoke ${token.name}`}
-                      >
-                        Revoke
-                      </Button>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+          // One keyed list, active first: a token revoked or expiring while the
+          // page is open moves down in place instead of jumping elsewhere.
+          <ul className="divide-y">{[...activeTokens, ...inactiveTokens].map(renderToken)}</ul>
         )}
       </section>
 
@@ -373,7 +459,8 @@ export function PersonalAccessTokensSection({ now = systemNow }: { now?: () => D
           <DialogHeader>
             <DialogTitle>Revoke access token?</DialogTitle>
             <DialogDescription>
-              {selected?.name} will immediately lose access. This action cannot be undone.
+              Anything using <strong className="font-medium text-foreground">{selected?.name}</strong>{" "}
+              will immediately lose access. This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           {revokeError && (

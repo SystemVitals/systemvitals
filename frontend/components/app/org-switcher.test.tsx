@@ -28,7 +28,7 @@ function renderSwitcher() {
 }
 
 describe("OrgSwitcher", () => {
-  it("shows a Create team action even for a single-org user", () => {
+  it("shows the current organization and a New organization action for a single-org user", () => {
     mockCtx = {
       orgs: [{ id: "org1", name: "First", role: "OWNER", plan: "SOLO", projects: [] }],
       activeOrg: { id: "org1", name: "First", role: "OWNER", plan: "SOLO", projects: [] },
@@ -37,9 +37,11 @@ describe("OrgSwitcher", () => {
     };
     renderSwitcher();
     expect(
-      screen.getByRole("button", { name: /create team/i }),
+      screen.getByRole("button", { name: /new organization/i }),
     ).toBeInTheDocument();
-    // ...but no org Select for a single-org user.
+    // The workspace is always named so pages are clearly scoped...
+    expect(screen.getByText("First")).toBeInTheDocument();
+    // ...but there is no org Select for a single-org user.
     expect(screen.queryByLabelText(/organization/i)).not.toBeInTheDocument();
   });
 
@@ -59,9 +61,9 @@ describe("OrgSwitcher", () => {
 
     expect(screen.getByLabelText(/organization/i)).toBeInTheDocument();
     expect(screen.getByText("First")).toBeInTheDocument();
-    // ...and the Create team action is still present alongside the Select.
+    // ...and the New organization action is still present alongside the Select.
     expect(
-      screen.getByRole("button", { name: /create team/i }),
+      screen.getByRole("button", { name: /new organization/i }),
     ).toBeInTheDocument();
   });
 });

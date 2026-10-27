@@ -1,11 +1,13 @@
 import { beforeEach, describe, it, expect, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MockedProvider } from "@apollo/client/testing/react";
 import { GraphQLError, print } from "graphql";
 import { CheckDetail, type CheckDetailData } from "@/components/app/check-detail";
 import {
   CHANNELS,
   CHECK,
+  DELETE_CHECK,
+  PAUSE_CHECK,
   SET_CHECK_CHANNEL_ENABLED,
 } from "@/lib/queries";
 import { CHECK_BY_SLUG } from "@/lib/legacy-queries";
@@ -163,7 +165,7 @@ describe("CheckDetail", () => {
     renderDetail();
 
     expect(screen.getByText("Nightly backup")).toBeInTheDocument();
-    expect(screen.getByRole("status", { name: "UP" })).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Up" })).toBeInTheDocument();
     expect(screen.getByText("203.0.113.40")).toBeInTheDocument();
     expect(screen.getByText("missed heartbeat")).toBeInTheDocument();
   });
@@ -390,7 +392,7 @@ describe("CheckDetail", () => {
       },
     });
 
-    expect(screen.getByRole("status", { name: "DOWN" })).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Down" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /acknowledge/i })).not.toBeInTheDocument();
     expect(screen.queryByText("Acknowledged")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Back to dashboard" })).toHaveAttribute(
@@ -398,11 +400,56 @@ describe("CheckDetail", () => {
       "/dashboard",
     );
     expect(screen.getByText("Up")).toBeInTheDocument();
-    expect(screen.getByText("Down")).toBeInTheDocument();
+    // The status badge and the outage event.
+    expect(screen.getAllByText("Down")).toHaveLength(2);
+    // The newest event is a recovery, so no "Down for" streak is claimed.
+    expect(screen.queryByText("Down for")).not.toBeInTheDocument();
     expect(
       await screen.findByRole("switch", {
         name: /Nightly backup.*Email notifications/i,
       }),
     ).toBeInTheDocument();
+  });
+
+  it("pauses the check from its page and refreshes it", async () => {
+    const onRefetch = vi.fn();
+    const pauseResult = vi.fn(() => ({
+      data: { pauseCheck: { __typename: "CheckModel", id: CHECK_DATA.id, status: "PAUSED" } },
+    }));
+    renderDetail({ onRefetch }, [
+      channelsMock,
+      { request: { query: PAUSE_CHECK, variables: { id: CHECK_DATA.id } }, result: pauseResult },
+    ]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+
+    await waitFor(() => expect(pauseResult).toHaveBeenCalledOnce());
+    await waitFor(() => expect(onRefetch).toHaveBeenCalled());
+  });
+
+  it("deletes a check only after confirmation", async () => {
+    const onDeleted = vi.fn();
+    const deleteResult = vi.fn(() => ({ data: { deleteCheck: true } }));
+    renderDetail({ onDeleted }, [
+      channelsMock,
+      { request: { query: DELETE_CHECK, variables: { id: CHECK_DATA.id } }, result: deleteResult },
+    ]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    const dialog = await screen.findByRole("dialog", {
+      name: `Delete ${CHECK_DATA.name}?`,
+    });
+    expect(within(dialog).getByText(/cannot be undone/i)).toBeInTheDocument();
+    expect(deleteResult).not.toHaveBeenCalled();
+
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete check" }));
+
+    await waitFor(() => expect(deleteResult).toHaveBeenCalledOnce());
+    await waitFor(() => expect(onDeleted).toHaveBeenCalledOnce());
+  });
+
+  it("hides deletion on routes that cannot navigate away afterwards", () => {
+    renderDetail();
+    expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
   });
 });

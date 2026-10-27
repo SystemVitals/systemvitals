@@ -76,10 +76,14 @@ on or off, including turning every channel off with a clear
 ## Personal access tokens for agents
 
 Open **Account > Personal access tokens > Create personal access token** to delegate
-account management to an agent. Save the secret when it is displayed: it is shown
-only once. The setup wizard provides Claude Code, Codex, Cursor, universal MCP,
-and GraphQL/cURL configurations. Account tokens default to 30 days; choose another
-expiration or no expiration as needed. Revoke them from the same page.
+account management to an agent. Name the token, pick the agent client and an
+expiration (account tokens default to 30 days; the form shows the resulting date),
+then create it. The result walks through three steps: copy the token (it is shown
+only once), paste the generated Claude Code, Codex, Cursor, universal MCP, or
+GraphQL/cURL setup, and try a suggested prompt. Closing without copying asks for
+confirmation because the token stays active; revoke it from the same page if its
+secret was lost. The token list shows active tokens first with relative created,
+last-used, and expiry times, followed by revoked and expired tokens.
 
 A personal access token manages organizations, checks, notification channels,
 members, invitations, status pages, and check moves across every organization
@@ -91,7 +95,7 @@ administration, and platform administration require your login session.
 
 Existing organization-scoped credentials stay valid and can be revoked from
 Account. The former Agent connections URL redirects to Account's personal-token
-section; token history includes credentials from all organizations. See the
+section; the token list includes credentials from all organizations. See the
 [MCP guide](integrations/mcp/README.md) for tool coverage, source-checkout usage
 and the MCP package publication requirement.
 

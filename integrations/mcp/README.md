@@ -260,9 +260,11 @@ contribution guidance.
 
 ## Claude setup names and package availability
 
-The wizard converts organization/account display names into a Claude-compatible
-`systemvitals-...` server name. Claude rejects spaces and punctuation in server
-names even when shell-quoted. Other clients retain correctly escaped display names.
+Account personal access tokens use the server name `systemvitals` in every
+generated client setup. Organization-scoped setups convert the organization
+display name into a Claude-compatible `systemvitals-...` server name, because
+Claude rejects spaces and punctuation in server names even when shell-quoted;
+other clients retain correctly escaped organization names.
 
 `@systemvitals/mcp` currently returns npm E404 because it has not been published.
 Until publication, use the source-checkout instructions above or select GraphQL/cURL

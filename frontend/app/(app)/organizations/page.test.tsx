@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { MockedProvider } from "@apollo/client/testing/react";
 import type { MockedResponse } from "@apollo/client/testing";
 import OrganizationsPage from "./page";
@@ -59,10 +59,10 @@ describe("OrganizationsPage", () => {
     expect(screen.getByText("Beta")).toBeInTheDocument();
   });
 
-  it("offers a Create team action", () => {
+  it("offers a New organization action", () => {
     renderPage();
     expect(
-      screen.getByRole("button", { name: /create team/i }),
+      screen.getByRole("button", { name: /new organization/i }),
     ).toBeInTheDocument();
   });
 
@@ -71,7 +71,7 @@ describe("OrganizationsPage", () => {
 
     expect(
       screen.getByText(
-        "SOLO accounts can create or own up to 10 organizations attributed to their account. SIGNAL and FLEET accounts have no limit.",
+        /Solo accounts can create or own up to 10 organizations; Signal and Fleet accounts have no limit\./,
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/free teams?/i)).not.toBeInTheDocument();
@@ -84,8 +84,16 @@ describe("OrganizationsPage", () => {
     expect(
       screen.getByText("Inherited from creator@example.com"),
     ).toBeInTheDocument();
-    expect(screen.getByText("SOLO")).toBeInTheDocument();
-    expect(screen.getByText("SIGNAL")).toBeInTheDocument();
+    expect(screen.getByText("Solo plan")).toBeInTheDocument();
+    expect(screen.getByText("Signal plan")).toBeInTheDocument();
+  });
+
+  it("marks the current workspace and switches to another organization", () => {
+    renderPage();
+    expect(screen.getAllByText("Current workspace")).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: /switch to acme/i })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /switch to beta/i }));
+    expect(mockSetActiveOrgId).toHaveBeenCalledWith("org2");
   });
 
   it("offers transfer only on an organization the current user actually created", () => {
@@ -162,14 +170,15 @@ describe("OrganizationsPage", () => {
     expect(
       await screen.findByRole("heading", { name: /leave beta/i }),
     ).toBeInTheDocument();
+    const leaveDialog = screen.getByRole("dialog");
     expect(
-      screen.getByText(/lose access to beta/i),
+      within(leaveDialog).getByText(/lose access to beta/i),
     ).toBeInTheDocument();
-    expect(screen.getByText(/checks/i)).toBeInTheDocument();
-    expect(screen.getByText(/notification channels/i)).toBeInTheDocument();
-    expect(screen.getByText(/status pages/i)).toBeInTheDocument();
-    expect(screen.getByText(/members/i)).toBeInTheDocument();
-    expect(screen.getByText(/data/i)).toBeInTheDocument();
+    expect(within(leaveDialog).getByText(/checks/i)).toBeInTheDocument();
+    expect(within(leaveDialog).getByText(/notification channels/i)).toBeInTheDocument();
+    expect(within(leaveDialog).getByText(/status pages/i)).toBeInTheDocument();
+    expect(within(leaveDialog).getByText(/members/i)).toBeInTheDocument();
+    expect(within(leaveDialog).getByText(/data/i)).toBeInTheDocument();
     expect(screen.queryByText(/projects?/i)).not.toBeInTheDocument();
     expect(screen.queryByText("Default")).not.toBeInTheDocument();
     expect(leaveResult).not.toHaveBeenCalled();

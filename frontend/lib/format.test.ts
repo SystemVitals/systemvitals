@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatDuration, formatElapsed } from "./format";
+import { formatDuration, formatElapsed, formatRelativeTime, formatSpan } from "./format";
 describe("formatDuration", () => {
   it("formats sub-minute as seconds", () => { expect(formatDuration(1)).toBe("1 sec"); expect(formatDuration(45)).toBe("45 sec"); });
   it("formats minutes", () => { expect(formatDuration(60)).toBe("1 min"); expect(formatDuration(300)).toBe("5 min"); });
@@ -48,5 +48,42 @@ describe("formatElapsed", () => {
 
   it("treats negative input as no elapsed time", () => {
     expect(formatElapsed(-5 * SEC)).toBe("<1s");
+  });
+});
+
+describe("formatSpan", () => {
+  it("keeps exact values in up to two units", () => {
+    expect(formatSpan(45)).toBe("45 sec");
+    expect(formatSpan(60)).toBe("1 min");
+    expect(formatSpan(90)).toBe("1 min 30 sec");
+    expect(formatSpan(300)).toBe("5 min");
+    expect(formatSpan(5400)).toBe("1 hr 30 min");
+    expect(formatSpan(86_400)).toBe("1 day");
+    expect(formatSpan(2 * 86_400)).toBe("2 days");
+  });
+
+  it("treats empty or invalid spans as zero", () => {
+    expect(formatSpan(0)).toBe("0 sec");
+    expect(formatSpan(Number.NaN)).toBe("0 sec");
+  });
+});
+
+describe("formatRelativeTime", () => {
+  const now = new Date("2026-10-26T12:00:00Z");
+
+  it("collapses moments under a minute", () => {
+    expect(formatRelativeTime("2026-10-26T11:59:30Z", now)).toBe("just now");
+  });
+
+  it("describes the past with the largest whole unit", () => {
+    expect(formatRelativeTime("2026-10-26T11:55:00Z", now)).toBe("5 minutes ago");
+    expect(formatRelativeTime("2026-10-26T09:00:00Z", now)).toBe("3 hours ago");
+    expect(formatRelativeTime("2026-10-25T12:00:00Z", now)).toBe("yesterday");
+  });
+
+  it("describes the future", () => {
+    expect(formatRelativeTime("2026-11-25T12:00:00Z", now)).toBe("in 30 days");
+    expect(formatRelativeTime("2026-10-29T12:00:00Z", now)).toBe("in 3 days");
+    expect(formatRelativeTime("2027-01-26T12:00:00Z", now)).toBe("in 3 months");
   });
 });

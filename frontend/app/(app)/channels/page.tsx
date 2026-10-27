@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@apollo/client/react";
 import { Hash, Mail, MessageSquare, Plus, Trash2, Webhook } from "lucide-react";
+import { PageHeader } from "@/components/app/page-header";
 import { ManagedTelegramSetup } from "@/components/channels/managed-telegram-setup";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -726,15 +727,11 @@ export default function ChannelsPage() {
   if (!user) return null;
 
   return (
-    <div className="space-y-6 px-4 py-6 sm:px-6">
-      <div className="mb-6">
-        <h1 className="font-heading text-2xl font-semibold tracking-tight">
-          Channels
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Notification destinations for your alerts.
-        </p>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Channels"
+        description="Where alerts go when a check goes down and when it recovers. New channels are turned on for every check; fine-tune them per check from the dashboard or a check's page."
+      />
 
       {!activeOrg ? (
         <p className="text-muted-foreground">No organizations found.</p>

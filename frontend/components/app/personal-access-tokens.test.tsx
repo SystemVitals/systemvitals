@@ -133,7 +133,7 @@ describe("PersonalAccessTokensSection", () => {
     expect(within(activeRow).getByText("Active")).toBeInTheDocument();
     expect(within(expiredRow).getByText("Expired")).toBeInTheDocument();
     expect(within(revokedRow).getByText("Revoked")).toBeInTheDocument();
-    expect(within(activeRow).getByText("Acme")).toBeInTheDocument();
+    expect(within(activeRow).getByText("Checks in Acme")).toBeInTheDocument();
     expect(within(activeRow).getByText("Read checks")).toBeInTheDocument();
     expect(within(activeRow).getByText("Manage checks")).toBeInTheDocument();
     expect(within(activeRow).getByText("Never")).toBeInTheDocument();
@@ -483,5 +483,43 @@ describe("PersonalAccessTokensSection", () => {
     fireEvent.click(confirm);
     expect(calls).toBe(1);
     expect(confirm).toBeDisabled();
+  });
+
+  it("lists active tokens before revoked or expired ones and counts both", async () => {
+    renderPage([queryMock([revoked, active, expired])]);
+
+    await screen.findByRole("listitem", { name: /codex — production/i });
+    expect(screen.getAllByRole("listitem").map((item) => item.getAttribute("aria-label"))).toEqual([
+      "Codex — Production",
+      "Former Cursor",
+      "Old deploy bot",
+    ]);
+    expect(screen.getByText("1 active · 2 revoked or expired")).toBeInTheDocument();
+  });
+
+  it("describes account tokens and expiry in plain language", async () => {
+    const account: TestToken = {
+      ...active,
+      id: "account",
+      name: "Claude Code",
+      scopes: ["account:manage"],
+      organizationId: null,
+      projectName: null,
+      organizationName: null,
+      createdAt: "2026-07-24T09:00:00.000Z",
+      lastUsedAt: "2026-07-24T11:55:00.000Z",
+      expiresAt: "2026-07-27T12:00:00.000Z",
+    };
+    renderPage([queryMock([account])]);
+
+    const row = await screen.findByRole("listitem", { name: "Claude Code" });
+    expect(within(row).getByText("Account-wide · all your organizations")).toBeInTheDocument();
+    // Account tokens describe their reach instead of listing raw scopes.
+    expect(within(row).queryByText("Manage account")).not.toBeInTheDocument();
+    expect(within(row).getByText("3 hours ago")).toBeInTheDocument();
+    expect(within(row).getByText("5 minutes ago")).toBeInTheDocument();
+    const expiry = within(row).getByText("in 3 days");
+    // Expiring within a week is highlighted.
+    expect(expiry).toHaveClass("text-warning");
   });
 });
