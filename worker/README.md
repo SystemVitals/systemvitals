@@ -37,6 +37,12 @@ containing it (HTML-escaped on Telegram, plain text elsewhere). Recovery
 notifications leave it out. Descriptions are capped at 2000 characters by the
 API so a DOWN alert still fits in one Telegram message.
 
+Webhook alerts are the only channel that receives structured check text: the
+payload's `check` object carries `description` and `agentInstructions` (each
+`null` when unset), so an agent triggered by the webhook gets its audit-and-fix
+procedure with the alert. Agent instructions never appear in Telegram, email or
+Slack messages.
+
 ## Queues
 
 The active queues are `probe` for scheduled checks, `alert` for transition

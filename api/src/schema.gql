@@ -148,6 +148,11 @@ type CheckEventModel {
 }
 
 type CheckModel {
+  """
+  Optional instructions for AI agents on how to audit and fix the check. Never included in Telegram, email or Slack alerts.
+  """
+  agentInstructions: String
+
   """Operator notes, such as how to fix the check when it is DOWN."""
   description: String
   events(limit: Int! = 50): [CheckEventModel!]!
@@ -238,12 +243,12 @@ type MemberModel {
 type Mutation {
   acceptInvite(token: String!): MemberModel!
   connectTelegramChannel(organizationId: ID, projectId: ID @deprecated(reason: "Use organizationId."), token: String!): ChannelModel!
-  createActiveCheck(description: String, expectedStatus: Int, intervalSeconds: Int!, method: String, name: String!, organizationId: ID, projectId: ID @deprecated(reason: "Use organizationId."), target: String!, timeoutMs: Int!, type: String!): CheckModel!
+  createActiveCheck(agentInstructions: String, description: String, expectedStatus: Int, intervalSeconds: Int!, method: String, name: String!, organizationId: ID, projectId: ID @deprecated(reason: "Use organizationId."), target: String!, timeoutMs: Int!, type: String!): CheckModel!
   createApiToken(name: String!, scopes: [String!]!): ApiTokenCreateResult!
   createBillingCheckout(interval: String, plan: String!): BillingLink!
   createBillingPortal: BillingLink!
   createChannel(configJson: String!, organizationId: ID, projectId: ID @deprecated(reason: "Use organizationId."), type: String!): ChannelModel!
-  createCheck(description: String, graceSeconds: Int!, name: String!, organizationId: ID, periodSeconds: Int, projectId: ID @deprecated(reason: "Use organizationId."), schedule: String, tz: String): CheckModel!
+  createCheck(agentInstructions: String, description: String, graceSeconds: Int!, name: String!, organizationId: ID, periodSeconds: Int, projectId: ID @deprecated(reason: "Use organizationId."), schedule: String, tz: String): CheckModel!
   createOrganization(name: String!): OrganizationModel!
   createPersonalAccessToken(expirationDays: Int, name: String!): ApiTokenCreateResult!
   createScopedApiToken(input: CreateApiTokenInput!): ApiTokenCreateResult!
@@ -357,6 +362,7 @@ type TelegramConnectionPreviewModel {
 }
 
 input UpdateCheckInput {
+  agentInstructions: String
   description: String
   expectedStatus: Int
   graceSeconds: Int

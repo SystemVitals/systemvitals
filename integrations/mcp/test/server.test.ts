@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { Gql } from "../src/gql.js";
 import { buildServer } from "../src/server.js";
 import {
@@ -58,6 +60,31 @@ const SCOPED_CHECK_TOOL_NAMES = [
 ] as const;
 
 describe("buildServer", () => {
+  it("tells agents to follow a check's agent instructions", async () => {
+    const { server } = await buildServer(
+      credentialGql({
+        authKind: "session",
+        credentialMode: "SESSION",
+        capabilities: [],
+        organizationId: null,
+        organizationName: null,
+        projectId: null,
+        projectName: null,
+      }),
+    );
+    const client = new Client({ name: "server-test", version: "0.1.0" });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await server.connect(serverTransport);
+    await client.connect(clientTransport);
+    try {
+      const instructions = client.getInstructions() ?? "";
+      expect(instructions).toContain("get_check");
+      expect(instructions).toContain("agent instructions");
+    } finally {
+      await client.close();
+    }
+  });
+
   it("fetches the credential once and registers every tool for a session", async () => {
     let calls = 0;
     const gql: Gql = async () => {

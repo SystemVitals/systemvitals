@@ -95,8 +95,8 @@ describe('public-status (e2e)', () => {
     const checkRes = (await gql(
       app,
       token,
-      `mutation($projectId: ID!, $name: String!, $periodSeconds: Int!, $graceSeconds: Int!, $description: String) {
-        createCheck(projectId: $projectId, name: $name, periodSeconds: $periodSeconds, graceSeconds: $graceSeconds, description: $description) {
+      `mutation($projectId: ID!, $name: String!, $periodSeconds: Int!, $graceSeconds: Int!, $description: String, $agentInstructions: String) {
+        createCheck(projectId: $projectId, name: $name, periodSeconds: $periodSeconds, graceSeconds: $graceSeconds, description: $description, agentInstructions: $agentInstructions) {
           id name pingSlug
         }
       }`,
@@ -106,6 +106,7 @@ describe('public-status (e2e)', () => {
         periodSeconds: 300,
         graceSeconds: 30,
         description: 'Internal runbook: restart the private worker',
+        agentInstructions: 'Agent-only: ssh to the private host',
       },
     )) as GqlCreateCheckResponse;
 
@@ -167,6 +168,8 @@ describe('public-status (e2e)', () => {
     expect(bodyStr).not.toContain('checkIds');
     expect(bodyStr).not.toContain('description');
     expect(bodyStr).not.toContain('Internal runbook');
+    expect(bodyStr).not.toContain('agentInstructions');
+    expect(bodyStr).not.toContain('Agent-only');
   });
 
   it('GET /status/nonexistent → 404', async () => {

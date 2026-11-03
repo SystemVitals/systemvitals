@@ -438,6 +438,61 @@ describe("handleAlert", () => {
     }
   });
 
+  it("sends the description and agent instructions in the webhook payload only", async () => {
+    await prisma.alertLog.deleteMany({ where: { checkId: checkWithChannelId } });
+    await prisma.check.update({
+      where: { id: checkWithChannelId },
+      data: {
+        description: "Restart the API container",
+        agentInstructions: "Audit: read the API logs. Fix: restart it.",
+      },
+    });
+    const webhook = await prisma.notificationChannel.create({
+      data: {
+        projectId,
+        type: ChannelType.WEBHOOK,
+        config: { url: "https://agent.example.com/hook" },
+        enabled: true,
+      },
+    });
+
+    const httpPost = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    const mailer = new CollectingMailer();
+    const deps: NotifierDeps = {
+      mailer,
+      httpPost,
+      telegramPost: vi.fn(),
+      telegramBotToken: "managed-test-token",
+    };
+
+    try {
+      await handleAlert(prisma, deps, {
+        checkId: checkWithChannelId,
+        kind: "down",
+        channelIds: [webhook.id, emailChannelId],
+      });
+      const [, body] = httpPost.mock.calls[0] as [
+        string,
+        { check: Record<string, unknown> },
+      ];
+      expect(body.check).toEqual({
+        id: checkWithChannelId,
+        name: expect.any(String),
+        status: expect.any(String),
+        description: "Restart the API container",
+        agentInstructions: "Audit: read the API logs. Fix: restart it.",
+      });
+      expect(mailer.sent[0]?.text).not.toContain("Audit: read the API logs");
+    } finally {
+      await prisma.alertLog.deleteMany({ where: { checkId: checkWithChannelId } });
+      await prisma.notificationChannel.delete({ where: { id: webhook.id } });
+      await prisma.check.update({
+        where: { id: checkWithChannelId },
+        data: { description: null, agentInstructions: null },
+      });
+    }
+  });
+
   it("uses 'recovered' wording in subject for kind=recovery", async () => {
     await prisma.alertLog.deleteMany({ where: { checkId: checkWithChannelId } });
 

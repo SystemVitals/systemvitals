@@ -117,7 +117,13 @@ export async function handleAlert(
     text,
     telegramText,
     kind,
-    check: { id: check.id, name: check.name, status: check.status },
+    check: {
+      id: check.id,
+      name: check.name,
+      status: check.status,
+      description: check.description,
+      agentInstructions: check.agentInstructions,
+    },
   };
   let successes = 0;
 

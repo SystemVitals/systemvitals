@@ -29,7 +29,7 @@ async function gql(
   };
 }
 
-// A SOLO account holds at most 5 checks; this suite creates 4.
+// A SOLO account holds at most 5 checks; this suite creates 5.
 describe('check description (e2e)', () => {
   let app: NestFastifyApplication;
   let token: string;
@@ -56,7 +56,7 @@ describe('check description (e2e)', () => {
       app,
       token,
       `mutation ($id: ID!, $input: UpdateCheckInput!) {
-         updateCheck(id: $id, input: $input) { id name description }
+         updateCheck(id: $id, input: $input) { id name description agentInstructions }
        }`,
       { id, input },
     );
@@ -169,5 +169,54 @@ describe('check description (e2e)', () => {
     const id = (check.data as { createCheck: { id: string } }).createCheck.id;
     const updated = await update(id, { description: tooLong });
     expect(updated.errors?.[0].message).toMatch(/2000 characters/);
+  });
+
+  it('stores agent instructions separately, keeps them on unrelated edits, and enforces 4000 characters', async () => {
+    const created = await gql(
+      app,
+      token,
+      `mutation ($o: ID!) {
+         createCheck(
+           organizationId: $o, name: "Agent runbook", graceSeconds: 60,
+           periodSeconds: 300, description: "Human steps",
+           agentInstructions: "  Audit: read the logs\\nFix: restart  "
+         ) { id description agentInstructions }
+       }`,
+      { o: organizationId },
+    );
+    expect(created.errors).toBeUndefined();
+    const check = (
+      created.data as {
+        createCheck: {
+          id: string;
+          description: string;
+          agentInstructions: string;
+        };
+      }
+    ).createCheck;
+    expect(check.description).toBe('Human steps');
+    expect(check.agentInstructions).toBe('Audit: read the logs\nFix: restart');
+
+    const renamed = await update(check.id, { description: 'New human steps' });
+    expect(
+      (renamed.data as { updateCheck: { agentInstructions: string } })
+        .updateCheck.agentInstructions,
+    ).toBe('Audit: read the logs\nFix: restart');
+
+    const tooLong = await update(check.id, {
+      agentInstructions: 'x'.repeat(4001),
+    });
+    expect(tooLong.errors?.[0].message).toMatch(/4000 characters/);
+
+    const longest = await update(check.id, {
+      agentInstructions: 'x'.repeat(4000),
+    });
+    expect(longest.errors).toBeUndefined();
+
+    const cleared = await update(check.id, { agentInstructions: '' });
+    expect(
+      (cleared.data as { updateCheck: { agentInstructions: string | null } })
+        .updateCheck.agentInstructions,
+    ).toBeNull();
   });
 });

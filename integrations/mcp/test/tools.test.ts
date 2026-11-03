@@ -433,6 +433,34 @@ describe("get_check", () => {
     );
   });
 
+  it("requests and shows agent instructions after the description", async () => {
+    const fakeData = {
+      check: {
+        id: "c1",
+        name: "Backup",
+        type: "HEARTBEAT",
+        status: "DOWN",
+        pingSlug: null,
+        target: null,
+        intervalSeconds: null,
+        periodSeconds: 86400,
+        description: "Rerun backup.sh",
+        agentInstructions: "Audit: read /var/log/backup.log\nFix: rerun backup.sh",
+        notificationChannelIds: [],
+        events: [],
+      },
+    };
+    const { gql, calls } = makeFakeGql(fakeData);
+    const result = await findTool("get_check").handler({ id: "c1" }, gql);
+
+    expect(calls[0].query).toContain("agentInstructions");
+    const text = result.content[0].text;
+    expect(text).toContain(
+      "Agent instructions:\nAudit: read /var/log/backup.log\nFix: rerun backup.sh",
+    );
+    expect(text.indexOf("Description:")).toBeLessThan(text.indexOf("Agent instructions:"));
+  });
+
   it("accurately exposes an empty notification channel selection", async () => {
     const fakeData = {
       check: {
@@ -695,6 +723,24 @@ describe("create_heartbeat_check", () => {
     });
   });
 
+  it("passes optional agent instructions", async () => {
+    const { gql, calls } = makeFakeGql({ createCheck: { id: "chk_new3" } });
+    await findTool("create_heartbeat_check").handler(
+      {
+        organizationId: "o1",
+        name: "Daily Job",
+        periodSeconds: 86400,
+        graceSeconds: 300,
+        agentInstructions: "Audit the cron logs",
+      },
+      gql,
+    );
+
+    expect(calls[0].query).toContain("$agentInstructions: String");
+    expect(calls[0].query).toContain("agentInstructions: $agentInstructions");
+    expect(calls[0].variables).toMatchObject({ agentInstructions: "Audit the cron logs" });
+  });
+
   it("accepts a cron schedule + tz instead of periodSeconds", async () => {
     const fakeData = { createCheck: { id: "chk_cron1" } };
     const { gql, calls } = makeFakeGql(fakeData);
@@ -780,6 +826,26 @@ describe("create_active_check", () => {
     expect(calls[0].variables).toMatchObject({
       description: "Check the CDN status page",
     });
+  });
+
+  it("passes optional agent instructions", async () => {
+    const { gql, calls } = makeFakeGql({ createActiveCheck: { id: "chk_act3" } });
+    await findTool("create_active_check").handler(
+      {
+        organizationId: "o1",
+        name: "Homepage",
+        type: "HTTP",
+        target: "https://example.com",
+        intervalSeconds: 60,
+        timeoutMs: 5000,
+        agentInstructions: "Audit the CDN",
+      },
+      gql,
+    );
+
+    expect(calls[0].query).toContain("$agentInstructions: String");
+    expect(calls[0].query).toContain("agentInstructions: $agentInstructions");
+    expect(calls[0].variables).toMatchObject({ agentInstructions: "Audit the CDN" });
   });
 
   it("works without optional method and expectedStatus", async () => {
@@ -1204,6 +1270,38 @@ describe("update_check", () => {
       id: "c1",
       input: { description: "" },
     });
+  });
+
+  it("sends agent instructions and confirms they were saved without echoing them", async () => {
+    const { gql, calls } = makeFakeGql({
+      updateCheck: {
+        id: "c1",
+        name: "Backup",
+        type: "HEARTBEAT",
+        periodSeconds: 86400,
+        graceSeconds: 3600,
+        schedule: null,
+        tz: null,
+        target: null,
+        method: null,
+        expectedStatus: null,
+        intervalSeconds: null,
+        timeoutMs: null,
+        description: null,
+        agentInstructions: "Audit: read logs\nFix: restart",
+      },
+    });
+    const result = await findTool("update_check").handler(
+      { id: "c1", agentInstructions: "Audit: read logs\nFix: restart" },
+      gql,
+    );
+
+    expect(calls[0].query).toContain("agentInstructions");
+    expect(calls[0].variables).toEqual({
+      id: "c1",
+      input: { agentInstructions: "Audit: read logs\nFix: restart" },
+    });
+    expect(result.content[0].text).toContain("Agent instructions: set (29 characters)");
   });
 
   it("works with only id — input has no keys, and no key is ever explicitly null", async () => {

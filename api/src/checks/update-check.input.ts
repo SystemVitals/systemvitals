@@ -19,6 +19,11 @@ export class UpdateCheckInput {
   @Field({ nullable: true }) @IsOptional() @IsString() slug?: string;
   /** A blank string or an explicit null clears the description. */
   @Field({ nullable: true }) @IsOptional() @IsString() description?: string;
+  /** A blank string or an explicit null clears the agent instructions. */
+  @Field({ nullable: true })
+  @IsOptional()
+  @IsString()
+  agentInstructions?: string;
   @Field({ nullable: true }) @IsOptional() @IsString() type?: string;
   @Field(() => Int, { nullable: true })
   @IsOptional()

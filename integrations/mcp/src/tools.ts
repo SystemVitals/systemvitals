@@ -88,6 +88,7 @@ interface UpdateCheckResponse {
     intervalSeconds: number | null;
     timeoutMs: number | null;
     description: string | null;
+    agentInstructions?: string | null;
   };
 }
 
@@ -156,6 +157,7 @@ interface CheckDetail {
   tz: string | null;
   nextExpectedAt: string | null;
   description?: string | null;
+  agentInstructions?: string | null;
   notificationChannelIds: string[];
   events: CheckEvent[];
 }
@@ -444,6 +446,9 @@ const listChecks: ToolDef = {
 const CHECK_DESCRIPTION_DESCRIPTION =
   "Operator notes, such as how to fix the check when it goes DOWN. Shown on the check page and appended to DOWN alerts. Up to 2000 characters.";
 
+const CHECK_AGENT_INSTRUCTIONS_DESCRIPTION =
+  "Optional instructions for AI agents on how to audit and fix the check: what to inspect, which fixes are safe, and when to hand off to a human. Returned by get_check and sent in webhook alerts; never in Telegram, email or Slack alerts. Up to 4000 characters.";
+
 const getCheck: ToolDef = {
   name: "get_check",
   description: "Get details and recent events for a specific check.",
@@ -466,6 +471,7 @@ const getCheck: ToolDef = {
           tz
           nextExpectedAt
           description
+          agentInstructions
           notificationChannelIds
           events(limit: 20) {
             id
@@ -497,6 +503,9 @@ const getCheck: ToolDef = {
             : null,
       check.nextExpectedAt ? `Next expected: ${check.nextExpectedAt}` : null,
       check.description ? `Description:\n${check.description}` : null,
+      check.agentInstructions
+        ? `Agent instructions:\n${check.agentInstructions}`
+        : null,
       `Notification channels: ${
         check.notificationChannelIds.length > 0
           ? check.notificationChannelIds.join(", ")
@@ -591,6 +600,10 @@ const createHeartbeatCheck: ToolDef = {
       .describe("IANA timezone (e.g. 'America/New_York') for the cron schedule. Required when schedule is set."),
     graceSeconds: z.number().int().describe("Grace period after a missed ping before alerting"),
     description: z.string().optional().describe(CHECK_DESCRIPTION_DESCRIPTION),
+    agentInstructions: z
+      .string()
+      .optional()
+      .describe(CHECK_AGENT_INSTRUCTIONS_DESCRIPTION),
   },
   handler: async (args, gql) => {
     const workspace = workspaceGraphql(readWorkspaceSelector(args));
@@ -600,6 +613,7 @@ const createHeartbeatCheck: ToolDef = {
     const tz = args["tz"] as string | undefined;
     const graceSeconds = args["graceSeconds"] as number;
     const description = args["description"] as string | undefined;
+    const agentInstructions = args["agentInstructions"] as string | undefined;
 
     const data = await gql(
       `mutation createCheck(
@@ -610,6 +624,7 @@ const createHeartbeatCheck: ToolDef = {
         $schedule: String
         $tz: String
         $description: String
+        $agentInstructions: String
       ) {
         createCheck(
           ${workspace.argument}
@@ -619,6 +634,7 @@ const createHeartbeatCheck: ToolDef = {
           schedule: $schedule
           tz: $tz
           description: $description
+          agentInstructions: $agentInstructions
         ) {
           id
         }
@@ -631,6 +647,7 @@ const createHeartbeatCheck: ToolDef = {
         schedule,
         tz,
         description,
+        agentInstructions,
       },
     );
 
@@ -653,6 +670,10 @@ const createActiveCheck: ToolDef = {
     method: z.string().optional().describe("HTTP method (default GET); ignored for TCP"),
     expectedStatus: z.number().int().optional().describe("Expected HTTP status code (e.g. 200)"),
     description: z.string().optional().describe(CHECK_DESCRIPTION_DESCRIPTION),
+    agentInstructions: z
+      .string()
+      .optional()
+      .describe(CHECK_AGENT_INSTRUCTIONS_DESCRIPTION),
   },
   handler: async (args, gql) => {
     const workspace = workspaceGraphql(readWorkspaceSelector(args));
@@ -664,6 +685,7 @@ const createActiveCheck: ToolDef = {
     const method = args["method"] as string | undefined;
     const expectedStatus = args["expectedStatus"] as number | undefined;
     const description = args["description"] as string | undefined;
+    const agentInstructions = args["agentInstructions"] as string | undefined;
 
     const data = await gql(
       `mutation createActiveCheck(
@@ -676,6 +698,7 @@ const createActiveCheck: ToolDef = {
         $method: String
         $expectedStatus: Int
         $description: String
+        $agentInstructions: String
       ) {
         createActiveCheck(
           ${workspace.argument}
@@ -687,6 +710,7 @@ const createActiveCheck: ToolDef = {
           method: $method
           expectedStatus: $expectedStatus
           description: $description
+          agentInstructions: $agentInstructions
         ) {
           id
         }
@@ -701,6 +725,7 @@ const createActiveCheck: ToolDef = {
         method,
         expectedStatus,
         description,
+        agentInstructions,
       },
     );
 
@@ -969,12 +994,13 @@ const UPDATE_CHECK_INPUT_KEYS = [
   "intervalSeconds",
   "timeoutMs",
   "description",
+  "agentInstructions",
 ] as const;
 
 const updateCheck: ToolDef = {
   name: "update_check",
   description:
-    "Update mutable fields on an existing check. Only the fields you supply are changed — everything else is left as-is. A heartbeat check is timed by either periodSeconds or schedule+tz, never both. Active (HTTP/TCP) checks use target, intervalSeconds, and timeoutMs; HTTP also has method and expectedStatus. Any check can carry a description with fix instructions; it is kept across type changes. This operation cannot move the check to another organization workspace or change its id, pingSlug, or status.",
+    "Update mutable fields on an existing check. Only the fields you supply are changed — everything else is left as-is. A heartbeat check is timed by either periodSeconds or schedule+tz, never both. Active (HTTP/TCP) checks use target, intervalSeconds, and timeoutMs; HTTP also has method and expectedStatus. Any check can carry a description with fix instructions and separate agent instructions; both are kept across type changes. This operation cannot move the check to another organization workspace or change its id, pingSlug, or status.",
   inputSchema: {
     id: z.string().min(1).describe("The check ID to update"),
     name: z.string().optional().describe("New display name"),
@@ -1032,6 +1058,12 @@ const updateCheck: ToolDef = {
       .string()
       .optional()
       .describe(`${CHECK_DESCRIPTION_DESCRIPTION} An empty string clears it.`),
+    agentInstructions: z
+      .string()
+      .optional()
+      .describe(
+        `${CHECK_AGENT_INSTRUCTIONS_DESCRIPTION} An empty string clears them.`,
+      ),
   },
   handler: async (args, gql) => {
     const id = args["id"] as string;
@@ -1062,6 +1094,7 @@ const updateCheck: ToolDef = {
           intervalSeconds
           timeoutMs
           description
+          agentInstructions
         }
       }`,
       { id, input },
@@ -1082,6 +1115,12 @@ const updateCheck: ToolDef = {
     if (result.intervalSeconds != null) parts.push(`Interval: ${result.intervalSeconds}s`);
     if (result.timeoutMs != null) parts.push(`Timeout: ${result.timeoutMs}ms`);
     if (result.description) parts.push(`Description: ${result.description}`);
+    // Long and multi-line, so confirm instead of echoing them back.
+    if (result.agentInstructions) {
+      parts.push(
+        `Agent instructions: set (${result.agentInstructions.length} characters)`,
+      );
+    }
 
     return text(parts.join(" "));
   },
