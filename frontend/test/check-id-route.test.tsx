@@ -50,6 +50,7 @@ const check = {
   expectedStatus: null,
   intervalSeconds: null,
   timeoutMs: null,
+  description: null,
   events: [],
 };
 

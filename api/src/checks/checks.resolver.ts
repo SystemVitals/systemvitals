@@ -169,6 +169,7 @@ export class ChecksResolver {
     periodSeconds?: number,
     @Args('schedule', { nullable: true }) schedule?: string,
     @Args('tz', { nullable: true }) tz?: string,
+    @Args('description', { nullable: true }) description?: string,
   ) {
     const workspace = await this.workspacesService.resolveForUser(
       principal.userId,
@@ -183,6 +184,7 @@ export class ChecksResolver {
       periodSeconds,
       schedule,
       tz,
+      description,
     );
     return this.attachOrganization(check, workspace.organizationId);
   }
@@ -321,6 +323,7 @@ export class ChecksResolver {
     @Args('method', { nullable: true }) method?: string,
     @Args('expectedStatus', { type: () => Int, nullable: true })
     expectedStatus?: number,
+    @Args('description', { nullable: true }) description?: string,
   ) {
     const workspace = await this.workspacesService.resolveForUser(
       principal.userId,
@@ -337,6 +340,7 @@ export class ChecksResolver {
       timeoutMs,
       method,
       expectedStatus,
+      description,
     );
     return this.attachOrganization(check, workspace.organizationId);
   }

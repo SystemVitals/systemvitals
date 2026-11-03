@@ -15,6 +15,7 @@ import { lockProjectCheckStatusChanges } from '../common/project-check-status-lo
 import { isValidCron, isValidTz, minCronGapSeconds } from './cron';
 import {
   resolveCheckUpdate,
+  normalizeCheckDescription,
   CheckValidationError,
   type CheckUpdateInput,
 } from './check-update';
@@ -290,7 +291,9 @@ export class ChecksService {
     periodSeconds?: number,
     schedule?: string,
     tz?: string,
+    rawDescription?: string | null,
   ) {
+    const description = this.parseDescription(rawDescription);
     const hasPeriod = typeof periodSeconds === 'number';
     const hasCron = typeof schedule === 'string' && schedule.length > 0;
     if (hasPeriod === hasCron) {
@@ -326,6 +329,7 @@ export class ChecksService {
                   graceSeconds,
                   schedule,
                   tz: zone,
+                  description,
                 },
               }),
           }),
@@ -352,6 +356,7 @@ export class ChecksService {
                 pingSlug: randomUUID(),
                 periodSeconds,
                 graceSeconds,
+                description,
               },
             }),
         }),
@@ -796,7 +801,9 @@ export class ChecksService {
     timeoutMs: number,
     method?: string,
     expectedStatus?: number,
+    rawDescription?: string | null,
   ) {
+    const description = this.parseDescription(rawDescription);
     if (type !== 'HTTP' && type !== 'TCP') {
       throw new BadRequestException(
         `Type must be HTTP or TCP; got ${type}. HEARTBEAT and PING are not accepted here.`,
@@ -840,10 +847,22 @@ export class ChecksService {
                 timeoutMs,
                 method: resolvedMethod,
                 expectedStatus,
+                description,
               },
             }),
         }),
     );
+  }
+
+  private parseDescription(raw?: string | null): string | null {
+    try {
+      return normalizeCheckDescription(raw);
+    } catch (err) {
+      if (err instanceof CheckValidationError) {
+        throw new BadRequestException(err.message);
+      }
+      throw err;
+    }
   }
 
   async eventsForCheck(checkId: string, limit: number) {

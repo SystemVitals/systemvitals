@@ -8,7 +8,8 @@
 
 SystemVitals is an open-source uptime and cron-job monitoring platform. It
 combines passive heartbeat monitoring with active HTTP, TCP, and ping checks,
-per-check notification routing, public status pages, and an MCP integration.
+per-check notification routing, check descriptions that carry fix instructions
+into DOWN alerts, public status pages, and an MCP integration.
 
 Visit [systemvitals.link](https://systemvitals.link) or clone the project:
 

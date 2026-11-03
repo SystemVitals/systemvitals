@@ -397,6 +397,47 @@ describe("handleAlert", () => {
     expect(sent).toBe(0);
   });
 
+  it("adds the check description as fix instructions to DOWN alerts only", async () => {
+    await prisma.alertLog.deleteMany({ where: { checkId: checkWithChannelId } });
+    await prisma.check.update({
+      where: { id: checkWithChannelId },
+      data: { description: "Restart the API container" },
+    });
+
+    const httpPost = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    const mailer = new CollectingMailer();
+    const deps: NotifierDeps = {
+      mailer,
+      httpPost,
+      telegramPost: vi.fn(),
+      telegramBotToken: "managed-test-token",
+    };
+
+    try {
+      await handleAlert(prisma, deps, {
+        checkId: checkWithChannelId,
+        kind: "down",
+      });
+      expect(mailer.sent[0]?.text).toContain(
+        "How to fix:\nRestart the API container",
+      );
+      const [, slackBody] = httpPost.mock.calls[0] as [string, { text: string }];
+      expect(slackBody.text).toContain("How to fix:\nRestart the API container");
+
+      await handleAlert(prisma, deps, {
+        checkId: checkWithChannelId,
+        kind: "recovery",
+      });
+      expect(mailer.sent[1]?.text).not.toContain("How to fix");
+    } finally {
+      await prisma.check.update({
+        where: { id: checkWithChannelId },
+        data: { description: null },
+      });
+      await prisma.alertLog.deleteMany({ where: { checkId: checkWithChannelId } });
+    }
+  });
+
   it("uses 'recovered' wording in subject for kind=recovery", async () => {
     await prisma.alertLog.deleteMany({ where: { checkId: checkWithChannelId } });
 

@@ -7,6 +7,7 @@ import { useOrg } from "@/lib/org-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { DurationSliderField } from "@/components/app/duration-slider-field";
 import {
   Dialog,
@@ -90,7 +91,11 @@ export interface EditableCheck {
   expectedStatus: number | null;
   intervalSeconds: number | null;
   timeoutMs: number | null;
+  description?: string | null;
 }
+
+/** Mirrors `MAX_CHECK_DESCRIPTION_LENGTH` in `api/src/checks/check-update.ts`. */
+const MAX_DESCRIPTION_LENGTH = 2000;
 
 /**
  * What `onSaved` hands back after a successful save — just enough for a
@@ -117,6 +122,7 @@ export function EditCheckDialog({ open, onOpenChange, check, onSaved }: EditChec
   const [type, setType] = useState<CheckType>(currentType);
   const [name, setName] = useState(check.name);
   const [slug, setSlug] = useState(check.slug);
+  const [description, setDescription] = useState(check.description ?? "");
 
   // Heartbeat fields
   const [periodSeconds, setPeriodSeconds] = useState(String(check.periodSeconds ?? 300));
@@ -145,6 +151,7 @@ export function EditCheckDialog({ open, onOpenChange, check, onSaved }: EditChec
       setType(asCheckType(check.type));
       setName(check.name);
       setSlug(check.slug);
+      setDescription(check.description ?? "");
       setPeriodSeconds(String(check.periodSeconds ?? 300));
       setGraceSeconds(String(check.graceSeconds ?? 60));
       setScheduleType(check.schedule ? "cron" : "simple");
@@ -216,6 +223,10 @@ export function EditCheckDialog({ open, onOpenChange, check, onSaved }: EditChec
     const input: Record<string, unknown> = { name: name.trim() };
     if (type !== currentType) input.type = type;
     if (slug.trim() !== check.slug) input.slug = slug.trim();
+    // Sent only when it changed; an empty string clears it server-side.
+    if (description.trim() !== (check.description ?? "").trim()) {
+      input.description = description.trim();
+    }
 
     if (type === "HEARTBEAT") {
       input.graceSeconds = parseInt(graceSeconds, 10);
@@ -323,6 +334,23 @@ export function EditCheckDialog({ open, onOpenChange, check, onSaved }: EditChec
               <p className="text-xs text-muted-foreground">
                 Changing the slug changes this check&apos;s URL. The old URL will stop working —
                 there is no redirect.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-check-description">
+                How to fix <span className="text-muted-foreground">(optional)</span>
+              </Label>
+              <Textarea
+                id="edit-check-description"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                maxLength={MAX_DESCRIPTION_LENGTH}
+                rows={4}
+                placeholder={"1. SSH into the host\n2. Restart the job"}
+              />
+              <p className="text-xs text-muted-foreground">
+                Shown on this check&apos;s page and added to its DOWN alerts.
               </p>
             </div>
 

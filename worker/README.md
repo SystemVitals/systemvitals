@@ -32,6 +32,11 @@ sibling-check health, and measured downtime on recovery. User-controlled names
 are HTML-escaped and link previews are disabled. Email, Slack, and webhook
 message formats remain independent.
 
+When a check has a description, DOWN alerts end with a "How to fix" section
+containing it (HTML-escaped on Telegram, plain text elsewhere). Recovery
+notifications leave it out. Descriptions are capped at 2000 characters by the
+API so a DOWN alert still fits in one Telegram message.
+
 ## Queues
 
 The active queues are `probe` for scheduled checks, `alert` for transition

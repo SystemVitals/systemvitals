@@ -4,6 +4,30 @@ import { isValidSlug } from '../common/slug';
 
 export class CheckValidationError extends Error {}
 
+/**
+ * Descriptions are appended to DOWN alerts, so they must fit inside a single
+ * Telegram message (4096 characters) next to the rest of the alert.
+ */
+export const MAX_CHECK_DESCRIPTION_LENGTH = 2000;
+
+/**
+ * Trims a description and maps absent or blank values to `null`, which
+ * clears the stored description. Inner line breaks are kept.
+ */
+export function normalizeCheckDescription(raw: unknown): string | null {
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw !== 'string') {
+    throw new CheckValidationError('Description must be a string');
+  }
+  const description = raw.trim();
+  if (description.length > MAX_CHECK_DESCRIPTION_LENGTH) {
+    throw new CheckValidationError(
+      `Description must be at most ${MAX_CHECK_DESCRIPTION_LENGTH} characters`,
+    );
+  }
+  return description.length > 0 ? description : null;
+}
+
 export type EditableCheckType = 'HEARTBEAT' | 'HTTP' | 'TCP';
 
 const EDITABLE_TYPES: readonly EditableCheckType[] = [
@@ -19,6 +43,7 @@ function isEditableCheckType(value: string): value is EditableCheckType {
 export interface CheckUpdateInput {
   name?: string;
   slug?: string;
+  description?: string;
   type?: string;
   periodSeconds?: number;
   graceSeconds?: number;
@@ -99,6 +124,12 @@ export function resolveCheckUpdate(
       );
     }
     data.slug = input.slug;
+  }
+
+  // Independent of the check type, so it survives a conversion. An explicit
+  // null or a blank string clears it.
+  if (input.description !== undefined) {
+    data.description = normalizeCheckDescription(input.description);
   }
 
   if (targetType === 'HEARTBEAT') {
