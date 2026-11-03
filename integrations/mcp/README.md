@@ -137,7 +137,7 @@ including an empty selection.
 | `list_organizations` | List organization workspaces and their plan, creator, and ping-key metadata |
 | `list_projects` | List all organizations and projects accessible with the current API token |
 | `list_checks` | List all checks for an organization workspace (with status, interval, last event) |
-| `get_check` | Get full details and recent events for a specific check |
+| `get_check` | Get full details, the description and recent events for a specific check |
 | `list_channels` | List notification channels for an organization workspace, including already-connected Telegram rows |
 | `list_members` | List the members of an organization, with membership id and role |
 
@@ -149,9 +149,9 @@ release. New clients should discover workspaces with `list_organizations`.
 | Tool | Description |
 |---|---|
 | `regenerate_ping_key` | Regenerate the ping key for an organization workspace (old key immediately invalidated) |
-| `create_heartbeat_check` | Create a heartbeat (dead-man's-switch) check — alerts if pings stop arriving. Provide either `periodSeconds` for a simple period, or `schedule` + `tz` for a cron schedule |
-| `create_active_check` | Create an active HTTP or TCP probe check |
-| `update_check` | Update mutable fields on an existing check (name, period, grace) |
+| `create_heartbeat_check` | Create a heartbeat (dead-man's-switch) check — alerts if pings stop arriving. Provide either `periodSeconds` for a simple period, or `schedule` + `tz` for a cron schedule. Optional `description` |
+| `create_active_check` | Create an active HTTP or TCP probe check. Optional `description` |
+| `update_check` | Update mutable fields on an existing check (name, period, grace, description). An empty `description` clears it |
 | `pause_check` | Pause monitoring for a check (no alerts while paused) |
 | `resume_check` | Resume a previously paused check |
 | `delete_check` | Permanently delete a check and all its events |

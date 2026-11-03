@@ -34,6 +34,7 @@ export const CHECK_BY_SLUG = gql`
       expectedStatus
       intervalSeconds
       timeoutMs
+      description
       events {
         id
         status

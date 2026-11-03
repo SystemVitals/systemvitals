@@ -53,6 +53,7 @@ export interface CheckDetailData {
   schedule: string | null;
   tz: string | null;
   nextExpectedAt: string | null;
+  description: string | null;
   status: CheckStatus;
   pingSlug: string | null;
   events: CheckEvent[];
@@ -494,6 +495,19 @@ export function CheckDetail({
               }
             />
           </div>
+
+          {check.description && (
+            <Card role="region" aria-labelledby="check-fix-instructions">
+              <CardHeader className="pb-2">
+                <CardTitle id="check-fix-instructions" className="text-base">
+                  How to fix
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="whitespace-pre-wrap break-words text-sm">{check.description}</p>
+              </CardContent>
+            </Card>
+          )}
 
           <Card>
             <CardHeader className="pb-2">

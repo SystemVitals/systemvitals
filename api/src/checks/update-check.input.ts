@@ -17,6 +17,8 @@ import { IsInt, IsOptional, IsString } from 'class-validator';
 export class UpdateCheckInput {
   @Field({ nullable: true }) @IsOptional() @IsString() name?: string;
   @Field({ nullable: true }) @IsOptional() @IsString() slug?: string;
+  /** A blank string or an explicit null clears the description. */
+  @Field({ nullable: true }) @IsOptional() @IsString() description?: string;
   @Field({ nullable: true }) @IsOptional() @IsString() type?: string;
   @Field(() => Int, { nullable: true })
   @IsOptional()

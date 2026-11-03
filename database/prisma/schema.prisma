@@ -202,6 +202,8 @@ model Check {
   id               String            @id @default(cuid())
   name             String
   slug             String
+  // Operator notes, e.g. how to fix the check when it goes DOWN.
+  description      String?
   type             CheckType
   status           CheckStatus       @default(NEW)
   projectId        String            @map("project_id")

@@ -17,6 +17,12 @@ export class CheckModel {
   notificationChannelIds?: string[];
   @Field() name!: string;
   @Field() slug!: string;
+  @Field(() => String, {
+    nullable: true,
+    description:
+      'Operator notes, such as how to fix the check when it is DOWN.',
+  })
+  description?: string | null;
   @Field() type!: string;
   @Field() status!: string;
   @Field({ nullable: true }) pingSlug?: string;

@@ -408,6 +408,31 @@ describe("get_check", () => {
     expect(text).toContain("203.0.113.40");
   });
 
+  it("requests and shows the check description", async () => {
+    const fakeData = {
+      check: {
+        id: "c1",
+        name: "Backup",
+        type: "HEARTBEAT",
+        status: "DOWN",
+        pingSlug: "abc123",
+        target: null,
+        intervalSeconds: null,
+        periodSeconds: 86400,
+        description: "1. SSH in\n2. Rerun backup.sh",
+        notificationChannelIds: [],
+        events: [],
+      },
+    };
+    const { gql, calls } = makeFakeGql(fakeData);
+    const result = await findTool("get_check").handler({ id: "c1" }, gql);
+
+    expect(calls[0].query).toContain("description");
+    expect(result.content[0].text).toContain(
+      "Description:\n1. SSH in\n2. Rerun backup.sh",
+    );
+  });
+
   it("accurately exposes an empty notification channel selection", async () => {
     const fakeData = {
       check: {
@@ -650,6 +675,26 @@ describe("create_heartbeat_check", () => {
     expect(result.content[0].text).toContain("chk_new1");
   });
 
+  it("passes an optional description", async () => {
+    const { gql, calls } = makeFakeGql({ createCheck: { id: "chk_new2" } });
+    await findTool("create_heartbeat_check").handler(
+      {
+        organizationId: "o1",
+        name: "Daily Job",
+        periodSeconds: 86400,
+        graceSeconds: 300,
+        description: "Restart the cron container",
+      },
+      gql,
+    );
+
+    expect(calls[0].query).toContain("$description: String");
+    expect(calls[0].query).toContain("description: $description");
+    expect(calls[0].variables).toMatchObject({
+      description: "Restart the cron container",
+    });
+  });
+
   it("accepts a cron schedule + tz instead of periodSeconds", async () => {
     const fakeData = { createCheck: { id: "chk_cron1" } };
     const { gql, calls } = makeFakeGql(fakeData);
@@ -713,6 +758,28 @@ describe("create_active_check", () => {
       timeoutMs: 5000,
     });
     expect(result.content[0].text).toContain("chk_act1");
+  });
+
+  it("passes an optional description", async () => {
+    const { gql, calls } = makeFakeGql({ createActiveCheck: { id: "chk_act2" } });
+    await findTool("create_active_check").handler(
+      {
+        organizationId: "o1",
+        name: "Homepage",
+        type: "HTTP",
+        target: "https://example.com",
+        intervalSeconds: 60,
+        timeoutMs: 5000,
+        description: "Check the CDN status page",
+      },
+      gql,
+    );
+
+    expect(calls[0].query).toContain("$description: String");
+    expect(calls[0].query).toContain("description: $description");
+    expect(calls[0].variables).toMatchObject({
+      description: "Check the CDN status page",
+    });
   });
 
   it("works without optional method and expectedStatus", async () => {
@@ -1097,6 +1164,46 @@ describe("update_check", () => {
     expect(result.content[0].type).toBe("text");
     expect(result.content[0].text).toContain("c1");
     expect(result.content[0].text).toContain("Renamed Check");
+  });
+
+  it("sends a description, including an empty one that clears it, and shows the result", async () => {
+    const updated = (description: string | null) => ({
+      updateCheck: {
+        id: "c1",
+        name: "Backup",
+        type: "HEARTBEAT",
+        periodSeconds: 86400,
+        graceSeconds: 3600,
+        schedule: null,
+        tz: null,
+        target: null,
+        method: null,
+        expectedStatus: null,
+        intervalSeconds: null,
+        timeoutMs: null,
+        description,
+      },
+    });
+    const tool = findTool("update_check");
+
+    const set = makeFakeGql(updated("Rerun backup.sh"));
+    const result = await tool.handler(
+      { id: "c1", description: "Rerun backup.sh" },
+      set.gql,
+    );
+    expect(set.calls[0].query).toContain("description");
+    expect(set.calls[0].variables).toEqual({
+      id: "c1",
+      input: { description: "Rerun backup.sh" },
+    });
+    expect(result.content[0].text).toContain("Description: Rerun backup.sh");
+
+    const cleared = makeFakeGql(updated(null));
+    await tool.handler({ id: "c1", description: "" }, cleared.gql);
+    expect(cleared.calls[0].variables).toEqual({
+      id: "c1",
+      input: { description: "" },
+    });
   });
 
   it("works with only id — input has no keys, and no key is ever explicitly null", async () => {

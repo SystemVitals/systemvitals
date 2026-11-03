@@ -1,6 +1,8 @@
 import {
   resolveCheckUpdate,
+  normalizeCheckDescription,
   CheckValidationError,
+  MAX_CHECK_DESCRIPTION_LENGTH,
   type CurrentCheck,
 } from './check-update';
 
@@ -270,6 +272,73 @@ describe('resolveCheckUpdate', () => {
           name: null as unknown as string,
         }),
       ).toThrow(/name/i);
+    });
+  });
+
+  describe('description', () => {
+    it('leaves the stored description alone when the key is absent', () => {
+      const { data } = resolveCheckUpdate(HEARTBEAT, { name: 'Renamed' });
+      expect(data).not.toHaveProperty('description');
+    });
+
+    it('trims a provided description and keeps inner line breaks', () => {
+      const { data } = resolveCheckUpdate(HEARTBEAT, {
+        description: '  1. SSH in\n2. Restart the worker  \n',
+      });
+      expect(data.description).toBe('1. SSH in\n2. Restart the worker');
+    });
+
+    it('clears the description on an empty or whitespace-only string', () => {
+      expect(
+        resolveCheckUpdate(HEARTBEAT, { description: '' }).data.description,
+      ).toBeNull();
+      expect(
+        resolveCheckUpdate(HEARTBEAT, { description: ' \n ' }).data.description,
+      ).toBeNull();
+    });
+
+    it('clears the description on an explicit null', () => {
+      const { data } = resolveCheckUpdate(HEARTBEAT, {
+        description: null as unknown as string,
+      });
+      expect(data.description).toBeNull();
+    });
+
+    it('accepts exactly the maximum length', () => {
+      const description = 'x'.repeat(MAX_CHECK_DESCRIPTION_LENGTH);
+      const { data } = resolveCheckUpdate(HEARTBEAT, { description });
+      expect(data.description).toBe(description);
+    });
+
+    it('rejects a description longer than the maximum', () => {
+      expect(() =>
+        resolveCheckUpdate(HEARTBEAT, {
+          description: 'x'.repeat(MAX_CHECK_DESCRIPTION_LENGTH + 1),
+        }),
+      ).toThrow(CheckValidationError);
+    });
+
+    it('applies across a type conversion', () => {
+      const { data } = resolveCheckUpdate(HEARTBEAT, {
+        type: 'HTTP',
+        target: 'https://example.com',
+        intervalSeconds: 300,
+        timeoutMs: 5000,
+        description: 'Check the load balancer',
+      });
+      expect(data.description).toBe('Check the load balancer');
+    });
+  });
+
+  describe('normalizeCheckDescription', () => {
+    it('maps absent, null and blank values to null', () => {
+      expect(normalizeCheckDescription(undefined)).toBeNull();
+      expect(normalizeCheckDescription(null)).toBeNull();
+      expect(normalizeCheckDescription('   ')).toBeNull();
+    });
+
+    it('rejects a non-string value', () => {
+      expect(() => normalizeCheckDescription(42)).toThrow(CheckValidationError);
     });
   });
 

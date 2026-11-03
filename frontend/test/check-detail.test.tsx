@@ -6,9 +6,11 @@ import { CheckDetail, type CheckDetailData } from "@/components/app/check-detail
 import {
   CHANNELS,
   CHECK,
+  CHECK_BY_ORGANIZATION_SLUG,
   DELETE_CHECK,
   PAUSE_CHECK,
   SET_CHECK_CHANNEL_ENABLED,
+  UPDATE_CHECK,
 } from "@/lib/queries";
 import { CHECK_BY_SLUG } from "@/lib/legacy-queries";
 import type { Org } from "@/lib/org-context";
@@ -61,6 +63,7 @@ const CHECK_DATA: CheckDetailData = {
   schedule: null,
   tz: null,
   nextExpectedAt: null,
+  description: null,
   status: "UP",
   pingSlug: "abc123",
   events: [
@@ -168,6 +171,29 @@ describe("CheckDetail", () => {
     expect(screen.getByRole("status", { name: "Up" })).toBeInTheDocument();
     expect(screen.getByText("203.0.113.40")).toBeInTheDocument();
     expect(screen.getByText("missed heartbeat")).toBeInTheDocument();
+  });
+
+  it("requests the description on every check query", () => {
+    expect(print(CHECK)).toContain("description");
+    expect(print(CHECK_BY_ORGANIZATION_SLUG)).toContain("description");
+    expect(print(CHECK_BY_SLUG)).toContain("description");
+    expect(print(UPDATE_CHECK)).toContain("description");
+  });
+
+  it("shows the description as fix instructions, keeping its line breaks", () => {
+    renderDetail({
+      check: { ...CHECK_DATA, description: "1. SSH into the host\n2. Restart the job" },
+    });
+
+    const card = screen.getByRole("region", { name: "How to fix" });
+    const text = within(card).getByText(/SSH into the host/);
+    expect(text.textContent).toBe("1. SSH into the host\n2. Restart the job");
+    expect(text).toHaveClass("whitespace-pre-wrap");
+  });
+
+  it("omits the fix instructions when the check has no description", () => {
+    renderDetail();
+    expect(screen.queryByRole("region", { name: "How to fix" })).not.toBeInTheDocument();
   });
 
   it("shows the skeleton while loading with no data yet", () => {

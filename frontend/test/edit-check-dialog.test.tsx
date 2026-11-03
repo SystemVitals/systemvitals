@@ -45,6 +45,7 @@ interface CheckFixture {
   expectedStatus: number | null;
   intervalSeconds: number | null;
   timeoutMs: number | null;
+  description?: string | null;
 }
 
 const HEARTBEAT: CheckFixture = {
@@ -147,6 +148,7 @@ function renderDialogCapturingVariables(check: CheckFixture, plan = "SIGNAL") {
             expectedStatus: null,
             intervalSeconds: null,
             timeoutMs: null,
+            description: null,
           },
         },
       });
@@ -369,6 +371,32 @@ describe("EditCheckDialog", () => {
     for (const b of unselected) {
       expect(b).toHaveAttribute("aria-pressed", "false");
     }
+  });
+
+  it("prefills the current description", () => {
+    renderDialog({ ...HEARTBEAT, description: "Restart the cron job" });
+    expect(screen.getByLabelText(/how to fix/i)).toHaveValue("Restart the cron job");
+  });
+
+  it("sends the description only when it changes, and an empty string to clear it", async () => {
+    const changed = renderDialogCapturingVariables({ ...HEARTBEAT, description: "Old" });
+    await waitForPlan();
+    fireEvent.change(screen.getByLabelText(/how to fix/i), {
+      target: { value: "1. SSH in\n2. Restart" },
+    });
+    submitForm();
+    await waitFor(() => expect(changed.captured).toHaveLength(1));
+    expect((changed.captured[0].input as Record<string, unknown>).description).toBe(
+      "1. SSH in\n2. Restart"
+    );
+    changed.unmount();
+
+    const cleared = renderDialogCapturingVariables({ ...HEARTBEAT, description: "Old" });
+    await waitForPlan();
+    fireEvent.change(screen.getByLabelText(/how to fix/i), { target: { value: "   " } });
+    submitForm();
+    await waitFor(() => expect(cleared.captured).toHaveLength(1));
+    expect((cleared.captured[0].input as Record<string, unknown>).description).toBe("");
   });
 
   it("prefills the current slug", () => {

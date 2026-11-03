@@ -175,6 +175,8 @@ type CheckEventModel {
 }
 
 type CheckModel {
+  """Operator notes, such as how to fix the check when it is DOWN."""
+  description: String
   events(limit: Int! = 50): [CheckEventModel!]!
   expectedStatus: Int
   graceSeconds: Int

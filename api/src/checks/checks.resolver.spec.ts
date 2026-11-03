@@ -136,6 +136,7 @@ describe('ChecksResolver workspace selectors', () => {
       300,
       undefined,
       undefined,
+      undefined,
     );
   });
 
@@ -166,6 +167,7 @@ describe('ChecksResolver workspace selectors', () => {
       'https://example.test',
       60,
       5000,
+      undefined,
       undefined,
       undefined,
     );

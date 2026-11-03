@@ -8,6 +8,7 @@ interface TelegramAlertInput {
     type: string;
     periodSeconds: number | null;
     intervalSeconds: number | null;
+    description?: string | null;
   };
   totalPings: number;
   lastSuccessAt: Date | null;
@@ -101,7 +102,14 @@ export function buildTelegramDownAlertMessage(
     `<b>Last Ping:</b> ${lastPing(input)}`,
     "",
     siblingSummary(input.otherChecksNotUp),
+    ...fixInstructions(input.check.description),
   ].join("\n");
+}
+
+/** The check's description, shown on DOWN alerts as instructions to fix it. */
+function fixInstructions(description: string | null | undefined): string[] {
+  if (!description) return [];
+  return ["", "<b>How to fix:</b>", escapeHtml(description)];
 }
 
 function formatDowntime(start: Date | null, end: Date | null): string {

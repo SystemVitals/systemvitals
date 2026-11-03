@@ -52,9 +52,12 @@ export async function handleAlert(
   const statusLabel = kind === "down" ? "DOWN" : "recovered";
   const subject = `[SystemVitals] ${check.name} is ${statusLabel}`;
   const now = new Date().toISOString();
+  const fixInstructions = check.description
+    ? `\n\nHow to fix:\n${check.description}`
+    : "";
   const text =
     kind === "down"
-      ? `ALERT: "${check.name}" is DOWN.\n\nStatus: DOWN\nDetected at: ${now}\n\nPlease investigate immediately.`
+      ? `ALERT: "${check.name}" is DOWN.\n\nStatus: DOWN\nDetected at: ${now}\n\nPlease investigate immediately.${fixInstructions}`
       : `RECOVERY: "${check.name}" has recovered.\n\nStatus: UP\nRecovered at: ${now}`;
 
   const alertStatus = kind === "down" ? CheckStatus.DOWN : CheckStatus.UP;

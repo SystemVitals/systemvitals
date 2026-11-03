@@ -87,6 +87,7 @@ interface UpdateCheckResponse {
     expectedStatus: number | null;
     intervalSeconds: number | null;
     timeoutMs: number | null;
+    description: string | null;
   };
 }
 
@@ -154,6 +155,7 @@ interface CheckDetail {
   schedule: string | null;
   tz: string | null;
   nextExpectedAt: string | null;
+  description?: string | null;
   notificationChannelIds: string[];
   events: CheckEvent[];
 }
@@ -439,6 +441,9 @@ const listChecks: ToolDef = {
   },
 };
 
+const CHECK_DESCRIPTION_DESCRIPTION =
+  "Operator notes, such as how to fix the check when it goes DOWN. Shown on the check page and appended to DOWN alerts. Up to 2000 characters.";
+
 const getCheck: ToolDef = {
   name: "get_check",
   description: "Get details and recent events for a specific check.",
@@ -460,6 +465,7 @@ const getCheck: ToolDef = {
           schedule
           tz
           nextExpectedAt
+          description
           notificationChannelIds
           events(limit: 20) {
             id
@@ -490,6 +496,7 @@ const getCheck: ToolDef = {
             ? `Period: ${check.periodSeconds}s`
             : null,
       check.nextExpectedAt ? `Next expected: ${check.nextExpectedAt}` : null,
+      check.description ? `Description:\n${check.description}` : null,
       `Notification channels: ${
         check.notificationChannelIds.length > 0
           ? check.notificationChannelIds.join(", ")
@@ -583,6 +590,7 @@ const createHeartbeatCheck: ToolDef = {
       .optional()
       .describe("IANA timezone (e.g. 'America/New_York') for the cron schedule. Required when schedule is set."),
     graceSeconds: z.number().int().describe("Grace period after a missed ping before alerting"),
+    description: z.string().optional().describe(CHECK_DESCRIPTION_DESCRIPTION),
   },
   handler: async (args, gql) => {
     const workspace = workspaceGraphql(readWorkspaceSelector(args));
@@ -591,6 +599,7 @@ const createHeartbeatCheck: ToolDef = {
     const schedule = args["schedule"] as string | undefined;
     const tz = args["tz"] as string | undefined;
     const graceSeconds = args["graceSeconds"] as number;
+    const description = args["description"] as string | undefined;
 
     const data = await gql(
       `mutation createCheck(
@@ -600,6 +609,7 @@ const createHeartbeatCheck: ToolDef = {
         $periodSeconds: Int
         $schedule: String
         $tz: String
+        $description: String
       ) {
         createCheck(
           ${workspace.argument}
@@ -608,6 +618,7 @@ const createHeartbeatCheck: ToolDef = {
           periodSeconds: $periodSeconds
           schedule: $schedule
           tz: $tz
+          description: $description
         ) {
           id
         }
@@ -619,6 +630,7 @@ const createHeartbeatCheck: ToolDef = {
         periodSeconds,
         schedule,
         tz,
+        description,
       },
     );
 
@@ -640,6 +652,7 @@ const createActiveCheck: ToolDef = {
     timeoutMs: z.number().int().describe("Probe timeout in milliseconds"),
     method: z.string().optional().describe("HTTP method (default GET); ignored for TCP"),
     expectedStatus: z.number().int().optional().describe("Expected HTTP status code (e.g. 200)"),
+    description: z.string().optional().describe(CHECK_DESCRIPTION_DESCRIPTION),
   },
   handler: async (args, gql) => {
     const workspace = workspaceGraphql(readWorkspaceSelector(args));
@@ -650,6 +663,7 @@ const createActiveCheck: ToolDef = {
     const timeoutMs = args["timeoutMs"] as number;
     const method = args["method"] as string | undefined;
     const expectedStatus = args["expectedStatus"] as number | undefined;
+    const description = args["description"] as string | undefined;
 
     const data = await gql(
       `mutation createActiveCheck(
@@ -661,6 +675,7 @@ const createActiveCheck: ToolDef = {
         $timeoutMs: Int!
         $method: String
         $expectedStatus: Int
+        $description: String
       ) {
         createActiveCheck(
           ${workspace.argument}
@@ -671,6 +686,7 @@ const createActiveCheck: ToolDef = {
           timeoutMs: $timeoutMs
           method: $method
           expectedStatus: $expectedStatus
+          description: $description
         ) {
           id
         }
@@ -684,6 +700,7 @@ const createActiveCheck: ToolDef = {
         timeoutMs,
         method,
         expectedStatus,
+        description,
       },
     );
 
@@ -951,12 +968,13 @@ const UPDATE_CHECK_INPUT_KEYS = [
   "expectedStatus",
   "intervalSeconds",
   "timeoutMs",
+  "description",
 ] as const;
 
 const updateCheck: ToolDef = {
   name: "update_check",
   description:
-    "Update mutable fields on an existing check. Only the fields you supply are changed — everything else is left as-is. A heartbeat check is timed by either periodSeconds or schedule+tz, never both. Active (HTTP/TCP) checks use target, intervalSeconds, and timeoutMs; HTTP also has method and expectedStatus. This operation cannot move the check to another organization workspace or change its id, pingSlug, or status.",
+    "Update mutable fields on an existing check. Only the fields you supply are changed — everything else is left as-is. A heartbeat check is timed by either periodSeconds or schedule+tz, never both. Active (HTTP/TCP) checks use target, intervalSeconds, and timeoutMs; HTTP also has method and expectedStatus. Any check can carry a description with fix instructions; it is kept across type changes. This operation cannot move the check to another organization workspace or change its id, pingSlug, or status.",
   inputSchema: {
     id: z.string().min(1).describe("The check ID to update"),
     name: z.string().optional().describe("New display name"),
@@ -1010,6 +1028,10 @@ const updateCheck: ToolDef = {
       .int()
       .optional()
       .describe("Active: probe timeout in milliseconds"),
+    description: z
+      .string()
+      .optional()
+      .describe(`${CHECK_DESCRIPTION_DESCRIPTION} An empty string clears it.`),
   },
   handler: async (args, gql) => {
     const id = args["id"] as string;
@@ -1039,6 +1061,7 @@ const updateCheck: ToolDef = {
           expectedStatus
           intervalSeconds
           timeoutMs
+          description
         }
       }`,
       { id, input },
@@ -1058,6 +1081,7 @@ const updateCheck: ToolDef = {
     }
     if (result.intervalSeconds != null) parts.push(`Interval: ${result.intervalSeconds}s`);
     if (result.timeoutMs != null) parts.push(`Timeout: ${result.timeoutMs}ms`);
+    if (result.description) parts.push(`Description: ${result.description}`);
 
     return text(parts.join(" "));
   },
