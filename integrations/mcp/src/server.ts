@@ -17,6 +17,13 @@ export type BuildServerResult = {
 } & PromiseLike<{ server: McpServer; toolNames: string[] }>;
 
 /**
+ * Sent to MCP clients at initialization so agents look up a check's own
+ * runbook before they audit or try to fix it.
+ */
+export const SERVER_INSTRUCTIONS =
+  "SystemVitals monitors heartbeat and HTTP/TCP checks. Before you audit, debug or fix a check, call get_check: its description holds the human fix steps and its agent instructions (when set) say what to inspect, which fixes are safe to apply and when to stop and ask a human. Follow the agent instructions over generic guesses. Use update_check to keep both fields accurate after you learn something new about a check.";
+
+/**
  * Create and configure the MCP server bound to the given Gql function.
  *
  * Returns both the configured McpServer and the list of tool names that were
@@ -24,7 +31,10 @@ export type BuildServerResult = {
  * to introspect SDK internals.
  */
 export function buildServer(gql: Gql): BuildServerResult {
-  const server = new McpServer({ name: "systemvitals", version: "0.1.0" });
+  const server = new McpServer(
+    { name: "systemvitals", version: "0.1.0" },
+    { instructions: SERVER_INSTRUCTIONS },
+  );
   const toolNames: string[] = [];
 
   const initialization = fetchCredential(gql).then((credential) => {

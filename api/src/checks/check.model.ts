@@ -23,6 +23,12 @@ export class CheckModel {
       'Operator notes, such as how to fix the check when it is DOWN.',
   })
   description?: string | null;
+  @Field(() => String, {
+    nullable: true,
+    description:
+      'Optional instructions for AI agents on how to audit and fix the check. Never included in Telegram, email or Slack alerts.',
+  })
+  agentInstructions?: string | null;
   @Field() type!: string;
   @Field() status!: string;
   @Field({ nullable: true }) pingSlug?: string;

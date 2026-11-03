@@ -7,7 +7,14 @@ export interface NotifyMessage {
   text: string;
   telegramText?: string;
   kind: "down" | "recovery";
-  check: { id: string; name: string; status: string };
+  check: {
+    id: string;
+    name: string;
+    status: string;
+    // Only the webhook payload carries these; the other channels use `text`.
+    description?: string | null;
+    agentInstructions?: string | null;
+  };
 }
 
 export interface TelegramPostResponse {

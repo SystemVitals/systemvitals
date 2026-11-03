@@ -16,6 +16,7 @@ import { isValidCron, isValidTz, minCronGapSeconds } from './cron';
 import {
   resolveCheckUpdate,
   normalizeCheckDescription,
+  normalizeCheckAgentInstructions,
   CheckValidationError,
   type CheckUpdateInput,
 } from './check-update';
@@ -292,8 +293,16 @@ export class ChecksService {
     schedule?: string,
     tz?: string,
     rawDescription?: string | null,
+    rawAgentInstructions?: string | null,
   ) {
-    const description = this.parseDescription(rawDescription);
+    const description = this.parseCheckText(
+      normalizeCheckDescription,
+      rawDescription,
+    );
+    const agentInstructions = this.parseCheckText(
+      normalizeCheckAgentInstructions,
+      rawAgentInstructions,
+    );
     const hasPeriod = typeof periodSeconds === 'number';
     const hasCron = typeof schedule === 'string' && schedule.length > 0;
     if (hasPeriod === hasCron) {
@@ -330,6 +339,7 @@ export class ChecksService {
                   schedule,
                   tz: zone,
                   description,
+                  agentInstructions,
                 },
               }),
           }),
@@ -357,6 +367,7 @@ export class ChecksService {
                 periodSeconds,
                 graceSeconds,
                 description,
+                agentInstructions,
               },
             }),
         }),
@@ -802,8 +813,16 @@ export class ChecksService {
     method?: string,
     expectedStatus?: number,
     rawDescription?: string | null,
+    rawAgentInstructions?: string | null,
   ) {
-    const description = this.parseDescription(rawDescription);
+    const description = this.parseCheckText(
+      normalizeCheckDescription,
+      rawDescription,
+    );
+    const agentInstructions = this.parseCheckText(
+      normalizeCheckAgentInstructions,
+      rawAgentInstructions,
+    );
     if (type !== 'HTTP' && type !== 'TCP') {
       throw new BadRequestException(
         `Type must be HTTP or TCP; got ${type}. HEARTBEAT and PING are not accepted here.`,
@@ -848,15 +867,19 @@ export class ChecksService {
                 method: resolvedMethod,
                 expectedStatus,
                 description,
+                agentInstructions,
               },
             }),
         }),
     );
   }
 
-  private parseDescription(raw?: string | null): string | null {
+  private parseCheckText(
+    normalize: (raw: unknown) => string | null,
+    raw?: string | null,
+  ): string | null {
     try {
-      return normalizeCheckDescription(raw);
+      return normalize(raw);
     } catch (err) {
       if (err instanceof CheckValidationError) {
         throw new BadRequestException(err.message);

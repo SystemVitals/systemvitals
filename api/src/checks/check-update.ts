@@ -11,21 +11,43 @@ export class CheckValidationError extends Error {}
 export const MAX_CHECK_DESCRIPTION_LENGTH = 2000;
 
 /**
- * Trims a description and maps absent or blank values to `null`, which
- * clears the stored description. Inner line breaks are kept.
+ * Agent instructions are never put into alert messages, so they can hold a
+ * longer audit-and-fix procedure than the description.
  */
-export function normalizeCheckDescription(raw: unknown): string | null {
+export const MAX_CHECK_AGENT_INSTRUCTIONS_LENGTH = 4000;
+
+/**
+ * Trims free-form check text and maps absent or blank values to `null`, which
+ * clears the stored value. Inner line breaks are kept.
+ */
+function normalizeCheckText(
+  raw: unknown,
+  label: string,
+  maxLength: number,
+): string | null {
   if (raw === undefined || raw === null) return null;
   if (typeof raw !== 'string') {
-    throw new CheckValidationError('Description must be a string');
+    throw new CheckValidationError(`${label} must be a string`);
   }
-  const description = raw.trim();
-  if (description.length > MAX_CHECK_DESCRIPTION_LENGTH) {
+  const value = raw.trim();
+  if (value.length > maxLength) {
     throw new CheckValidationError(
-      `Description must be at most ${MAX_CHECK_DESCRIPTION_LENGTH} characters`,
+      `${label} must be at most ${maxLength} characters`,
     );
   }
-  return description.length > 0 ? description : null;
+  return value.length > 0 ? value : null;
+}
+
+export function normalizeCheckDescription(raw: unknown): string | null {
+  return normalizeCheckText(raw, 'Description', MAX_CHECK_DESCRIPTION_LENGTH);
+}
+
+export function normalizeCheckAgentInstructions(raw: unknown): string | null {
+  return normalizeCheckText(
+    raw,
+    'Agent instructions',
+    MAX_CHECK_AGENT_INSTRUCTIONS_LENGTH,
+  );
 }
 
 export type EditableCheckType = 'HEARTBEAT' | 'HTTP' | 'TCP';
@@ -44,6 +66,7 @@ export interface CheckUpdateInput {
   name?: string;
   slug?: string;
   description?: string;
+  agentInstructions?: string;
   type?: string;
   periodSeconds?: number;
   graceSeconds?: number;
@@ -126,10 +149,15 @@ export function resolveCheckUpdate(
     data.slug = input.slug;
   }
 
-  // Independent of the check type, so it survives a conversion. An explicit
-  // null or a blank string clears it.
+  // Both are independent of the check type, so they survive a conversion. An
+  // explicit null or a blank string clears them.
   if (input.description !== undefined) {
     data.description = normalizeCheckDescription(input.description);
+  }
+  if (input.agentInstructions !== undefined) {
+    data.agentInstructions = normalizeCheckAgentInstructions(
+      input.agentInstructions,
+    );
   }
 
   if (targetType === 'HEARTBEAT') {

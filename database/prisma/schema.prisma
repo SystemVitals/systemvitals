@@ -204,6 +204,8 @@ model Check {
   slug             String
   // Operator notes, e.g. how to fix the check when it goes DOWN.
   description      String?
+  // Optional instructions for AI agents on how to audit and fix the check.
+  agentInstructions String?          @map("agent_instructions")
   type             CheckType
   status           CheckStatus       @default(NEW)
   projectId        String            @map("project_id")

@@ -1,8 +1,10 @@
 import {
   resolveCheckUpdate,
   normalizeCheckDescription,
+  normalizeCheckAgentInstructions,
   CheckValidationError,
   MAX_CHECK_DESCRIPTION_LENGTH,
+  MAX_CHECK_AGENT_INSTRUCTIONS_LENGTH,
   type CurrentCheck,
 } from './check-update';
 
@@ -339,6 +341,63 @@ describe('resolveCheckUpdate', () => {
 
     it('rejects a non-string value', () => {
       expect(() => normalizeCheckDescription(42)).toThrow(CheckValidationError);
+    });
+  });
+
+  describe('agentInstructions', () => {
+    it('leaves stored agent instructions alone when the key is absent', () => {
+      const { data } = resolveCheckUpdate(HEARTBEAT, {
+        description: 'Human steps',
+      });
+      expect(data).not.toHaveProperty('agentInstructions');
+    });
+
+    it('trims provided agent instructions and keeps inner line breaks', () => {
+      const { data } = resolveCheckUpdate(HEARTBEAT, {
+        agentInstructions: '\n  Audit: read logs\nFix: restart  ',
+      });
+      expect(data.agentInstructions).toBe('Audit: read logs\nFix: restart');
+    });
+
+    it('clears agent instructions on a blank string or explicit null', () => {
+      expect(
+        resolveCheckUpdate(HEARTBEAT, { agentInstructions: '  ' }).data
+          .agentInstructions,
+      ).toBeNull();
+      expect(
+        resolveCheckUpdate(HEARTBEAT, {
+          agentInstructions: null as unknown as string,
+        }).data.agentInstructions,
+      ).toBeNull();
+    });
+
+    it('allows more room than the alert-bound description', () => {
+      expect(MAX_CHECK_AGENT_INSTRUCTIONS_LENGTH).toBeGreaterThan(
+        MAX_CHECK_DESCRIPTION_LENGTH,
+      );
+      const longest = 'x'.repeat(MAX_CHECK_AGENT_INSTRUCTIONS_LENGTH);
+      expect(normalizeCheckAgentInstructions(longest)).toBe(longest);
+    });
+
+    it('rejects agent instructions longer than the maximum', () => {
+      expect(() =>
+        resolveCheckUpdate(HEARTBEAT, {
+          agentInstructions: 'x'.repeat(
+            MAX_CHECK_AGENT_INSTRUCTIONS_LENGTH + 1,
+          ),
+        }),
+      ).toThrow(/Agent instructions must be at most/);
+    });
+
+    it('applies across a type conversion', () => {
+      const { data } = resolveCheckUpdate(HEARTBEAT, {
+        type: 'TCP',
+        target: 'db.example.com:5432',
+        intervalSeconds: 300,
+        timeoutMs: 5000,
+        agentInstructions: 'Check the database host',
+      });
+      expect(data.agentInstructions).toBe('Check the database host');
     });
   });
 
