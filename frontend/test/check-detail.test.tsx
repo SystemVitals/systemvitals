@@ -64,6 +64,7 @@ const CHECK_DATA: CheckDetailData = {
   tz: null,
   nextExpectedAt: null,
   description: null,
+  agentInstructions: null,
   status: "UP",
   pingSlug: "abc123",
   events: [
@@ -173,11 +174,34 @@ describe("CheckDetail", () => {
     expect(screen.getByText("missed heartbeat")).toBeInTheDocument();
   });
 
-  it("requests the description on every check query", () => {
-    expect(print(CHECK)).toContain("description");
-    expect(print(CHECK_BY_ORGANIZATION_SLUG)).toContain("description");
-    expect(print(CHECK_BY_SLUG)).toContain("description");
-    expect(print(UPDATE_CHECK)).toContain("description");
+  it("requests the description and agent instructions on every check query", () => {
+    for (const document of [CHECK, CHECK_BY_ORGANIZATION_SLUG, CHECK_BY_SLUG, UPDATE_CHECK]) {
+      expect(print(document)).toContain("description");
+      expect(print(document)).toContain("agentInstructions");
+    }
+  });
+
+  it("shows agent instructions in their own section", () => {
+    renderDetail({
+      check: {
+        ...CHECK_DATA,
+        description: "Restart the job",
+        agentInstructions: "Audit: read the job logs\nFix: restart only if idle",
+      },
+    });
+
+    const card = screen.getByRole("region", { name: "Agent instructions" });
+    const text = within(card).getByText(/Audit: read the job logs/);
+    expect(text.textContent).toBe("Audit: read the job logs\nFix: restart only if idle");
+    expect(text).toHaveClass("whitespace-pre-wrap");
+    expect(
+      within(screen.getByRole("region", { name: "How to fix" })).queryByText(/Audit:/)
+    ).not.toBeInTheDocument();
+  });
+
+  it("omits the agent instructions section when there are none", () => {
+    renderDetail();
+    expect(screen.queryByRole("region", { name: "Agent instructions" })).not.toBeInTheDocument();
   });
 
   it("shows the description as fix instructions, keeping its line breaks", () => {

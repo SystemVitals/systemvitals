@@ -47,6 +47,7 @@ export const CHECK = gql`
       tz
       nextExpectedAt
       description
+      agentInstructions
       status
       pingSlug
       events(limit: 50) {
@@ -84,6 +85,7 @@ export const CHECK_BY_ORGANIZATION_SLUG = gql`
       intervalSeconds
       timeoutMs
       description
+      agentInstructions
       events {
         id
         status
@@ -362,6 +364,7 @@ export const UPDATE_CHECK = gql`
       intervalSeconds
       timeoutMs
       description
+      agentInstructions
     }
   }
 `;

@@ -51,6 +51,7 @@ const check = {
   intervalSeconds: null,
   timeoutMs: null,
   description: null,
+  agentInstructions: null,
   events: [],
 };
 

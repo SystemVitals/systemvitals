@@ -46,6 +46,7 @@ interface CheckFixture {
   intervalSeconds: number | null;
   timeoutMs: number | null;
   description?: string | null;
+  agentInstructions?: string | null;
 }
 
 const HEARTBEAT: CheckFixture = {
@@ -149,6 +150,7 @@ function renderDialogCapturingVariables(check: CheckFixture, plan = "SIGNAL") {
             intervalSeconds: null,
             timeoutMs: null,
             description: null,
+            agentInstructions: null,
           },
         },
       });
@@ -397,6 +399,40 @@ describe("EditCheckDialog", () => {
     submitForm();
     await waitFor(() => expect(cleared.captured).toHaveLength(1));
     expect((cleared.captured[0].input as Record<string, unknown>).description).toBe("");
+  });
+
+  it("prefills the current agent instructions", () => {
+    renderDialog({ ...HEARTBEAT, agentInstructions: "Audit the cron logs" });
+    expect(screen.getByLabelText(/agent instructions/i)).toHaveValue("Audit the cron logs");
+  });
+
+  it("sends agent instructions only when they change, and an empty string to clear them", async () => {
+    const unchanged = renderDialogCapturingVariables({ ...HEARTBEAT, agentInstructions: "Old" });
+    await waitForPlan();
+    fireEvent.change(screen.getByLabelText(/name/i), { target: { value: "Renamed job" } });
+    submitForm();
+    await waitFor(() => expect(unchanged.captured).toHaveLength(1));
+    expect(unchanged.captured[0].input).not.toHaveProperty("agentInstructions");
+    unchanged.unmount();
+
+    const changed = renderDialogCapturingVariables({ ...HEARTBEAT, agentInstructions: "Old" });
+    await waitForPlan();
+    fireEvent.change(screen.getByLabelText(/agent instructions/i), {
+      target: { value: "Audit: logs\nFix: restart" },
+    });
+    submitForm();
+    await waitFor(() => expect(changed.captured).toHaveLength(1));
+    expect((changed.captured[0].input as Record<string, unknown>).agentInstructions).toBe(
+      "Audit: logs\nFix: restart"
+    );
+    changed.unmount();
+
+    const cleared = renderDialogCapturingVariables({ ...HEARTBEAT, agentInstructions: "Old" });
+    await waitForPlan();
+    fireEvent.change(screen.getByLabelText(/agent instructions/i), { target: { value: " " } });
+    submitForm();
+    await waitFor(() => expect(cleared.captured).toHaveLength(1));
+    expect((cleared.captured[0].input as Record<string, unknown>).agentInstructions).toBe("");
   });
 
   it("prefills the current slug", () => {
