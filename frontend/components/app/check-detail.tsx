@@ -54,6 +54,7 @@ export interface CheckDetailData {
   tz: string | null;
   nextExpectedAt: string | null;
   description: string | null;
+  agentInstructions: string | null;
   status: CheckStatus;
   pingSlug: string | null;
   events: CheckEvent[];
@@ -505,6 +506,21 @@ export function CheckDetail({
               </CardHeader>
               <CardContent>
                 <p className="whitespace-pre-wrap break-words text-sm">{check.description}</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {check.agentInstructions && (
+            <Card role="region" aria-labelledby="check-agent-instructions">
+              <CardHeader className="pb-2">
+                <CardTitle id="check-agent-instructions" className="text-base">
+                  Agent instructions
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="whitespace-pre-wrap break-words text-sm text-muted-foreground">
+                  {check.agentInstructions}
+                </p>
               </CardContent>
             </Card>
           )}

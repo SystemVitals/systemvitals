@@ -92,10 +92,13 @@ export interface EditableCheck {
   intervalSeconds: number | null;
   timeoutMs: number | null;
   description?: string | null;
+  agentInstructions?: string | null;
 }
 
 /** Mirrors `MAX_CHECK_DESCRIPTION_LENGTH` in `api/src/checks/check-update.ts`. */
 const MAX_DESCRIPTION_LENGTH = 2000;
+/** Mirrors `MAX_CHECK_AGENT_INSTRUCTIONS_LENGTH` in `api/src/checks/check-update.ts`. */
+const MAX_AGENT_INSTRUCTIONS_LENGTH = 4000;
 
 /**
  * What `onSaved` hands back after a successful save — just enough for a
@@ -123,6 +126,7 @@ export function EditCheckDialog({ open, onOpenChange, check, onSaved }: EditChec
   const [name, setName] = useState(check.name);
   const [slug, setSlug] = useState(check.slug);
   const [description, setDescription] = useState(check.description ?? "");
+  const [agentInstructions, setAgentInstructions] = useState(check.agentInstructions ?? "");
 
   // Heartbeat fields
   const [periodSeconds, setPeriodSeconds] = useState(String(check.periodSeconds ?? 300));
@@ -152,6 +156,7 @@ export function EditCheckDialog({ open, onOpenChange, check, onSaved }: EditChec
       setName(check.name);
       setSlug(check.slug);
       setDescription(check.description ?? "");
+      setAgentInstructions(check.agentInstructions ?? "");
       setPeriodSeconds(String(check.periodSeconds ?? 300));
       setGraceSeconds(String(check.graceSeconds ?? 60));
       setScheduleType(check.schedule ? "cron" : "simple");
@@ -223,9 +228,12 @@ export function EditCheckDialog({ open, onOpenChange, check, onSaved }: EditChec
     const input: Record<string, unknown> = { name: name.trim() };
     if (type !== currentType) input.type = type;
     if (slug.trim() !== check.slug) input.slug = slug.trim();
-    // Sent only when it changed; an empty string clears it server-side.
+    // Each text is sent only when it changed; an empty string clears it server-side.
     if (description.trim() !== (check.description ?? "").trim()) {
       input.description = description.trim();
+    }
+    if (agentInstructions.trim() !== (check.agentInstructions ?? "").trim()) {
+      input.agentInstructions = agentInstructions.trim();
     }
 
     if (type === "HEARTBEAT") {
@@ -351,6 +359,24 @@ export function EditCheckDialog({ open, onOpenChange, check, onSaved }: EditChec
               />
               <p className="text-xs text-muted-foreground">
                 Shown on this check&apos;s page and added to its DOWN alerts.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-check-agent-instructions">
+                Agent instructions <span className="text-muted-foreground">(optional)</span>
+              </Label>
+              <Textarea
+                id="edit-check-agent-instructions"
+                value={agentInstructions}
+                onChange={(e) => setAgentInstructions(e.target.value)}
+                maxLength={MAX_AGENT_INSTRUCTIONS_LENGTH}
+                rows={4}
+                placeholder={"Audit: what to inspect first\nFix: what is safe to do, and when to ask a human"}
+              />
+              <p className="text-xs text-muted-foreground">
+                How an AI agent should audit and fix this check. Agents read it through the MCP
+                server and webhook alerts. It is not sent in Telegram, email or Slack alerts.
               </p>
             </div>
 

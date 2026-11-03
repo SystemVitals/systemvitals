@@ -51,6 +51,9 @@ package publication.
 - The dashboard sorts checks by severity (down, late, waiting, up, paused),
   offers status filters, and adds search at six or more checks. Check pages
   provide pause/resume and a confirmed delete.
+- Check pages show the optional "How to fix" description and agent
+  instructions in their own cards; both are edited in the edit-check dialog
+  and sent only when they change (an empty value clears them).
 - Destructive actions (deleting a check, removing a member, revoking a token)
   always confirm in a shadcn Dialog.
 

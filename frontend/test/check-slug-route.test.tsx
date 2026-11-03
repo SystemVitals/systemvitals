@@ -69,6 +69,7 @@ interface CheckRecord {
   intervalSeconds: number | null;
   timeoutMs: number | null;
   description: string | null;
+  agentInstructions: string | null;
   events: unknown[];
 }
 
@@ -94,6 +95,7 @@ const INITIAL_CHECK: CheckRecord = {
   intervalSeconds: null,
   timeoutMs: null,
   description: null,
+  agentInstructions: null,
   events: [],
 };
 
