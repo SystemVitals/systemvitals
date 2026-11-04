@@ -68,6 +68,25 @@ Ordinary successful events do not produce recovery notifications, and changing
 a channel selection while a check is already `DOWN` does not notify it
 retroactively. Routing changes affect future transitions only.
 
+## Outage history
+
+`check_outages` holds one row per period a check spent `DOWN`, with `ended_at`
+left `NULL` while the outage is ongoing; a partial unique index allows one open
+outage per check. The `checks_record_outage` trigger opens a row when a check's
+status becomes `DOWN` and closes it when the status leaves `DOWN`, so
+application code never writes outages. Account-wide reporting reads outages,
+not raw check events.
+
+The `20261104120100_backfill_check_outages` migration rebuilt earlier history
+from `check_events`. Each run of consecutive `DOWN` events is one outage that
+ends at the next non-`DOWN` event. Pausing writes no event, so for HTTP, TCP,
+and ping checks a gap longer than `max(3 × interval, 5 minutes)` ends the
+outage one interval after the last `DOWN` event before the gap. Heartbeats have
+no regular cadence, so a heartbeat paused while `DOWN` keeps counting until its
+next non-`DOWN` event (or its `updated_at`, if none exists). The migration
+scans events before it locks `checks`, leaves outages that start after the
+trigger was installed to the trigger, and merges any overlap between the two.
+
 ## Per-check notification routing
 
 The effective routing set is every globally enabled notification channel in
