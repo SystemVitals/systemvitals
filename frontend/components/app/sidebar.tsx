@@ -8,6 +8,7 @@ import {
   CreditCard,
   Globe,
   LayoutDashboard,
+  LayoutGrid,
   LogOut,
   Shield,
   UserCog,
@@ -34,6 +35,10 @@ interface NavSection {
 // Grouped by scope so it is clear which pages follow the selected
 // organization and which belong to the signed-in account.
 export const APP_NAV_SECTIONS: NavSection[] = [
+  {
+    label: "All organizations",
+    items: [{ label: "Overview", href: "/overview", icon: LayoutGrid }],
+  },
   {
     label: "Monitoring",
     items: [

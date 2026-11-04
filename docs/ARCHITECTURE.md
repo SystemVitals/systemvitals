@@ -88,6 +88,15 @@ scans events into a staging table before it locks `checks`, skips checks
 deleted in the meantime, leaves outages that start after the trigger was
 installed to the trigger, and merges any overlap between the two.
 
+### Account overview
+
+The `accountOverview(range, timeZone)` query reports across all of the caller's
+current organization memberships. Account sessions and account PATs may call
+it; scoped and legacy tokens are rejected. It aggregates `check_outages`
+(clipped to the range) rather than raw check events. The frontend `/overview`
+page renders it client-side, keeps the range in `?range=`, and polls while the
+tab is visible.
+
 ## Per-check notification routing
 
 The effective routing set is every globally enabled notification channel in
