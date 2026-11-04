@@ -100,6 +100,82 @@ existing token storage and requires no database migration or worker change.
 Older API versions reject account PATs instead of treating them as legacy broad
 tokens; existing scoped and legacy tokens remain compatible with the new API.
 
+## Account overview release: outage history migrations
+
+This release adds the first database trigger and a backfill. The API
+entrypoint applies three migrations before the API is ready:
+
+| Migration | What it does | Effect on writers |
+| --- | --- | --- |
+| `20261104120000_check_outages` | Creates `check_outages`, the `checks_record_outage` trigger, and a backfill cutoff | Waits briefly for in-flight status writes |
+| `20261104120100_backfill_check_outages` | Rebuilds outage history from `check_events` | See below |
+| `20261104120200_check_outages_ended_at_index` | Indexes `check_outages (check_id, ended_at)` for the overview query | Pauses status changes while it builds over the (small) outage table |
+
+From the first migration on, every write that changes `checks.status` (worker
+probes and watchdog, pings, pause and resume, type changes, admin actions, and
+manual SQL) also opens or closes a `check_outages` row through
+`checks_record_outage`. Writes that leave the status unchanged do nothing extra.
+
+The backfill runs in one transaction with no `lock_timeout`:
+
+1. **Phase (a)** scans all of `check_events` into a temporary staging table.
+   It only reads, so probes, pings, and status writes continue.
+2. **Phases (b)–(e)** lock `checks` (`FOR KEY SHARE` on every row, then
+   `SHARE ROW EXCLUSIVE`). Until the commit, status writes and pings wait while
+   the staged outages are inserted and overlapping outages are merged. This
+   pause grows with outage history, not with the total number of events.
+   Without a `lock_timeout`, the lock also waits behind any long-running
+   transaction that touches `checks`, and writers queue behind it.
+
+Size the release before deploying. Rehearse on a restored backup for a real
+timing:
+
+```sql
+-- Rows phase (a) scans (writers keep running) and an upper bound for outages.
+SELECT count(*) AS events,
+       count(*) FILTER (WHERE status = 'DOWN') AS down_events
+FROM check_events;
+
+-- Roughly the outage rows inserted while writers wait: one per run of
+-- consecutive DOWN events. Probe gaps (pauses) split a few more.
+SELECT count(*) AS estimated_outages
+FROM (
+  SELECT status,
+         lag(status) OVER (PARTITION BY check_id ORDER BY "timestamp", id) AS previous
+  FROM check_events
+) e
+WHERE status = 'DOWN' AND previous IS DISTINCT FROM 'DOWN';
+
+-- Long-running transactions the table lock would queue behind.
+SELECT pid, now() - xact_start AS open_for, state, left(query, 80) AS query
+FROM pg_stat_activity
+WHERE datname = current_database() AND xact_start < now() - interval '1 minute';
+```
+
+The API image's health check allows a 31-minute start period, which covers
+migrations. If the container is stopped mid-backfill, the transaction rolls
+back; recover as for a failure, below.
+
+**If the backfill fails**, for example when it is chosen as a deadlock victim
+because an organization or project delete cascades over several checks while
+the backfill takes its row locks, the transaction rolls back cleanly. The first
+migration has already committed, so the trigger keeps recording new outages and
+the previous API keeps serving. Prisma marks the backfill as failed and refuses
+later deploys until it is resolved. From `database/`, with `DATABASE_URL`
+pointing at the production database:
+
+```bash
+npx prisma migrate resolve --rolled-back 20261104120100_backfill_check_outages
+```
+
+Then redeploy the API. The re-run reuses the original cutoff, leaves outages
+recorded since then to the trigger, and merges any overlap.
+
+The overview requires **PostgreSQL 16 or later**: its buckets use the
+time-zone-aware `generate_series(start, stop, step, time_zone)`. The bundled
+Compose files and CI pin PostgreSQL 18. On older servers the migrations
+succeed, but `accountOverview` requests fail.
+
 ## Operational checks
 
 Before and after every deployment:
