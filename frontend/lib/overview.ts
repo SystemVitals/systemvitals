@@ -83,6 +83,29 @@ export function formatBrokenSeconds(seconds: number): string {
   return seconds <= 0 ? "0m" : formatElapsed(seconds * 1000);
 }
 
+/**
+ * Whether a check's longest outage is still open. A check can hold a long
+ * closed outage and a short open one; only the longest span (clipped to the
+ * range, open spans measured to `rangeEnd`) decides. Ties prefer the open span.
+ */
+export function isLongestOutageOngoing(
+  outages: { startedAt: string; endedAt: string | null }[],
+  rangeEnd: string,
+): boolean {
+  let longest = -1;
+  let ongoing = false;
+  for (const outage of outages) {
+    const end = outage.endedAt === null ? Date.parse(rangeEnd) : Date.parse(outage.endedAt);
+    const length = end - Date.parse(outage.startedAt);
+    const open = outage.endedAt === null;
+    if (length > longest || (length === longest && open)) {
+      longest = length;
+      ongoing = open;
+    }
+  }
+  return ongoing;
+}
+
 /** `part` as a CSS percentage of `whole`, clamped to 0–100%, e.g. "30.94%". */
 export function percentOf(part: number, whole: number): string {
   if (whole <= 0) return "0%";

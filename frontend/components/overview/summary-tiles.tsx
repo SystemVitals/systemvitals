@@ -1,6 +1,5 @@
 import { Card, CardContent } from "@/components/ui/card";
-import { formatBrokenSeconds, formatUptime } from "@/lib/overview";
-import { cn } from "@/lib/utils";
+import { formatBrokenSeconds, formatUptime, isLongestOutageOngoing } from "@/lib/overview";
 
 export interface OverviewSummaryData {
   uptimePercent: number | null;
@@ -9,9 +8,9 @@ export interface OverviewSummaryData {
   ongoingCount: number;
   medianOutageSeconds: number | null;
   longestOutage: {
-    brokenSeconds: number;
-    ongoing: boolean;
+    longestOutageSeconds: number;
     check: { name: string };
+    outages: { startedAt: string; endedAt: string | null }[];
   } | null;
 }
 
@@ -41,10 +40,12 @@ export function SummaryTiles({
   summary,
   checkCount,
   rangeTitle,
+  rangeEnd,
 }: {
   summary: OverviewSummaryData;
   checkCount: number;
   rangeTitle: string;
+  rangeEnd: string;
 }) {
   const longest = summary.longestOutage;
   return (
@@ -82,12 +83,14 @@ export function SummaryTiles({
         </Tile>
         <Tile
           label="Longest outage"
-          value={longest ? formatBrokenSeconds(longest.brokenSeconds) : "—"}
+          value={longest ? formatBrokenSeconds(longest.longestOutageSeconds) : "—"}
         >
           {longest ? (
             <>
               {longest.check.name}
-              {longest.ongoing && <span className={cn("text-destructive")}>, ongoing</span>}
+              {isLongestOutageOngoing(longest.outages, rangeEnd) && (
+                <span className="text-destructive">, ongoing</span>
+              )}
             </>
           ) : (
             "no outages"
