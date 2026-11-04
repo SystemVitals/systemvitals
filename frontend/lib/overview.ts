@@ -83,34 +83,24 @@ export function formatBrokenSeconds(seconds: number): string {
   return seconds <= 0 ? "0m" : formatElapsed(seconds * 1000);
 }
 
-/**
- * Whether a check's longest outage is still open. A check can hold a long
- * closed outage and a short open one; only the longest span (clipped to the
- * range, open spans measured to `rangeEnd`) decides. Ties prefer the open span.
- */
-export function isLongestOutageOngoing(
-  outages: { startedAt: string; endedAt: string | null }[],
-  rangeEnd: string,
-): boolean {
-  let longest = -1;
-  let ongoing = false;
-  for (const outage of outages) {
-    const end = outage.endedAt === null ? Date.parse(rangeEnd) : Date.parse(outage.endedAt);
-    const length = end - Date.parse(outage.startedAt);
-    const open = outage.endedAt === null;
-    if (length > longest || (length === longest && open)) {
-      longest = length;
-      ongoing = open;
-    }
-  }
-  return ongoing;
-}
-
 /** `part` as a CSS percentage of `whole`, clamped to 0–100%, e.g. "30.94%". */
 export function percentOf(part: number, whole: number): string {
   if (whole <= 0) return "0%";
   const share = Math.min(100, Math.max(0, (part / whole) * 100));
   return `${Number(share.toFixed(2))}%`;
+}
+
+/**
+ * One or more nearby outages merged by the API for the timeline (at most 200
+ * per check). `startedAt` is already clipped to the range.
+ */
+export interface OutageSpan {
+  startedAt: string;
+  /** Null while the last merged outage is ongoing. */
+  endedAt: string | null;
+  outageCount: number;
+  /** The merged outages' summed broken time, excluding the gaps between them. */
+  brokenSeconds: number;
 }
 
 export interface CheckBrokenTimeRow {
@@ -119,7 +109,9 @@ export interface CheckBrokenTimeRow {
   brokenSeconds: number;
   outageCount: number;
   longestOutageSeconds: number;
+  /** Whether the single longest outage is still open (not just any outage). */
+  longestOutageOngoing: boolean;
   ongoing: boolean;
   uptimePercent: number | null;
-  outages: { startedAt: string; endedAt: string | null }[];
+  outages: OutageSpan[];
 }

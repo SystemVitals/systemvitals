@@ -59,7 +59,7 @@ export function LongestBrokenTable({
             </td>
             <td className={cn(WIDE_ONLY, "px-3 py-2.5 text-right whitespace-nowrap tabular-nums")}>
               {formatBrokenSeconds(row.longestOutageSeconds)}
-              {row.ongoing && (
+              {row.longestOutageOngoing && (
                 <span className="ml-1.5 text-[10px] font-semibold tracking-wide text-destructive">
                   ONGOING
                 </span>

@@ -618,14 +618,11 @@ export const ACCOUNT_OVERVIEW = gql`
         medianOutageSeconds
         longestOutage {
           longestOutageSeconds
+          longestOutageOngoing
           check {
             id
             name
             slug
-          }
-          outages {
-            startedAt
-            endedAt
           }
         }
       }
@@ -646,6 +643,7 @@ export const ACCOUNT_OVERVIEW = gql`
         brokenSeconds
         outageCount
         longestOutageSeconds
+        longestOutageOngoing
         ongoing
         uptimePercent
         check {
@@ -661,6 +659,8 @@ export const ACCOUNT_OVERVIEW = gql`
         outages {
           startedAt
           endedAt
+          outageCount
+          brokenSeconds
         }
       }
     }

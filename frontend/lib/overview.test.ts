@@ -4,7 +4,6 @@ import {
   brokenReason,
   formatBrokenSeconds,
   formatUptime,
-  isLongestOutageOngoing,
   parseRangeParam,
   percentOf,
   rangeOfOverview,
@@ -105,36 +104,5 @@ describe("percentOf", () => {
     expect(percentOf(5, 0)).toBe("0%");
     expect(percentOf(-5, 10)).toBe("0%");
     expect(percentOf(15, 10)).toBe("100%");
-  });
-});
-
-describe("isLongestOutageOngoing", () => {
-  const rangeEnd = now.toISOString();
-  const closed = (startAgo: number, length: number) => ({
-    startedAt: ago(startAgo),
-    endedAt: ago(startAgo - length),
-  });
-  const open = (startAgo: number) => ({ startedAt: ago(startAgo), endedAt: null });
-
-  it("is true when the longest span is still open", () => {
-    expect(isLongestOutageOngoing([closed(600 * MIN, 60 * MIN), open(90 * MIN)], rangeEnd)).toBe(
-      true,
-    );
-  });
-
-  it("is false when the longest span closed and only a shorter one is open", () => {
-    expect(isLongestOutageOngoing([closed(600 * MIN, 120 * MIN), open(10 * MIN)], rangeEnd)).toBe(
-      false,
-    );
-  });
-
-  it("measures an open span up to rangeEnd and prefers it on a tie", () => {
-    expect(isLongestOutageOngoing([closed(600 * MIN, 30 * MIN), open(30 * MIN)], rangeEnd)).toBe(
-      true,
-    );
-  });
-
-  it("is false without outages", () => {
-    expect(isLongestOutageOngoing([], rangeEnd)).toBe(false);
   });
 });

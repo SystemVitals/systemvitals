@@ -6,13 +6,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { formatDateTime } from "@/lib/format";
-import { formatBrokenSeconds, percentOf } from "@/lib/overview";
+import { formatBrokenSeconds, percentOf, type OutageSpan } from "@/lib/overview";
 import { cn } from "@/lib/utils";
 
 interface TimelineRow {
   check: { id: string; name: string };
   organization: { name: string };
-  outages: { startedAt: string; endedAt: string | null }[];
+  outages: OutageSpan[];
 }
 
 const HOUR_MS = 3_600_000;
@@ -58,32 +58,60 @@ function axisTicks(startMs: number, endMs: number) {
   return ticks;
 }
 
+/**
+ * Text for one span. A single outage reads "Down from … to …, 1h"; a merged
+ * span says how many outages it holds and their summed broken time, which
+ * excludes the gaps between them and so can be shorter than the bar.
+ */
+function describeSpan(outage: OutageSpan, from: number, to: number) {
+  const started = formatDateTime(new Date(from));
+  const ended = outage.endedAt === null ? "ongoing" : formatDateTime(outage.endedAt);
+  if (outage.outageCount > 1) {
+    const title = `${outage.outageCount} outages · ${formatBrokenSeconds(outage.brokenSeconds)} down`;
+    return {
+      title,
+      label:
+        outage.endedAt === null
+          ? `${title}, from ${started}, ongoing`
+          : `${title}, from ${started} to ${ended}`,
+      started,
+      ended,
+    };
+  }
+  const duration = formatBrokenSeconds(Math.floor(Math.max(0, to - from) / 1000));
+  return {
+    title: `Down for ${duration}`,
+    label:
+      outage.endedAt === null
+        ? `Down from ${started}, ongoing, ${duration}`
+        : `Down from ${started} to ${ended}, ${duration}`,
+    started,
+    ended,
+  };
+}
+
 function OutageSegment({
   outage,
   startMs,
   endMs,
 }: {
-  outage: { startedAt: string; endedAt: string | null };
+  outage: OutageSpan;
   startMs: number;
   endMs: number;
 }) {
   const span = endMs - startMs;
+  // The API clips spans to the range; clipping again keeps the label's start
+  // and duration in step with the bar even if it did not.
   const from = Math.max(startMs, Date.parse(outage.startedAt));
   const to = outage.endedAt === null ? endMs : Math.min(endMs, Date.parse(outage.endedAt));
   const left = percentOf(from - startMs, span);
   const width = percentOf(to - from, span);
-  const duration = formatBrokenSeconds(Math.floor(Math.max(0, to - from) / 1000));
-  const started = formatDateTime(outage.startedAt);
-  const ended = outage.endedAt === null ? "ongoing" : formatDateTime(outage.endedAt);
+  const { title, label, started, ended } = describeSpan(outage, from, to);
 
   return (
     <Tooltip>
       <TooltipTrigger
-        aria-label={
-          outage.endedAt === null
-            ? `Down from ${started}, ongoing, ${duration}`
-            : `Down from ${started} to ${ended}, ${duration}`
-        }
+        aria-label={label}
         className="absolute inset-y-0 min-w-1 rounded-sm bg-destructive outline-none focus-visible:ring-2 focus-visible:ring-ring"
         // When min-w-1 widens a short outage, grow it leftwards so it still ends
         // at its real end; an ongoing one then never pokes past the now line.
@@ -91,7 +119,7 @@ function OutageSegment({
       />
       <TooltipContent>
         <div className="space-y-0.5">
-          <p className="font-medium">Down for {duration}</p>
+          <p className="font-medium">{title}</p>
           <p>
             {started} – {ended}
           </p>

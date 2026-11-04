@@ -4,11 +4,13 @@ import { BrokenTimeChart } from "@/components/overview/broken-time-chart";
 import { OrganizationBrokenTime } from "@/components/overview/organization-broken-time";
 import { OutageTimeline } from "@/components/overview/outage-timeline";
 import { LongestBrokenTable } from "@/components/overview/longest-broken-table";
+import { formatDateTime } from "@/lib/format";
 import { formatUptime, type CheckBrokenTimeRow } from "@/lib/overview";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const RANGE_START = "2026-10-28T00:00:00.000Z";
 const RANGE_END = "2026-11-04T00:00:00.000Z";
+const START_MS = Date.parse(RANGE_START);
 const END_MS = Date.parse(RANGE_END);
 
 function iso(ms: number) {
@@ -20,15 +22,25 @@ function percent(value: string) {
   return parseFloat(value);
 }
 
-function timelineRow(
-  id: string,
-  outages: { startedAt: string; endedAt: string | null }[],
-  name = id,
-) {
+type SpanInput = {
+  startedAt: string;
+  endedAt: string | null;
+  outageCount?: number;
+  brokenSeconds?: number;
+};
+
+/** One timeline row; spans default to a single outage covering the span. */
+function timelineRow(id: string, outages: SpanInput[], name = id) {
   return {
     check: { id, name },
     organization: { name: "Acme Prod" },
-    outages,
+    outages: outages.map((span) => ({
+      outageCount: 1,
+      brokenSeconds:
+        (Date.parse(span.endedAt ?? RANGE_END) - Math.max(START_MS, Date.parse(span.startedAt))) /
+        1000,
+      ...span,
+    })),
   };
 }
 
@@ -43,6 +55,7 @@ function brokenRow(overrides: Partial<CheckBrokenTimeRow> = {}): CheckBrokenTime
     brokenSeconds: 111900,
     outageCount: 2,
     longestOutageSeconds: 108000,
+    longestOutageOngoing: false,
     ongoing: false,
     uptimePercent: 95.6789,
     outages: [],
@@ -141,6 +154,64 @@ describe("OutageTimeline", () => {
     expect(segment).toHaveAccessibleName(/ongoing/);
   });
 
+  it("describes a merged span by its outage count and summed broken time", () => {
+    const start = END_MS - 2 * DAY_MS;
+    const end = start + 3 * 3_600_000;
+    render(
+      <OutageTimeline
+        rangeStart={RANGE_START}
+        rangeEnd={RANGE_END}
+        rows={[
+          timelineRow("c1", [
+            { startedAt: iso(start), endedAt: iso(end), outageCount: 3, brokenSeconds: 4800 },
+          ]),
+        ]}
+        late={[]}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /^3 outages/ })).toHaveAccessibleName(
+      `3 outages · 1h 20m down, from ${formatDateTime(iso(start))} to ${formatDateTime(iso(end))}`,
+    );
+  });
+
+  it("describes an ongoing merged span", () => {
+    const start = END_MS - 2 * 3_600_000;
+    render(
+      <OutageTimeline
+        rangeStart={RANGE_START}
+        rangeEnd={RANGE_END}
+        rows={[
+          timelineRow("c1", [
+            { startedAt: iso(start), endedAt: null, outageCount: 4, brokenSeconds: 5400 },
+          ]),
+        ]}
+        late={[]}
+      />,
+    );
+    expect(screen.getByRole("button", { name: /^4 outages/ })).toHaveAccessibleName(
+      `4 outages · 1h 30m down, from ${formatDateTime(iso(start))}, ongoing`,
+    );
+  });
+
+  it("labels a single outage from its clipped start so start and duration agree", () => {
+    render(
+      <OutageTimeline
+        rangeStart={RANGE_START}
+        rangeEnd={RANGE_END}
+        rows={[
+          timelineRow("c1", [
+            { startedAt: iso(START_MS - DAY_MS), endedAt: iso(START_MS + 3_600_000) },
+          ]),
+        ]}
+        late={[]}
+      />,
+    );
+    const [segment] = segments();
+    expect(segment).toHaveAccessibleName(
+      `Down from ${formatDateTime(RANGE_START)} to ${formatDateTime(iso(START_MS + 3_600_000))}, 1h`,
+    );
+  });
+
   it("caps the rows and says how many more there are", () => {
     const rows = Array.from({ length: 12 }, (_, index) =>
       timelineRow(`c${index}`, [{ startedAt: iso(END_MS - DAY_MS), endedAt: RANGE_END }], `check-${index}`),
@@ -186,12 +257,17 @@ describe("OutageTimeline", () => {
 });
 
 describe("LongestBrokenTable", () => {
-  it("tags ongoing outages", () => {
+  it("tags the longest outage ONGOING only when that outage is still open", () => {
     render(
       <LongestBrokenTable
         rows={[
-          brokenRow({ ongoing: true }),
-          brokenRow({ check: { id: "c2", name: "api-health", slug: "api-health" } }),
+          brokenRow({ ongoing: true, longestOutageOngoing: true }),
+          // A shorter outage is open, but the longest one closed.
+          brokenRow({
+            check: { id: "c2", name: "api-health", slug: "api-health" },
+            ongoing: true,
+            longestOutageOngoing: false,
+          }),
         ]}
       />,
     );

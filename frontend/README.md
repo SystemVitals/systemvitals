@@ -45,7 +45,11 @@ package publication.
   the `accountOverview` query, polls while the tab is visible, and keeps the
   range in `?range=` (`24h`, `7d`, `30d`, `90d`, default `30d`). Charts and
   tables live in `components/overview/`. While a new range loads, the previous
-  result stays on screen, dimmed, and its labels follow the data shown.
+  result stays on screen, dimmed, and its labels follow the data shown. The
+  outage timeline draws the API's merged spans (at most 200 per check); a
+  merged span's tooltip gives its outage count and summed broken time. The
+  Longest outage tile and the table's ONGOING tag both read
+  `longestOutageOngoing`.
 - Signed-in pages start with `components/app/page-header.tsx` and rely on the
   layout's padding rather than adding their own.
 - Check statuses render as plain-language labels (`Up`, `Down`, `Late` for

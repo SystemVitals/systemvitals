@@ -224,7 +224,6 @@ function OverviewContent() {
             summary={overview.summary}
             checkCount={overview.checkCount}
             rangeTitle={shownRange.title}
-            rangeEnd={overview.rangeEnd}
           />
           {overview.summary.outageCount === 0 ? (
             <Card>

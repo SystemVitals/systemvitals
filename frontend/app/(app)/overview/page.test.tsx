@@ -59,20 +59,9 @@ const summary = {
   medianOutageSeconds: 1080,
   longestOutage: {
     __typename: "CheckBrokenTime",
-    // The check's total broken time and "has any open outage" flag; the tile
-    // must show the longest single span instead.
-    brokenSeconds: 111900,
-    ongoing: true,
     longestOutageSeconds: 108000,
+    longestOutageOngoing: true,
     check: { __typename: "CheckModel", id: "c9", name: "nightly-backup", slug: "nightly-backup" },
-    outages: [
-      { __typename: "OutageSpan", startedAt: "2026-11-02T18:00:00.000Z", endedAt: null },
-      {
-        __typename: "OutageSpan",
-        startedAt: "2026-10-30T00:00:00.000Z",
-        endedAt: "2026-10-30T01:05:00.000Z",
-      },
-    ],
   },
 };
 
@@ -143,12 +132,19 @@ const brokenCheck = {
   brokenSeconds: 111900,
   outageCount: 2,
   longestOutageSeconds: 108000,
+  longestOutageOngoing: true,
   ongoing: true,
   uptimePercent: 95.6789,
   check: { __typename: "CheckModel", id: "c9", name: "nightly-backup", slug: "nightly-backup" },
   organization: { ...org, id: "o2", name: "Side Projects", slug: "side" },
   outages: [
-    { __typename: "OutageSpan", startedAt: "2026-11-03T00:00:00.000Z", endedAt: null },
+    {
+      __typename: "OutageSpan",
+      startedAt: "2026-11-03T00:00:00.000Z",
+      endedAt: null,
+      outageCount: 2,
+      brokenSeconds: 86400,
+    },
   ],
 };
 
@@ -204,27 +200,21 @@ describe("OverviewPage", () => {
     expect(tile.getByText(", ongoing")).toBeTruthy();
   });
 
-  it("does not call the longest outage ongoing when only a shorter one is open", async () => {
+  it("does not call the longest outage ongoing when only a shorter one is open, in the tile or the table", async () => {
+    // The check has an open outage, but its longest one closed.
     renderPage({
       summary: {
         ...summary,
-        longestOutage: {
-          ...summary.longestOutage,
-          outages: [
-            {
-              __typename: "OutageSpan",
-              startedAt: "2026-10-30T00:00:00.000Z",
-              endedAt: "2026-10-31T06:00:00.000Z",
-            },
-            { __typename: "OutageSpan", startedAt: "2026-11-03T23:50:00.000Z", endedAt: null },
-          ],
-        },
+        longestOutage: { ...summary.longestOutage, longestOutageOngoing: false },
       },
+      checks: [{ ...brokenCheck, ongoing: true, longestOutageOngoing: false }],
     });
     await screen.findByText("99.76%");
     const tile = within(longestOutageTile());
     expect(tile.getByText("nightly-backup")).toBeTruthy();
     expect(tile.queryByText(", ongoing")).toBeNull();
+    expect(screen.getByText("Checks broken the longest")).toBeTruthy();
+    expect(screen.queryByText("ONGOING")).toBeNull();
   });
 
   it("shows \"Nothing needs fixing\" when nothing is broken", async () => {
