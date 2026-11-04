@@ -80,8 +80,12 @@ to `UTC`.
 
 The response lists checks that need fixing now (`DOWN` first, then late
 heartbeats, oldest first), outage totals and uptime, broken time per bucket,
-organization and check, and each check's outage spans clipped to the range.
-Durations are seconds (`Float`). Broken time is read from `check_outages`, which
+organization and check, and each check's timeline spans clipped to the range.
+Spans merge outages less than a thousandth of the range apart, doubling that
+gap until a check has at most 200 spans; each `OutageSpan` carries its
+`outageCount` and summed `brokenSeconds`. Totals, medians and longest outages
+always count every outage, and `CheckBrokenTime.longestOutageOngoing` says
+whether the single longest one is still open. Durations are seconds (`Float`). Broken time is read from `check_outages`, which
 a database trigger maintains on every `checks.status` write. The only
 `check_events` read is the latest `DOWN` event of each currently `DOWN` active
 check, which becomes its `reason`. Membership is re-read on every call, so

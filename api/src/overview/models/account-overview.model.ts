@@ -54,11 +54,26 @@ export class BrokenCheck {
   reason!: string | null;
 }
 
-@ObjectType()
+@ObjectType({
+  description:
+    'One or more nearby outages of a check, merged for the timeline (at most 200 spans per check).',
+})
 export class OutageSpan {
-  @Field() startedAt!: Date;
-  @Field(() => Date, { nullable: true, description: 'Null while ongoing.' })
+  @Field({
+    description: "The first merged outage's start, clipped to the range.",
+  })
+  startedAt!: Date;
+  @Field(() => Date, {
+    nullable: true,
+    description: 'Null while the last merged outage is ongoing.',
+  })
   endedAt!: Date | null;
+  @Field(() => Int, { description: 'Outages merged into this span.' })
+  outageCount!: number;
+  @Field(() => Float, {
+    description: 'Their clipped durations, summed; gaps between them excluded.',
+  })
+  brokenSeconds!: number;
 }
 
 @ObjectType()
@@ -68,9 +83,18 @@ export class CheckBrokenTime {
   @Field(() => Float) brokenSeconds!: number;
   @Field(() => Int) outageCount!: number;
   @Field(() => Float) longestOutageSeconds!: number;
-  @Field() ongoing!: boolean;
+  @Field({
+    description:
+      'Whether the single longest outage is still open; ties prefer the open one.',
+  })
+  longestOutageOngoing!: boolean;
+  @Field({ description: 'Whether any outage of the check is still open.' })
+  ongoing!: boolean;
   @Field(() => Float, { nullable: true }) uptimePercent!: number | null;
-  @Field(() => [OutageSpan], { description: 'Clipped to the range.' })
+  @Field(() => [OutageSpan], {
+    description:
+      'Timeline spans, clipped to the range; nearby outages are merged. Totals count every outage.',
+  })
   outages!: OutageSpan[];
 }
 

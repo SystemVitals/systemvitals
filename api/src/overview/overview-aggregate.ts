@@ -44,9 +44,15 @@ export interface BrokenEntry {
   downAt: Date | null;
 }
 
+/** One or more nearby outages, merged for the timeline. */
 export interface OutageSpanResult {
+  /** The first merged outage's start, clipped to the range. */
   startedAt: Date;
+  /** Null when the merged outage that ends last is still ongoing. */
   endedAt: Date | null;
+  outageCount: number;
+  /** The merged outages' clipped durations, summed; gaps are not counted. */
+  brokenSeconds: number;
 }
 
 export interface CheckTotals {
@@ -54,10 +60,19 @@ export interface CheckTotals {
   brokenSeconds: number;
   outageCount: number;
   longestOutageSeconds: number;
+  /** Whether the single longest outage (ties prefer the open one) is open. */
+  longestOutageOngoing: boolean;
   ongoing: boolean;
   uptimePercent: number | null;
+  /** At most MAX_TIMELINE_SPANS; totals above count every outage. */
   outages: OutageSpanResult[];
 }
+
+/**
+ * Timeline spans per check. A flapping check can log thousands of outages in
+ * 90 days; the timeline cannot draw them apart anyway, so nearby ones merge.
+ */
+export const MAX_TIMELINE_SPANS = 200;
 
 export interface AggregateResult {
   needsFixing: BrokenEntry[];
@@ -116,6 +131,65 @@ interface ClippedOutage {
   end: number;
   open: boolean;
   seconds: number;
+}
+
+interface Span {
+  start: number;
+  end: number;
+  open: boolean;
+  count: number;
+  seconds: number;
+}
+
+/** Merges consecutive spans (sorted by start) closer than `gapMs`. */
+function coalesce(spans: Span[], gapMs: number): Span[] {
+  const merged: Span[] = [];
+  for (const span of spans) {
+    const last = merged.at(-1);
+    if (last === undefined || span.start - last.end >= gapMs) {
+      merged.push({ ...span });
+      continue;
+    }
+    // The open flag follows whichever outage ends last; ties prefer open.
+    if (span.end > last.end) last.open = span.open;
+    else if (span.end === last.end) last.open ||= span.open;
+    last.end = Math.max(last.end, span.end);
+    last.count += span.count;
+    last.seconds += span.seconds;
+  }
+  return merged;
+}
+
+/**
+ * Merges outages less than a thousandth of the range apart (about 43 minutes
+ * over 30 days), then keeps doubling that gap until at most
+ * MAX_TIMELINE_SPANS remain.
+ */
+function timelineSpans(
+  outages: ClippedOutage[],
+  rangeMs: number,
+): OutageSpanResult[] {
+  const sorted: Span[] = outages
+    .map((o) => ({
+      start: o.start,
+      end: Math.max(o.start, o.end),
+      open: o.open,
+      count: 1,
+      seconds: o.seconds,
+    }))
+    .sort((a, b) => a.start - b.start || a.end - b.end);
+  let gapMs = Math.max(1, rangeMs / 1000);
+  let spans = coalesce(sorted, gapMs);
+  while (spans.length > MAX_TIMELINE_SPANS) {
+    gapMs *= 2;
+    spans = coalesce(spans, gapMs);
+  }
+  return spans.map((span) => ({
+    startedAt: new Date(span.start),
+    endedAt: span.open ? null : new Date(span.end),
+    outageCount: span.count,
+    brokenSeconds: Math.round(span.seconds),
+  }));
 }
 
 function median(sorted: number[]): number | null {
@@ -212,17 +286,26 @@ export function aggregateOverview(input: AggregateInput): AggregateResult {
       measuredMonitored += monitoredSeconds(c);
     }
     if (list.length === 0) continue;
+    let longestSeconds = -1;
+    let longestOpen = false;
+    for (const o of list) {
+      if (
+        o.seconds > longestSeconds ||
+        (o.seconds === longestSeconds && o.open)
+      ) {
+        longestSeconds = o.seconds;
+        longestOpen = o.open;
+      }
+    }
     checks.push({
       checkId: c.id,
       brokenSeconds: Math.round(broken),
       outageCount: list.length,
-      longestOutageSeconds: Math.round(Math.max(...list.map((o) => o.seconds))),
+      longestOutageSeconds: Math.round(longestSeconds),
+      longestOutageOngoing: longestOpen,
       ongoing: list.some((o) => o.open),
       uptimePercent: measured ? uptime(broken, monitoredSeconds(c)) : null,
-      outages: list.map((o) => ({
-        startedAt: new Date(o.start),
-        endedAt: o.open ? null : new Date(o.end),
-      })),
+      outages: timelineSpans(list, nowMs - rangeStartMs),
     });
   }
   checks.sort((a, b) => b.brokenSeconds - a.brokenSeconds);

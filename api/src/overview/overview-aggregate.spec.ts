@@ -74,7 +74,10 @@ describe('aggregateOverview', () => {
     expect(result.checks[0].outages[0]).toEqual({
       startedAt: rangeStart,
       endedAt: null,
+      outageCount: 1,
+      brokenSeconds: 604800,
     });
+    expect(result.checks[0].longestOutageOngoing).toBe(true);
   });
 
   it('orders DOWN oldest first, then LATE most overdue first, and skips PAUSED and NEW', () => {
@@ -249,6 +252,171 @@ describe('aggregateOverview', () => {
       { organizationId: 'org-a', brokenSeconds: 0, outageCount: 0 },
       { organizationId: 'org-c', brokenSeconds: 0, outageCount: 0 },
     ]);
+  });
+});
+
+describe('timeline spans', () => {
+  const MONTH_START = new Date(now.getTime() - 30 * 86400 * 1000);
+  const sum = (values: number[]) => values.reduce((a, b) => a + b, 0);
+
+  /** `count` outages of `seconds`, each starting `gaps[i % gaps.length]` after the last ended. */
+  function series(
+    checkId: string,
+    from: Date,
+    count: number,
+    seconds: number,
+    gaps: number[],
+  ): AggregateOutage[] {
+    const outages: AggregateOutage[] = [];
+    let start = from.getTime();
+    for (let i = 0; i < count; i += 1) {
+      outages.push(closed(checkId, new Date(start), seconds));
+      start += (seconds + gaps[i % gaps.length]) * 1000;
+    }
+    return outages;
+  }
+
+  it('coalesces a flapping check to at most 200 spans without changing its totals', () => {
+    const c = check({ status: 'UP' });
+    const outages = series(c.id, at('2026-10-20T00:00:00Z'), 1000, 60, [60]);
+    const result = aggregateOverview(
+      input({
+        rangeStart: MONTH_START,
+        bucketStarts: [MONTH_START],
+        checks: [c],
+        outages,
+      }),
+    );
+
+    const totals = result.checks[0];
+    expect(totals.outages.length).toBeLessThanOrEqual(200);
+    expect(sum(totals.outages.map((s) => s.outageCount))).toBe(1000);
+    expect(sum(totals.outages.map((s) => s.brokenSeconds))).toBe(
+      totals.brokenSeconds,
+    );
+    // Totals still come from the 1,000 raw outages.
+    expect(totals.brokenSeconds).toBe(60000);
+    expect(totals.outageCount).toBe(1000);
+    expect(totals.longestOutageSeconds).toBe(60);
+    expect(totals.longestOutageOngoing).toBe(false);
+    expect(result.summary).toMatchObject({
+      brokenSeconds: 60000,
+      outageCount: 1000,
+      ongoingCount: 0,
+      medianOutageSeconds: 60,
+      longestOutageCheckId: c.id,
+    });
+    expect(result.byOrganization[0]).toMatchObject({
+      brokenSeconds: 60000,
+      outageCount: 1000,
+    });
+    expect(sum(result.buckets.map((b) => b.brokenSeconds))).toBe(60000);
+  });
+
+  it('merges outages closer than a thousandth of the range and keeps the rest apart', () => {
+    // 7d range: outages under 604.8s apart merge.
+    const c = check();
+    const result = aggregateOverview(
+      input({
+        checks: [c],
+        outages: [
+          closed(c.id, at('2026-11-01T00:00:00Z'), 120),
+          closed(c.id, at('2026-11-01T00:07:00Z'), 60), // 5m after the last end
+          closed(c.id, at('2026-11-01T01:08:00Z'), 30), // 1h after the last end
+        ],
+      }),
+    );
+    expect(result.checks[0].outages).toEqual([
+      {
+        startedAt: at('2026-11-01T00:00:00Z'),
+        endedAt: at('2026-11-01T00:08:00Z'),
+        outageCount: 2,
+        brokenSeconds: 180,
+      },
+      {
+        startedAt: at('2026-11-01T01:08:00Z'),
+        endedAt: at('2026-11-01T01:08:30Z'),
+        outageCount: 1,
+        brokenSeconds: 30,
+      },
+    ]);
+  });
+
+  it('doubles the merge gap until at most 200 spans remain', () => {
+    // 30d range: the first gap (2592s) merges nothing; doubled (5184s) it
+    // merges the 3000s gaps but not the 6000s ones.
+    const c = check();
+    const outages = series(
+      c.id,
+      at('2026-10-10T00:00:00Z'),
+      300,
+      60,
+      [3000, 6000],
+    );
+    const spans = aggregateOverview(
+      input({ rangeStart: MONTH_START, checks: [c], outages }),
+    ).checks[0].outages;
+
+    expect(spans).toHaveLength(150);
+    for (const span of spans) {
+      expect(span).toMatchObject({ outageCount: 2, brokenSeconds: 120 });
+    }
+  });
+
+  it('leaves a merged span open when its last outage is ongoing', () => {
+    const c = check({ status: 'DOWN' });
+    const result = aggregateOverview(
+      input({
+        checks: [c],
+        outages: [
+          closed(c.id, secondsAgo(600), 120),
+          { checkId: c.id, startedAt: secondsAgo(420), endedAt: null },
+        ],
+      }),
+    );
+    expect(result.checks[0].outages).toEqual([
+      {
+        startedAt: secondsAgo(600),
+        endedAt: null,
+        outageCount: 2,
+        brokenSeconds: 540,
+      },
+    ]);
+  });
+});
+
+describe('longestOutageOngoing', () => {
+  function longestOngoing(outages: (id: string) => AggregateOutage[]) {
+    const c = check({ status: 'DOWN' });
+    return aggregateOverview(input({ checks: [c], outages: outages(c.id) }))
+      .checks[0].longestOutageOngoing;
+  }
+
+  it('is true when the longest outage is still open', () => {
+    expect(
+      longestOngoing((id) => [
+        closed(id, at('2026-11-01T00:00:00Z'), 600),
+        { checkId: id, startedAt: secondsAgo(3600), endedAt: null },
+      ]),
+    ).toBe(true);
+  });
+
+  it('is false when the longest outage closed and only a shorter one is open', () => {
+    expect(
+      longestOngoing((id) => [
+        closed(id, at('2026-11-01T00:00:00Z'), 7200),
+        { checkId: id, startedAt: secondsAgo(600), endedAt: null },
+      ]),
+    ).toBe(false);
+  });
+
+  it('prefers the open outage on a tie', () => {
+    expect(
+      longestOngoing((id) => [
+        closed(id, at('2026-11-01T00:00:00Z'), 600),
+        { checkId: id, startedAt: secondsAgo(600), endedAt: null },
+      ]),
+    ).toBe(true);
   });
 });
 

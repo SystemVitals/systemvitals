@@ -59,7 +59,13 @@ interface Overview {
   checks: Array<{
     check: { id: string };
     ongoing: boolean;
-    outages: Array<{ startedAt: string; endedAt: string | null }>;
+    longestOutageOngoing: boolean;
+    outages: Array<{
+      startedAt: string;
+      endedAt: string | null;
+      outageCount: number;
+      brokenSeconds: number;
+    }>;
   }>;
 }
 
@@ -73,7 +79,10 @@ const OVERVIEW = `query ($range: OverviewRange!, $timeZone: String) {
     summary { ongoingCount outageCount brokenSeconds uptimePercent }
     byOrganization { organization { id name } brokenSeconds }
     buckets { start brokenSeconds }
-    checks { check { id } ongoing outages { startedAt endedAt } }
+    checks {
+      check { id } ongoing longestOutageOngoing
+      outages { startedAt endedAt outageCount brokenSeconds }
+    }
   }
 }`;
 
@@ -175,8 +184,11 @@ describe('account overview (e2e)', () => {
     expect(data!.checks).toHaveLength(2);
     for (const row of data!.checks) {
       expect(row.ongoing).toBe(true);
+      expect(row.longestOutageOngoing).toBe(true);
       expect(row.outages).toHaveLength(1);
       expect(row.outages[0].endedAt).toBeNull();
+      expect(row.outages[0].outageCount).toBe(1);
+      expect(row.outages[0].brokenSeconds).toBeGreaterThanOrEqual(0);
     }
   });
 
