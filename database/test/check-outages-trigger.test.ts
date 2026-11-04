@@ -111,6 +111,25 @@ describe("check outage trigger", () => {
     },
   );
 
+  it("reopens a new outage after a recovery", async () => {
+    const check = await createCheck();
+    await setStatus(check.id, "DOWN");
+    await setStatus(check.id, "UP");
+    await setStatus(check.id, "DOWN");
+
+    const outages = await outagesOf(check.id);
+    expect(outages).toHaveLength(2);
+    const [first, second] = outages;
+    expect(first.endedAt).not.toBeNull();
+    expect(first.endedAt!.getTime()).toBeGreaterThanOrEqual(
+      first.startedAt.getTime(),
+    );
+    expect(second.endedAt).toBeNull();
+    expect(second.startedAt.getTime()).toBeGreaterThanOrEqual(
+      first.endedAt!.getTime(),
+    );
+  });
+
   it("records a check inserted as DOWN", async () => {
     const check = await createCheck("DOWN");
 

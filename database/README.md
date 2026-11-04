@@ -16,7 +16,10 @@ Writes to `checks.status` open and close `check_outages` rows through the
 writes outages. A partial unique index, `check_outages_one_open_per_check`,
 allows at most one open outage (`ended_at IS NULL`) per check. Outage timestamps
 are `TIMESTAMP(3)` UTC like every other column, so the trigger uses
-`now() AT TIME ZONE 'UTC'`, never bare `now()`.
+`clock_timestamp() AT TIME ZONE 'UTC'`. It uses `clock_timestamp()` rather than
+`now()` because `now()` is the transaction start time: writers begin before they
+lock the check row, so racing writers could otherwise record `ended_at` before
+`started_at`.
 
 Run database validation from this directory with a configured local
 `DATABASE_URL`:

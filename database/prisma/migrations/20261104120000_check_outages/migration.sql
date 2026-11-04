@@ -25,14 +25,16 @@ CREATE TABLE "check_outage_backfill_cutoff" (
     "cutoff" TIMESTAMP(3) NOT NULL
 );
 
+-- clock_timestamp(), not now(): writers BEGIN before taking the check row lock,
+-- so transaction start times can disagree with the order of status writes.
 CREATE FUNCTION record_check_outage() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   IF NEW.status = 'DOWN' AND (TG_OP = 'INSERT' OR OLD.status IS DISTINCT FROM 'DOWN') THEN
     INSERT INTO "check_outages" ("check_id", "started_at")
-    VALUES (NEW."id", now() AT TIME ZONE 'UTC')
+    VALUES (NEW."id", clock_timestamp() AT TIME ZONE 'UTC')
     ON CONFLICT ("check_id") WHERE "ended_at" IS NULL DO NOTHING;
   ELSIF TG_OP = 'UPDATE' AND OLD.status = 'DOWN' AND NEW.status <> 'DOWN' THEN
-    UPDATE "check_outages" SET "ended_at" = now() AT TIME ZONE 'UTC'
+    UPDATE "check_outages" SET "ended_at" = clock_timestamp() AT TIME ZONE 'UTC'
     WHERE "check_id" = NEW."id" AND "ended_at" IS NULL;
   END IF;
   RETURN NULL;
