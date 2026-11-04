@@ -152,8 +152,12 @@ function OverviewContent() {
     return () => clearInterval(timer);
   }, []);
 
+  // cache-and-network: Apollo schedules the first poll a full interval after
+  // polling starts, so a cached result (an organization the user has left, or
+  // another account's data) would otherwise stay up until then.
   const query = useQuery<AccountOverviewData>(ACCOUNT_OVERVIEW, {
     variables: { range, timeZone },
+    fetchPolicy: "cache-and-network",
   });
   usePollWhenVisible(query, CHECK_POLL_INTERVAL_MS);
 

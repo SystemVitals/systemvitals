@@ -49,7 +49,10 @@ package publication.
   outage timeline draws the API's merged spans (at most 200 per check); a
   merged span's tooltip gives its outage count and summed broken time. The
   Longest outage tile and the table's ONGOING tag both read
-  `longestOutageOngoing`.
+  `longestOutageOngoing`. The query uses `cache-and-network`, so a revisit
+  fetches immediately instead of showing a cached result until the first poll.
+- `AuthProvider` clears the Apollo store on login, token sign-in, and logout,
+  so one account never sees another's cached results in the same tab.
 - Signed-in pages start with `components/app/page-header.tsx` and rely on the
   layout's padding rather than adding their own.
 - Check statuses render as plain-language labels (`Up`, `Down`, `Late` for

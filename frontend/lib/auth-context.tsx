@@ -1,5 +1,6 @@
 "use client";
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { getApolloContext } from "@apollo/client/react";
 
 export interface Org {
   id: string;
@@ -39,6 +40,21 @@ async function fetchMe(token: string): Promise<User | null> {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  // Optional: tests render AuthProvider without an ApolloProvider.
+  const apolloClient = useContext(getApolloContext()).client;
+
+  /**
+   * Drops every cached query result when the signed-in account changes, so the
+   * next account never sees the previous one's data (for example a cached
+   * overview) while its own queries load.
+   */
+  async function clearApolloStore() {
+    try {
+      await apolloClient?.clearStore();
+    } catch {
+      // Clearing only discards cached data; a failure must not block auth.
+    }
+  }
 
   useEffect(() => {
     const token = localStorage.getItem("sv_token");
@@ -58,13 +74,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!res.ok) throw new Error("Authentication failed");
     const { token } = await res.json();
     localStorage.setItem("sv_token", token);
-    setUser(await fetchMe(token));
+    const me = await fetchMe(token);
+    await clearApolloStore();
+    setUser(me);
   }
 
   async function loginWithToken(token: string) {
     const me = await fetchMe(token);
     if (!me) throw new Error("Authentication failed");
     localStorage.setItem("sv_token", token);
+    await clearApolloStore();
     setUser(me);
   }
 
@@ -81,7 +100,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       signup: (e, p) => authenticate("signup", e, p),
       loginWithToken,
       refetchMe,
-      logout: () => { localStorage.removeItem("sv_token"); localStorage.removeItem("sv_admin_token"); setUser(null); },
+      logout: () => {
+        localStorage.removeItem("sv_token");
+        localStorage.removeItem("sv_admin_token");
+        // Queue the signed-out render before the clear (itself a microtask), so
+        // signed-in pages normally unmount before their in-flight queries are
+        // cancelled under them.
+        setUser(null);
+        void clearApolloStore();
+      },
     }}>{children}</Ctx.Provider>
   );
 }

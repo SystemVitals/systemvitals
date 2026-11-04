@@ -1,4 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { InMemoryCache } from "@apollo/client";
+import type { MockLink } from "@apollo/client/testing";
 import { MockedProvider } from "@apollo/client/testing/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ACCOUNT_OVERVIEW } from "@/lib/queries";
@@ -103,11 +105,11 @@ function errorMock(message: string) {
   };
 }
 
-type Mock = ReturnType<typeof mockWith> | ReturnType<typeof errorMock>;
+type Mock = MockLink.MockedResponse;
 
-function renderWith(mocks: Mock[]) {
+function renderWith(mocks: Mock[], cache?: InMemoryCache) {
   const tree = () => (
-    <MockedProvider mocks={mocks}>
+    <MockedProvider mocks={mocks} cache={cache}>
       <OverviewPage />
     </MockedProvider>
   );
@@ -233,6 +235,27 @@ describe("OverviewPage", () => {
     await screen.findByText("Nothing needs fixing");
     fireEvent.click(screen.getByRole("button", { name: "90d" }));
     expect(nav.replace).toHaveBeenCalledWith("/overview?range=90d");
+  });
+
+  it("fetches on mount even when the cache already holds an overview", async () => {
+    // A cached result from an earlier visit still lists an organization the
+    // user has since left; the page must not wait a poll interval to drop it.
+    const cache = new InMemoryCache();
+    const stale = mockWith({ organizationCount: 4 });
+    cache.writeQuery({
+      query: ACCOUNT_OVERVIEW,
+      variables: stale.request.variables,
+      data: stale.result.data,
+    });
+    const fresh = mockWith({ organizationCount: 3 });
+    const result = vi.fn(() => fresh.result);
+
+    renderWith([{ request: fresh.request, result }], cache);
+
+    expect(
+      await screen.findByText("All your organizations · 3 organizations · 24 checks"),
+    ).toBeTruthy();
+    expect(result).toHaveBeenCalledTimes(1);
   });
 
   it("polls while visible", async () => {
