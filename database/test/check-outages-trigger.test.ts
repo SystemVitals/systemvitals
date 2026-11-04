@@ -154,4 +154,15 @@ describe("check outage trigger", () => {
 
     expect(await outagesOf(check.id)).toHaveLength(0);
   });
+
+  it("indexes outages by check and end for the overview's overlap query", async () => {
+    const rows = await prisma.$queryRaw<Array<{ indexdef: string }>>`
+      SELECT indexdef FROM pg_indexes
+      WHERE schemaname = current_schema()
+        AND tablename = 'check_outages'
+        AND indexname = 'check_outages_check_id_ended_at_idx'`;
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].indexdef).toMatch(/\(check_id, ended_at\)$/);
+  });
 });

@@ -245,6 +245,7 @@ model CheckOutage {
   endedAt   DateTime? @map("ended_at")
 
   @@index([checkId, startedAt])
+  @@index([checkId, endedAt])
   @@map("check_outages")
 }
 
