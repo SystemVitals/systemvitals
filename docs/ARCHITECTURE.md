@@ -84,8 +84,9 @@ and ping checks a gap longer than `max(3 × interval, 5 minutes)` ends the
 outage one interval after the last `DOWN` event before the gap. Heartbeats have
 no regular cadence, so a heartbeat paused while `DOWN` keeps counting until its
 next non-`DOWN` event (or its `updated_at`, if none exists). The migration
-scans events before it locks `checks`, leaves outages that start after the
-trigger was installed to the trigger, and merges any overlap between the two.
+scans events into a staging table before it locks `checks`, skips checks
+deleted in the meantime, leaves outages that start after the trigger was
+installed to the trigger, and merges any overlap between the two.
 
 ## Per-check notification routing
 

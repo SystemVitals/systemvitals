@@ -186,17 +186,23 @@ function minutesOf(outages: Outage[], checkId: string) {
 }
 
 describe("check outage backfill migration", () => {
-  it("scans events before locking checks and runs in one transaction", () => {
+  it("stages the event scan before locking checks and writes outages only after the lock", () => {
     const sql = readFileSync(migration, "utf8");
-    const firstOutageInsert = sql.indexOf('INSERT INTO "check_outages"');
     const checksLock = sql.indexOf(
       'LOCK TABLE "checks" IN SHARE ROW EXCLUSIVE MODE',
     );
+    const beforeLock = sql.slice(0, checksLock);
+    const scan = beforeLock
+      .split(";")
+      .find((statement) => statement.includes('INSERT INTO "backfill_streaks"'));
 
     expect(sql.trimStart()).toMatch(/^BEGIN;/);
     expect(sql.trimEnd()).toMatch(/COMMIT;$/);
-    expect(firstOutageInsert).toBeGreaterThan(-1);
-    expect(checksLock).toBeGreaterThan(firstOutageInsert);
+    expect(checksLock).toBeGreaterThan(-1);
+    expect(scan).toMatch(/FROM "check_events"/);
+    expect(scan).toMatch(/\bOVER\b/);
+    expect(beforeLock).not.toContain('INSERT INTO "check_outages"');
+    expect(sql.slice(checksLock)).toContain('INSERT INTO "check_outages"');
   });
 
   describe("rebuilding history from check events", () => {
@@ -409,6 +415,64 @@ describe("check outage backfill migration", () => {
         ]);
       } finally {
         await writer.$disconnect();
+        await migrationRun?.catch(() => undefined);
+      }
+    });
+  });
+
+  it("skips a check deleted between the event scan and the lock", async () => {
+    await withOldSchema(async (url) => {
+      seedHistory(
+        url,
+        `
+          ('a-blocker', 'HEARTBEAT', 'UP', NULL, '08:00', '08:00'),
+          ('b-deleted', 'HEARTBEAT', 'UP', NULL, '09:30', '09:30'),
+          ('c-kept', 'HEARTBEAT', 'UP', NULL, '09:30', '09:30')
+        `,
+        `
+          ('a-blocker', '08:00', 'UP'),
+          ('b-deleted', '09:00', 'DOWN'),
+          ('b-deleted', '09:30', 'UP'),
+          ('c-kept', '09:00', 'DOWN'),
+          ('c-kept', '09:30', 'UP')
+        `,
+      );
+      const blocker = new PrismaClient({ datasourceUrl: url.toString() });
+      let migrationRun:
+        | Promise<{ status: number | null; stderr: string }>
+        | undefined;
+      try {
+        // "a-blocker" sorts first, so holding its row lock parks the migration
+        // after the event scan, at the row locks it takes before LOCK TABLE.
+        await blocker.$transaction(
+          async (tx) => {
+            await tx.$queryRaw`
+              SELECT id FROM checks WHERE id = 'a-blocker' FOR UPDATE
+            `;
+            migrationRun = startMigration(url);
+            await waitUntilMigrationWaitsForALock(url);
+            psql(url, [
+              "-c",
+              "SET lock_timeout = '3s'",
+              "-c",
+              "DELETE FROM checks WHERE id = 'b-deleted'",
+            ]);
+          },
+          { timeout: 20_000 },
+        );
+
+        const result = await migrationRun!;
+        expect(result.stderr).toBe("");
+        expect(result.status).toBe(0);
+        expect(
+          readOutages(url).map(([checkId, startedAt, endedAt]) => [
+            checkId,
+            shorten(startedAt),
+            endedAt === null ? null : shorten(endedAt),
+          ]),
+        ).toEqual([["c-kept", "09:00", "09:30"]]);
+      } finally {
+        await blocker.$disconnect();
         await migrationRun?.catch(() => undefined);
       }
     });
