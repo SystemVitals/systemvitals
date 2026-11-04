@@ -43,7 +43,9 @@ package publication.
   mobile drawer reuses the same sections and organization switcher.
 - `/overview` is account-wide and ignores the organization switcher. It runs
   the `accountOverview` query, polls while the tab is visible, and keeps the
-  range in `?range=` (`24h`, `7d`, `30d`, default `30d`).
+  range in `?range=` (`24h`, `7d`, `30d`, `90d`, default `30d`). Charts and
+  tables live in `components/overview/`. While a new range loads, the previous
+  result stays on screen, dimmed, and its labels follow the data shown.
 - Signed-in pages start with `components/app/page-header.tsx` and rely on the
   layout's padding rather than adding their own.
 - Check statuses render as plain-language labels (`Up`, `Down`, `Late` for

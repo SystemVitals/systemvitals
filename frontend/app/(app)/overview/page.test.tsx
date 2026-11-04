@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MockedProvider } from "@apollo/client/testing/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ACCOUNT_OVERVIEW } from "@/lib/queries";
@@ -8,6 +8,7 @@ import OverviewPage from "./page";
 const nav = vi.hoisted(() => ({
   replace: vi.fn(),
   pollWhenVisible: vi.fn(),
+  search: "range=7d",
 }));
 
 vi.mock("@/lib/use-poll-when-visible", () => ({
@@ -16,7 +17,7 @@ vi.mock("@/lib/use-poll-when-visible", () => ({
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: nav.replace }),
-  useSearchParams: () => new URLSearchParams("range=7d"),
+  useSearchParams: () => new URLSearchParams(nav.search),
 }));
 
 const org = { __typename: "OverviewOrganization", id: "o1", name: "Acme Prod", slug: "acme" };
@@ -64,9 +65,13 @@ const summary = {
   },
 };
 
-function mockWith(overview: Record<string, unknown>) {
+function mockWith(
+  overview: Record<string, unknown>,
+  { range = "WEEK", delay }: { range?: string; delay?: number } = {},
+) {
   return {
-    request: { query: ACCOUNT_OVERVIEW, variables: { range: "WEEK", timeZone: "UTC" } },
+    request: { query: ACCOUNT_OVERVIEW, variables: { range, timeZone: "UTC" } },
+    delay,
     result: {
       data: {
         accountOverview: {
@@ -87,17 +92,55 @@ function mockWith(overview: Record<string, unknown>) {
   };
 }
 
-function renderPage(overview: Record<string, unknown> = {}) {
-  return render(
-    <MockedProvider mocks={[mockWith(overview)]}>
-      <OverviewPage />
-    </MockedProvider>,
-  );
+function errorMock(message: string) {
+  return {
+    request: { query: ACCOUNT_OVERVIEW, variables: { range: "WEEK", timeZone: "UTC" } },
+    error: new Error(message),
+  };
 }
+
+type Mock = ReturnType<typeof mockWith> | ReturnType<typeof errorMock>;
+
+function renderWith(mocks: Mock[]) {
+  const tree = () => (
+    <MockedProvider mocks={mocks}>
+      <OverviewPage />
+    </MockedProvider>
+  );
+  const view = render(tree());
+  return { ...view, rerenderPage: () => view.rerender(tree()) };
+}
+
+function renderPage(overview: Record<string, unknown> = {}) {
+  return renderWith([mockWith(overview)]);
+}
+
+/** Re-runs the query the way a poll does; the page passes its query to the poller. */
+async function poll() {
+  const query = nav.pollWhenVisible.mock.lastCall![0] as { refetch: () => Promise<unknown> };
+  await act(async () => {
+    await query.refetch().catch(() => undefined);
+  });
+}
+
+const brokenCheck = {
+  __typename: "CheckBrokenTime",
+  brokenSeconds: 111900,
+  outageCount: 2,
+  longestOutageSeconds: 108000,
+  ongoing: true,
+  uptimePercent: 95.6789,
+  check: { __typename: "CheckModel", id: "c9", name: "nightly-backup", slug: "nightly-backup" },
+  organization: { ...org, id: "o2", name: "Side Projects", slug: "side" },
+  outages: [
+    { __typename: "OutageSpan", startedAt: "2026-11-03T00:00:00.000Z", endedAt: null },
+  ],
+};
 
 describe("OverviewPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    nav.search = "range=7d";
     vi.spyOn(Intl.DateTimeFormat.prototype, "resolvedOptions").mockReturnValue({
       timeZone: "UTC",
     } as Intl.ResolvedDateTimeFormatOptions);
@@ -161,5 +204,99 @@ describe("OverviewPage", () => {
       expect.anything(),
       CHECK_POLL_INTERVAL_MS,
     );
+  });
+
+  it("charts broken time, outages, and the longest-broken checks", async () => {
+    renderPage({
+      buckets: [
+        { __typename: "BrokenTimeBucket", start: "2026-11-03T00:00:00.000Z", brokenSeconds: 86400 },
+      ],
+      byOrganization: [
+        {
+          __typename: "OrganizationBrokenTime",
+          brokenSeconds: 111900,
+          outageCount: 2,
+          organization: brokenCheck.organization,
+        },
+      ],
+      checks: [brokenCheck],
+    });
+    expect(await screen.findByRole("figure", { name: "Time broken per day" })).toBeTruthy();
+    expect(screen.getByText("Time broken by organization")).toBeTruthy();
+    expect(screen.getByText("Outages, last 7 days")).toBeTruthy();
+    expect(screen.getByRole("list", { name: "Legend" })).toBeTruthy();
+    expect(screen.getByText("Checks broken the longest")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "nightly-backup" }).getAttribute("href")).toBe(
+      "/side/nightly-backup",
+    );
+  });
+
+  it("shows one calm line when there were no outages", async () => {
+    renderPage({
+      checks: [],
+      summary: {
+        ...summary,
+        uptimePercent: 100,
+        brokenSeconds: 0,
+        outageCount: 0,
+        ongoingCount: 0,
+        medianOutageSeconds: null,
+        longestOutage: null,
+      },
+    });
+    expect(await screen.findByText("No outages in the last 7 days")).toBeTruthy();
+    expect(screen.getByText("100%")).toBeTruthy();
+    expect(screen.queryByRole("list", { name: "Legend" })).toBeNull();
+    expect(screen.queryByText("Down")).toBeNull();
+    expect(screen.queryByText("Checks broken the longest")).toBeNull();
+  });
+
+  it("keeps the previous range on screen while the next one loads", async () => {
+    nav.replace.mockImplementation((url: string) => {
+      nav.search = url.split("?")[1];
+    });
+    const month = mockWith(
+      {
+        rangeStart: "2026-10-05T00:00:00.000Z",
+        rangeEnd: "2026-11-04T00:00:00.000Z",
+        summary: { ...summary, uptimePercent: 98.5 },
+      },
+      { range: "MONTH", delay: 30 },
+    );
+    const { rerenderPage, container } = renderWith([mockWith({}), month]);
+    expect(await screen.findByText("99.76%")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "30d" }));
+    rerenderPage();
+
+    // The 7-day numbers stay up, still labelled as 7 days, instead of the skeleton.
+    expect(screen.getByRole("button", { name: "30d" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByText("99.76%")).toBeTruthy();
+    expect(screen.getByText("Last 7 days, all organizations")).toBeTruthy();
+    expect(container.querySelector('[data-slot="skeleton"]')).toBeNull();
+    expect(container.querySelector('[aria-busy="true"]')).toBeTruthy();
+
+    expect(await screen.findByText("98.50%")).toBeTruthy();
+    expect(screen.queryByText("99.76%")).toBeNull();
+    expect(screen.getByText("Last 30 days, all organizations")).toBeTruthy();
+    expect(container.querySelector('[aria-busy="true"]')).toBeNull();
+  });
+
+  it("does not reopen a dismissed error when the same error repeats", async () => {
+    renderWith([
+      errorMock("Network down"),
+      errorMock("Network down"),
+      errorMock("Gateway timeout"),
+    ]);
+    expect(await screen.findByText("Could not load the overview")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByText("Could not load the overview")).toBeNull());
+
+    await poll();
+    expect(screen.queryByText("Could not load the overview")).toBeNull();
+
+    // A different failure is news, so it is reported.
+    await poll();
+    expect(await screen.findByText("Could not load the overview")).toBeTruthy();
   });
 });

@@ -5,6 +5,8 @@ import {
   formatBrokenSeconds,
   formatUptime,
   parseRangeParam,
+  percentOf,
+  rangeOfOverview,
 } from "./overview";
 
 const now = new Date("2026-11-04T12:00:00.000Z");
@@ -17,6 +19,17 @@ describe("parseRangeParam", () => {
     expect(parseRangeParam("7d")).toBe("WEEK");
     expect(parseRangeParam(null)).toBe("MONTH");
     expect(parseRangeParam("bogus")).toBe("MONTH");
+  });
+});
+
+describe("rangeOfOverview", () => {
+  it("names the range a loaded overview covers", () => {
+    const rangeEnd = now.toISOString();
+    expect(rangeOfOverview({ rangeStart: ago(24 * 60 * MIN), rangeEnd })?.key).toBe("DAY");
+    expect(rangeOfOverview({ rangeStart: ago(90 * 24 * 60 * MIN), rangeEnd })?.key).toBe(
+      "QUARTER",
+    );
+    expect(rangeOfOverview({ rangeStart: ago(MIN), rangeEnd })).toBeUndefined();
   });
 });
 
@@ -80,5 +93,16 @@ describe("formatters", () => {
     expect(formatUptime(null)).toBe("—");
     expect(formatBrokenSeconds(0)).toBe("0m");
     expect(formatBrokenSeconds(34620)).toBe("9h 37m");
+  });
+});
+
+describe("percentOf", () => {
+  it("returns a clamped CSS percentage", () => {
+    expect(percentOf(34620, 111900)).toBe("30.94%");
+    expect(percentOf(111900, 111900)).toBe("100%");
+    expect(percentOf(0, 111900)).toBe("0%");
+    expect(percentOf(5, 0)).toBe("0%");
+    expect(percentOf(-5, 10)).toBe("0%");
+    expect(percentOf(15, 10)).toBe("100%");
   });
 });

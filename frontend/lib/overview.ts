@@ -2,16 +2,33 @@ import { formatElapsed, formatRelativeTime } from "@/lib/format";
 
 export type OverviewRangeKey = "DAY" | "WEEK" | "MONTH" | "QUARTER";
 
-export const OVERVIEW_RANGES: {
+export interface OverviewRange {
   key: OverviewRangeKey;
   param: "24h" | "7d" | "30d" | "90d";
   title: string;
-}[] = [
-  { key: "DAY", param: "24h", title: "24 hours" },
-  { key: "WEEK", param: "7d", title: "7 days" },
-  { key: "MONTH", param: "30d", title: "30 days" },
-  { key: "QUARTER", param: "90d", title: "90 days" },
+  /** Window length; the API returns `rangeEnd - rangeStart` of exactly this. */
+  seconds: number;
+}
+
+export const OVERVIEW_RANGES: OverviewRange[] = [
+  { key: "DAY", param: "24h", title: "24 hours", seconds: 86_400 },
+  { key: "WEEK", param: "7d", title: "7 days", seconds: 604_800 },
+  { key: "MONTH", param: "30d", title: "30 days", seconds: 2_592_000 },
+  { key: "QUARTER", param: "90d", title: "90 days", seconds: 7_776_000 },
 ];
+
+/**
+ * The range a loaded overview covers. While a newly selected range loads, the
+ * page keeps showing the previous result, so labels must follow the data rather
+ * than the URL.
+ */
+export function rangeOfOverview(overview: {
+  rangeStart: string;
+  rangeEnd: string;
+}): OverviewRange | undefined {
+  const seconds = (Date.parse(overview.rangeEnd) - Date.parse(overview.rangeStart)) / 1000;
+  return OVERVIEW_RANGES.find((range) => range.seconds === seconds);
+}
 
 export function parseRangeParam(value: string | null): OverviewRangeKey {
   return OVERVIEW_RANGES.find((range) => range.param === value)?.key ?? "MONTH";
@@ -64,6 +81,13 @@ export function formatUptime(percent: number | null): string {
 
 export function formatBrokenSeconds(seconds: number): string {
   return seconds <= 0 ? "0m" : formatElapsed(seconds * 1000);
+}
+
+/** `part` as a CSS percentage of `whole`, clamped to 0–100%, e.g. "30.94%". */
+export function percentOf(part: number, whole: number): string {
+  if (whole <= 0) return "0%";
+  const share = Math.min(100, Math.max(0, (part / whole) * 100));
+  return `${Number(share.toFixed(2))}%`;
 }
 
 export interface CheckBrokenTimeRow {
