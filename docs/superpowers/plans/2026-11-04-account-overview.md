@@ -520,10 +520,11 @@ Rules the implementation must follow (from spec §Definitions and §Rules):
   - `it('orders DOWN oldest first, then LATE most overdue first, and skips PAUSED and NEW')`.
     Set up:
     - two DOWN checks with since 09:00 and 07:00;
-    - two late heartbeats with `lastEventAt` 09:40 and 09:50 and period 600;
+    - two late heartbeats with `lastEventAt` 09:40 and 09:45 and period 600,
+      so they were expected at 09:50 and 09:55;
     - one PAUSED check and one NEW check.
 
-    Expect the `checkId` order `[down07, down09, late0940, late0950]`.
+    Expect the `checkId` order `[down07, down09, late0940, late0945]`.
   - `it('marks a period heartbeat late after nextExpectedAt and keeps it late past downAt')`.
     With `lastEventAt = now − 400s`, `period = 300`, and `grace = 60`, expect
     `since = now − 100s` and `downAt = now − 40s`, both non-null.
