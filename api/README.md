@@ -66,6 +66,27 @@ job. Later per-check channel changes affect only future transitions; already
 queued jobs retain their original recipients. Consumers may still skip a
 snapshotted channel if it is deleted or globally disabled before delivery.
 
+## Account overview
+
+`accountOverview(range: OverviewRange!, timeZone: String): AccountOverview!`
+reports what is broken across every organization the caller currently belongs
+to. `range` is `DAY`, `WEEK`, `MONTH` or `QUARTER`: the 24 hours, 7, 30 or 90
+days ending now. `timeZone` is an IANA name such as `America/Sao_Paulo`.
+Buckets are hourly for `DAY` and local-midnight days in that zone otherwise,
+computed by PostgreSQL so they follow DST changes. A missing, malformed or
+unknown zone, including one PostgreSQL's tzdata lacks, falls back to `UTC`.
+
+The response lists checks that need fixing now (`DOWN` first, then late
+heartbeats, oldest first), outage totals and uptime, broken time per bucket,
+organization and check, and each check's outage spans clipped to the range.
+Durations are seconds (`Float`). Broken time is read from `check_outages`, which
+a database trigger maintains on every `checks.status` write. The only
+`check_events` read is the latest `DOWN` event of each currently `DOWN` active
+check, which becomes its `reason`. Membership is re-read on every call, so
+leaving an organization removes it immediately. Sessions and account PATs may
+call it; scoped and legacy tokens get `Account session required`.
+Organizations are exposed as `OverviewOrganization { id name slug }` only.
+
 ## Error monitoring
 
 Sentry project: `nexus/systemvitals-api` at https://sentry.nihey.org. Set

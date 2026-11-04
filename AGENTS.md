@@ -26,6 +26,13 @@ Authenticated account-session and account-PAT organization members can query
 limit, and remaining allowance; the response never exposes creator identity
 data.
 
+Authenticated sessions and account PATs can query `accountOverview` for broken
+checks and outage time across every organization in the caller's current
+memberships, re-read on each request so leaving an organization drops it at
+once. Scoped and legacy tokens are rejected with `Account session required`.
+Organizations appear only as `OverviewOrganization { id name slug }`; the
+response never exposes creator identity data.
+
 Personal access tokens use the explicit `account:manage` scope, no workspace
 binding, and `ACCOUNT` credential discovery mode. They delegate public product
 operations across the issuer's current organization memberships plus GraphQL
