@@ -51,6 +51,9 @@ package publication.
   Longest outage tile and the table's ONGOING tag both read
   `longestOutageOngoing`. The query uses `cache-and-network`, so a revisit
   fetches immediately instead of showing a cached result until the first poll.
+  A dismissed error stays closed while the same failure repeats, and is
+  reported again after any successful load; if the first load fails, the page
+  shows "Couldn't load the overview." with a Retry button.
 - `AuthProvider` clears the Apollo store on login, token sign-in, and logout,
   so one account never sees another's cached results in the same tab.
 - Signed-in pages start with `components/app/page-header.tsx` and rely on the

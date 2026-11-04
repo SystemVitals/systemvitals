@@ -144,7 +144,8 @@ function OverviewContent() {
   const [timeZone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
   const [now, setNow] = useState(() => new Date());
   // Polling repeats a failure every interval; remembering the dismissed message
-  // keeps the same error from reopening the dialog each time.
+  // keeps the same error from reopening the dialog each time. A successful
+  // load ends that run of failures (see below).
   const [dismissedError, setDismissedError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -166,6 +167,12 @@ function OverviewContent() {
   const overview = (query.data ?? query.previousData)?.accountOverview;
   const loadingNextRange = query.loading && !query.data && !!overview;
   const shownRange = (overview && rangeOfOverview(overview)) ?? rangeInfo;
+  // Once a request settles without an error, forget the dismissed message, so
+  // the same failure later (e.g. "Failed to fetch") is reported again instead
+  // of leaving stale data on screen silently.
+  if (dismissedError !== null && !query.loading && !query.error) {
+    setDismissedError(null);
+  }
   const errorOpen = !!query.error && query.error.message !== dismissedError;
 
   const rangeControl = (
@@ -199,7 +206,22 @@ function OverviewContent() {
       />
 
       {!overview ? (
-        query.loading ? <OverviewSkeleton /> : null
+        query.loading ? (
+          <OverviewSkeleton />
+        ) : query.error ? (
+          <Card>
+            <CardContent className="space-y-3 text-sm">
+              <p>Couldn&apos;t load the overview.</p>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void query.refetch().catch(() => undefined)}
+              >
+                Retry
+              </Button>
+            </CardContent>
+          </Card>
+        ) : null
       ) : overview.organizationCount === 0 ? (
         <Card>
           <CardContent className="space-y-3 text-sm">

@@ -360,4 +360,33 @@ describe("OverviewPage", () => {
     await poll();
     expect(await screen.findByText("Could not load the overview")).toBeTruthy();
   });
+
+  it("reports a dismissed error again once a load has succeeded in between", async () => {
+    renderWith([errorMock("Failed to fetch"), mockWith({}), errorMock("Failed to fetch")]);
+    expect(await screen.findByText("Could not load the overview")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByText("Could not load the overview")).toBeNull());
+
+    await poll();
+    expect(await screen.findByText("Nothing needs fixing")).toBeTruthy();
+    expect(screen.queryByText("Could not load the overview")).toBeNull();
+
+    // The same message after a success is a new outage of the page, not a repeat.
+    await poll();
+    expect(await screen.findByText("Could not load the overview")).toBeTruthy();
+  });
+
+  it("offers a retry instead of a blank page when the first load fails", async () => {
+    renderWith([errorMock("Failed to fetch"), mockWith({})]);
+    expect(await screen.findByText("Could not load the overview")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByText("Could not load the overview")).toBeNull());
+
+    expect(screen.getByText("Couldn't load the overview.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+    expect(await screen.findByText("Nothing needs fixing")).toBeTruthy();
+    expect(screen.queryByText("Couldn't load the overview.")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+  });
 });
