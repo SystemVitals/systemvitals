@@ -72,9 +72,11 @@ snapshotted channel if it is deleted or globally disabled before delivery.
 reports what is broken across every organization the caller currently belongs
 to. `range` is `DAY`, `WEEK`, `MONTH` or `QUARTER`: the 24 hours, 7, 30 or 90
 days ending now. `timeZone` is an IANA name such as `America/Sao_Paulo`.
-Buckets are hourly for `DAY` and local-midnight days in that zone otherwise,
-computed by PostgreSQL so they follow DST changes. A missing, malformed or
-unknown zone, including one PostgreSQL's tzdata lacks, falls back to `UTC`.
+Buckets are hourly for `DAY` and local-midnight days in that zone otherwise.
+PostgreSQL steps through them in that zone (PostgreSQL 16+), so across a DST
+change hours stay one hour apart and a day lasts 23 or 25 hours. A missing,
+malformed or unknown zone, including one PostgreSQL's tzdata lacks, falls back
+to `UTC`.
 
 The response lists checks that need fixing now (`DOWN` first, then late
 heartbeats, oldest first), outage totals and uptime, broken time per bucket,

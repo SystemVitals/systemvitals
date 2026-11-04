@@ -178,8 +178,9 @@ export class OverviewService {
 
   /**
    * Bucket starts from `rangeStart` (truncated to `unit` in `timeZone`) up to
-   * `now`, computed by Postgres so day buckets follow local midnight across
-   * DST changes.
+   * `now`. Postgres steps in `timeZone` (the PG16+ zone-aware
+   * `generate_series`), so days start at local midnight and DST days are 23 or
+   * 25 hours long, while hours stay exactly one hour apart.
    */
   async bucketStarts(
     rangeStart: Date,
@@ -188,11 +189,12 @@ export class OverviewService {
     timeZone: string,
   ): Promise<Date[]> {
     const rows = await this.prisma.$queryRaw<Array<{ start: Date }>>`
-      SELECT (gs AT TIME ZONE ${timeZone}) AS start
+      SELECT gs AS start
       FROM generate_series(
-        date_trunc(${unit}, ${rangeStart}::timestamptz AT TIME ZONE ${timeZone}),
-        ${now}::timestamptz AT TIME ZONE ${timeZone},
-        ${'1 ' + unit}::interval) gs`;
+        date_trunc(${unit}, ${rangeStart}::timestamptz, ${timeZone}),
+        ${now}::timestamptz,
+        ${'1 ' + unit}::interval,
+        ${timeZone}) gs`;
     return rows.map((row) => row.start);
   }
 
@@ -211,14 +213,23 @@ export class OverviewService {
     }
   }
 
-  /** One lookup of the latest DOWN event for currently DOWN active checks. */
+  /**
+   * The latest DOWN event of each currently DOWN active check. The lateral
+   * LIMIT 1 walks the (check_id, timestamp) index backwards and stops at the
+   * first DOWN event, instead of reading every event the check ever logged.
+   */
   private async downReasons(checkIds: string[]): Promise<Map<string, string>> {
     if (checkIds.length === 0) return new Map();
     const rows = await this.prisma.$queryRaw<LatestDownEvent[]>`
-      SELECT DISTINCT ON (check_id) check_id, status_code, error
-      FROM check_events
-      WHERE check_id = ANY(${checkIds}) AND status = 'DOWN'
-      ORDER BY check_id, timestamp DESC`;
+      SELECT c.id AS check_id, e.status_code, e.error
+      FROM unnest(${checkIds}::text[]) AS c(id)
+      CROSS JOIN LATERAL (
+        SELECT status_code, error
+        FROM check_events
+        WHERE check_id = c.id AND status = 'DOWN'
+        ORDER BY timestamp DESC
+        LIMIT 1
+      ) e`;
     const reasons = new Map<string, string>();
     for (const row of rows) {
       const reason =

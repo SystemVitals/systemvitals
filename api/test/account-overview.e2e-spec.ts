@@ -330,4 +330,29 @@ describe('account overview (e2e)', () => {
     ]);
     expect(starts[3].getTime() - starts[2].getTime()).toBe(25 * 3600 * 1000);
   });
+
+  it('builds hourly buckets across a DST change', async () => {
+    // 2026-11-01 06:00Z is when New York falls back from EDT to EST, so the
+    // local 01:00 hour happens twice.
+    const starts = await app
+      .get(OverviewService)
+      .bucketStarts(
+        new Date('2026-11-01T03:00:00Z'),
+        new Date('2026-11-01T08:00:00Z'),
+        'hour',
+        'America/New_York',
+      );
+
+    expect(starts.map((d) => d.toISOString())).toEqual([
+      '2026-11-01T03:00:00.000Z',
+      '2026-11-01T04:00:00.000Z',
+      '2026-11-01T05:00:00.000Z',
+      '2026-11-01T06:00:00.000Z',
+      '2026-11-01T07:00:00.000Z',
+      '2026-11-01T08:00:00.000Z',
+    ]);
+    for (let i = 1; i < starts.length; i++) {
+      expect(starts[i].getTime() - starts[i - 1].getTime()).toBe(3600 * 1000);
+    }
+  });
 });
