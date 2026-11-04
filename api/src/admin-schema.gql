@@ -2,6 +2,18 @@
 # THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
 # ------------------------------------------------------
 
+type AccountOverview {
+  buckets: [BrokenTimeBucket!]!
+  byOrganization: [OrganizationBrokenTime!]!
+  checkCount: Int!
+  checks: [CheckBrokenTime!]!
+  needsFixing: [BrokenCheck!]!
+  organizationCount: Int!
+  rangeEnd: DateTime!
+  rangeStart: DateTime!
+  summary: OverviewSummary!
+}
+
 type AdminCheckList {
   items: [AdminCheckModel!]!
   total: Int!
@@ -152,6 +164,31 @@ type AuditLogModel {
   targetType: String
 }
 
+type BrokenCheck {
+  check: CheckModel!
+
+  """LATE only: expected ping plus grace."""
+  downAt: DateTime
+  organization: OverviewOrganization!
+
+  """DOWN active checks: the latest DOWN event's status or error."""
+  reason: String
+
+  """DOWN: when the open outage started. LATE: expected ping."""
+  since: DateTime!
+  state: BrokenState!
+}
+
+enum BrokenState {
+  DOWN
+  LATE
+}
+
+type BrokenTimeBucket {
+  brokenSeconds: Float!
+  start: DateTime!
+}
+
 type ChannelModel {
   configJson: String!
   enabled: Boolean!
@@ -162,6 +199,28 @@ type ChannelModel {
   verificationDeliveryStatus: String!
   verificationExpiresAt: DateTime
   verificationStatus: String!
+}
+
+type CheckBrokenTime {
+  brokenSeconds: Float!
+  check: CheckModel!
+
+  """
+  Whether the single longest outage is still open; ties prefer the open one.
+  """
+  longestOutageOngoing: Boolean!
+  longestOutageSeconds: Float!
+
+  """Whether any outage of the check is still open."""
+  ongoing: Boolean!
+  organization: OverviewOrganization!
+  outageCount: Int!
+
+  """
+  Timeline spans, clipped to the range; nearby outages are merged. Totals count every outage.
+  """
+  outages: [OutageSpan!]!
+  uptimePercent: Float
 }
 
 type CheckEventModel {
@@ -272,6 +331,12 @@ type Mutation {
   adminUnsuspendUser(id: ID!): AdminUserModel!
 }
 
+type OrganizationBrokenTime {
+  brokenSeconds: Float!
+  organization: OverviewOrganization!
+  outageCount: Int!
+}
+
 type OrganizationCheckAllowance {
   limit: Int!
   remaining: Int!
@@ -288,6 +353,38 @@ type OrganizationModel {
   projects: [ProjectModel!]! @deprecated(reason: "Organizations now contain one implicit workspace.")
   role: String!
   slug: String!
+}
+
+"""
+One or more nearby outages of a check, merged for the timeline (at most 200 spans per check).
+"""
+type OutageSpan {
+  """Their clipped durations, summed; gaps between them excluded."""
+  brokenSeconds: Float!
+
+  """Null while the last merged outage is ongoing."""
+  endedAt: DateTime
+
+  """Outages merged into this span."""
+  outageCount: Int!
+
+  """The first merged outage's start, clipped to the range."""
+  startedAt: DateTime!
+}
+
+type OverviewOrganization {
+  id: ID!
+  name: String!
+  slug: String!
+}
+
+type OverviewSummary {
+  brokenSeconds: Float!
+  longestOutage: CheckBrokenTime
+  medianOutageSeconds: Float
+  ongoingCount: Int!
+  outageCount: Int!
+  uptimePercent: Float
 }
 
 """

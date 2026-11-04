@@ -27,6 +27,7 @@ import { BillingModule } from './billing/billing.module';
 import { AdminModule } from './admin/admin.module';
 import { TelegramModule } from './telegram/telegram.module';
 import { WorkspacesModule } from './workspaces/workspaces.module';
+import { OverviewModule } from './overview/overview.module';
 
 const PUBLIC_ONLY_SCHEMA_TYPES = new Set([
   'ApiCredential',
@@ -82,6 +83,7 @@ export function graphqlSchemaDestination(
         StatusPagesModule,
         BillingModule,
         TelegramModule,
+        OverviewModule,
       ],
     }),
     GraphQLModule.forRoot<ApolloDriverConfig>({
@@ -114,6 +116,7 @@ export function graphqlSchemaDestination(
     BillingModule,
     AdminModule,
     TelegramModule,
+    OverviewModule,
   ],
 })
 export class AppModule {}

@@ -38,9 +38,24 @@ package publication.
 ## App shell and UI conventions
 
 - The sidebar always names the current organization ("Workspace") and groups
-  navigation by scope: Monitoring (dashboard, channels, status pages),
+  navigation by scope: All organizations (overview), Monitoring (dashboard, channels, status pages),
   Organization (members, organizations), and Personal (billing, account). The
   mobile drawer reuses the same sections and organization switcher.
+- `/overview` is account-wide and ignores the organization switcher. It runs
+  the `accountOverview` query, polls while the tab is visible, and keeps the
+  range in `?range=` (`24h`, `7d`, `30d`, `90d`, default `30d`). Charts and
+  tables live in `components/overview/`. While a new range loads, the previous
+  result stays on screen, dimmed, and its labels follow the data shown. The
+  outage timeline draws the API's merged spans (at most 200 per check); a
+  merged span's tooltip gives its outage count and summed broken time. The
+  Longest outage tile and the table's ONGOING tag both read
+  `longestOutageOngoing`. The query uses `cache-and-network`, so a revisit
+  fetches immediately instead of showing a cached result until the first poll.
+  A dismissed error stays closed while the same failure repeats, and is
+  reported again after any successful load; if the first load fails, the page
+  shows "Couldn't load the overview." with a Retry button.
+- `AuthProvider` clears the Apollo store on login, token sign-in, and logout,
+  so one account never sees another's cached results in the same tab.
 - Signed-in pages start with `components/app/page-header.tsx` and rely on the
   layout's padding rather than adding their own.
 - Check statuses render as plain-language labels (`Up`, `Down`, `Late` for

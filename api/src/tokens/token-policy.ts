@@ -25,6 +25,7 @@ const SESSION_ONLY_OPERATIONS = new Set([
   'connectTelegramChannel',
   'moveCheck',
   'organizationCheckAllowance',
+  'accountOverview',
 ]);
 
 const ACCOUNT_TOKEN_OPERATIONS = new Set([
@@ -33,6 +34,7 @@ const ACCOUNT_TOKEN_OPERATIONS = new Set([
   'connectTelegramChannel',
   'moveCheck',
   'organizationCheckAllowance',
+  'accountOverview',
   'me',
   'projects',
   'mySubscription',

@@ -45,6 +45,7 @@ describe('account personal access policy', () => {
     'acceptInvite',
     'moveCheck',
     'organizationCheckAllowance',
+    'accountOverview',
     'telegramConnectionPreview',
     'connectTelegramChannel',
     'createBillingCheckout',
@@ -172,6 +173,7 @@ describe('requireOperationAccess', () => {
     'connectTelegramChannel',
     'moveCheck',
     'organizationCheckAllowance',
+    'accountOverview',
   ])(
     'allows sessions to resolve the session-only operation %s',
     (operationName) => {
@@ -186,6 +188,7 @@ describe('requireOperationAccess', () => {
     'connectTelegramChannel',
     'moveCheck',
     'organizationCheckAllowance',
+    'accountOverview',
   ])(
     'denies scoped API tokens from the session-only operation %s',
     (operationName) => {
@@ -200,6 +203,7 @@ describe('requireOperationAccess', () => {
     'connectTelegramChannel',
     'moveCheck',
     'organizationCheckAllowance',
+    'accountOverview',
   ])(
     'denies legacy-broad API tokens from the session-only operation %s',
     (operationName) => {

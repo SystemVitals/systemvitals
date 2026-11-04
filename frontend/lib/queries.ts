@@ -582,3 +582,87 @@ export const REVOKE_API_TOKEN = gql`
     revokeApiToken(id: $id)
   }
 `;
+
+export const ACCOUNT_OVERVIEW = gql`
+  query accountOverview($range: OverviewRange!, $timeZone: String) {
+    accountOverview(range: $range, timeZone: $timeZone) {
+      organizationCount
+      checkCount
+      rangeStart
+      rangeEnd
+      needsFixing {
+        state
+        since
+        downAt
+        reason
+        check {
+          id
+          name
+          slug
+          type
+          status
+          lastEventAt
+          description
+        }
+        organization {
+          id
+          name
+          slug
+        }
+      }
+      summary {
+        uptimePercent
+        brokenSeconds
+        outageCount
+        ongoingCount
+        medianOutageSeconds
+        longestOutage {
+          longestOutageSeconds
+          longestOutageOngoing
+          check {
+            id
+            name
+            slug
+          }
+        }
+      }
+      buckets {
+        start
+        brokenSeconds
+      }
+      byOrganization {
+        brokenSeconds
+        outageCount
+        organization {
+          id
+          name
+          slug
+        }
+      }
+      checks {
+        brokenSeconds
+        outageCount
+        longestOutageSeconds
+        longestOutageOngoing
+        ongoing
+        uptimePercent
+        check {
+          id
+          name
+          slug
+        }
+        organization {
+          id
+          name
+          slug
+        }
+        outages {
+          startedAt
+          endedAt
+          outageCount
+          brokenSeconds
+        }
+      }
+    }
+  }
+`;
